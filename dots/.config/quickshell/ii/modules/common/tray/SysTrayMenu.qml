@@ -94,6 +94,16 @@ PopupWindow {
         root.menuOpened(root);
     }
 
+    // A workspace change closes every menu (ContextMenus.dismissAll); the
+    // tray lets go of its focus grab on menuClosed.
+    Connections {
+        target: ContextMenus
+        function onDismissAllRequested() {
+            if (root.visible || root.openPending)
+                root.close();
+        }
+    }
+
     function close() {
         root.openPending = false;
         openFallback.stop();

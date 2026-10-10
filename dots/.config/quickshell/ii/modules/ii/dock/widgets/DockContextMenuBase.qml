@@ -179,6 +179,12 @@ Loader {
         if (!active || isClosing) return
         isClosing = true
     }
+    // A workspace change closes every menu and its focus grab
+    // (ContextMenus.dismissAll); app groups and stacks go with them.
+    Connections {
+        target: ContextMenus
+        function onDismissAllRequested() { root.close(); }
+    }
 
     onActiveChanged: {
         if (!root.active) {

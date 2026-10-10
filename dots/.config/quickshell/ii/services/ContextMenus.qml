@@ -3,6 +3,8 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
+import qs
 import qs.modules.common
 
 /**
@@ -29,6 +31,41 @@ Singleton {
     // The user's size for every menu (50-200 %). A menu applies it as a scale
     // on its card, and sizes its window/clamps by the scaled extent.
     readonly property real scale: Math.max(0.5, Math.min(2, Number(root.cfg?.scale ?? 1) || 1))
+
+    // ── Dismissal ────────────────────────────────────────────────────────────
+    // A menu is about what was under the pointer on THIS workspace. When the
+    // workspace changes (Super+number, a touchpad swipe, a special workspace)
+    // every open menu closes and lets go of its focus grab, instead of
+    // floating over windows it has nothing to do with. Menus whose state
+    // lives in GlobalStates are closed here; the rest listen for
+    // `dismissAllRequested`.
+    signal dismissAllRequested()
+    function dismissAll(): void {
+        GlobalStates.closeDesktopMenu();
+        if (GlobalStates.editWidgetMenuOpen)
+            GlobalStates.closeEditWidgetMenu();
+        if (GlobalStates.editBarMenuOpen)
+            GlobalStates.closeEditBarMenu();
+        root.dismissAllRequested();
+    }
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name === "activespecialv2") {
+                root.dismissAll();
+                return;
+            }
+            if (event.name !== "workspacev2")
+                return;
+            // Focus moving to a monitor whose workspace is already on screen
+            // (the click that opened a menu there) is not a switch. Read before
+            // HyprlandData refreshes: its update is an async hyprctl call.
+            const id = parseInt(String(event.data).split(",")[0]);
+            const onScreen = (HyprlandData.monitors ?? []).some(m => m?.activeWorkspace?.id === id);
+            if (!onScreen)
+                root.dismissAll();
+        }
+    }
 
     // ── Metrics ──────────────────────────────────────────────────────────────
     // Compact: the card fits its content between these, the rows are 34 px.

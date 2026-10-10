@@ -115,6 +115,11 @@ FocusScope {
             return;
         root.closing = true;
     }
+    // A workspace change closes every menu (ContextMenus.dismissAll).
+    Connections {
+        target: ContextMenus
+        function onDismissAllRequested() { root.dismiss(); }
+    }
 
     // ── Enter and exit ───────────────────────────────────────────────────────
     // The desktop menu's motion: plate and card grow out of the corner under
