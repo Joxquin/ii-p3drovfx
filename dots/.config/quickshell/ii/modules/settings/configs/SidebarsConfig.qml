@@ -125,102 +125,115 @@ Item {
         }
 
         // ── Quick toggles ─────────────────────────────────────────────────
-        SidebarsLinkCard {
-            Layout.fillWidth: true
+        LazyBlock {
+            placeholderHeight: 92
             Layout.topMargin: sidebarsRoot.sectionGap
-            symbol: "tune"
-            shapeIdle: MaterialShape.Shape.Clover4Leaf
-            shapeEngaged: MaterialShape.Shape.Flower
-            title: Translation.tr("Quick toggles and sliders")
-            summary: Translation.tr("Toggle styles, Android column count, capsule sliders and fixed sliders")
-            onClicked: sidebarsRoot.openSubPage("SidebarQuickTogglesConfig.qml")
+            SidebarsLinkCard {
+                Layout.fillWidth: true
+                symbol: "tune"
+                shapeIdle: MaterialShape.Shape.Clover4Leaf
+                shapeEngaged: MaterialShape.Shape.Flower
+                title: Translation.tr("Quick toggles and sliders")
+                summary: Translation.tr("Toggle styles, Android column count, capsule sliders and fixed sliders")
+                onClicked: sidebarsRoot.openSubPage("SidebarQuickTogglesConfig.qml")
+            }
         }
 
         // ── Dashboard ─────────────────────────────────────────────────────
-        ContentSection {
+        LazyBlock {
+            placeholderHeight: 279
             Layout.topMargin: sidebarsRoot.sectionGap
-            title: Translation.tr("Dashboard")
-            icon: "dashboard"
+            ContentSection {
+                title: Translation.tr("Dashboard")
+                icon: "dashboard"
 
-            ConfigSwitch {
-                buttonIcon: "animation"
-                text: Translation.tr("Dashboard entrance animations")
-                checked: sidebarsRoot.sidebar.dashboardEntranceAnimations
-                onCheckedChanged: {
-                    if (Config.ready && checked !== sidebarsRoot.sidebar.dashboardEntranceAnimations)
-                        sidebarsRoot.sidebar.dashboardEntranceAnimations = checked;
+                ConfigSwitch {
+                    buttonIcon: "animation"
+                    text: Translation.tr("Dashboard entrance animations")
+                    checked: sidebarsRoot.sidebar.dashboardEntranceAnimations
+                    onCheckedChanged: {
+                        if (Config.ready && checked !== sidebarsRoot.sidebar.dashboardEntranceAnimations)
+                            sidebarsRoot.sidebar.dashboardEntranceAnimations = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Restores decorative staggered animations for the dashboard header, quick toggles, notifications, calendar, tasks, and timers. They begin with the sidebar opening request and may cost some opening performance.")
+                    }
                 }
 
-                StyledToolTip {
-                    text: Translation.tr("Restores decorative staggered animations for the dashboard header, quick toggles, notifications, calendar, tasks, and timers. They begin with the sidebar opening request and may cost some opening performance.")
+                ConfigSwitch {
+                    buttonIcon: "note_stack"
+                    text: Translation.tr("Notes tab in dashboard")
+                    description: Translation.tr("Show Notes in the bottom widget group alongside Calendar, Tasks, and Timer")
+                    checked: sidebarsRoot.sidebar.bottomGroup?.notesTab ?? true
+                    onCheckedChanged: {
+                        if (Config.ready && sidebarsRoot.sidebar.bottomGroup)
+                            sidebarsRoot.sidebar.bottomGroup.notesTab = checked;
+                    }
                 }
-            }
 
-            ConfigSwitch {
-                buttonIcon: "note_stack"
-                text: Translation.tr("Notes tab in dashboard")
-                description: Translation.tr("Show Notes in the bottom widget group alongside Calendar, Tasks, and Timer")
-                checked: sidebarsRoot.sidebar.bottomGroup?.notesTab ?? true
-                onCheckedChanged: {
-                    if (Config.ready && sidebarsRoot.sidebar.bottomGroup)
-                        sidebarsRoot.sidebar.bottomGroup.notesTab = checked;
-                }
-            }
+                ContentSubsection {
+                    title: Translation.tr("Dashboard header button design")
+                    icon: "circle"
+                    Layout.fillWidth: true
 
-            ContentSubsection {
-                title: Translation.tr("Dashboard header button design")
-                icon: "circle"
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: sidebarsRoot.sidebar.dashboardHeader.buttonsDesign
-                    onSelected: newValue => sidebarsRoot.sidebar.dashboardHeader.buttonsDesign = newValue
-                    options: [
-                        { displayName: Translation.tr("Default"), icon: "crop_square", value: "default" },
-                        { displayName: Translation.tr("Circles"), icon: "circle", value: "circles" }
-                    ]
+                    ConfigSelectionArray {
+                        currentValue: sidebarsRoot.sidebar.dashboardHeader.buttonsDesign
+                        onSelected: newValue => sidebarsRoot.sidebar.dashboardHeader.buttonsDesign = newValue
+                        options: [
+                            { displayName: Translation.tr("Default"), icon: "crop_square", value: "default" },
+                            { displayName: Translation.tr("Circles"), icon: "circle", value: "circles" }
+                        ]
+                    }
                 }
             }
         }
 
         // ── Screen corners ────────────────────────────────────────────────
-        ContentSection {
+        LazyBlock {
+            placeholderHeight: 122
             visible: sidebarsRoot.cornersAvailable
-            title: Translation.tr("Screen Corners")
-            icon: "mouse"
+            ContentSection {
+                visible: sidebarsRoot.cornersAvailable
+                title: Translation.tr("Screen Corners")
+                icon: "mouse"
 
-            ConfigSwitch {
-                buttonIcon: "touch_app"
-                text: Translation.tr("Enable corner open")
-                checked: sidebarsRoot.sidebar.cornerOpen.enable
-                configPage: Qt.resolvedUrl("widgets/ScreenCornersConfig.qml")
-                property bool readyForToggle: false
-                Component.onCompleted: readyForToggle = true
-                onCheckedChanged: {
-                    if (!readyForToggle || !Config.ready)
-                        return;
-                    sidebarsRoot.sidebar.cornerOpen.enable = checked;
-                }
+                ConfigSwitch {
+                    buttonIcon: "touch_app"
+                    text: Translation.tr("Enable corner open")
+                    checked: sidebarsRoot.sidebar.cornerOpen.enable
+                    configPage: Qt.resolvedUrl("widgets/ScreenCornersConfig.qml")
+                    property bool readyForToggle: false
+                    Component.onCompleted: readyForToggle = true
+                    onCheckedChanged: {
+                        if (!readyForToggle || !Config.ready)
+                            return;
+                        sidebarsRoot.sidebar.cornerOpen.enable = checked;
+                    }
 
-                StyledToolTip {
-                    text: Translation.tr("Toggle corner open activation. Click button text to configure hover trigger, vertical offset, and region bounds.")
+                    StyledToolTip {
+                        text: Translation.tr("Toggle corner open activation. Click button text to configure hover trigger, vertical offset, and region bounds.")
+                    }
                 }
             }
         }
 
         // ── Related ───────────────────────────────────────────────────────
-        ContentSection {
-            icon: "link"
-            title: Translation.tr("Related settings")
+        LazyBlock {
+            placeholderHeight: 100
+            ContentSection {
+                icon: "link"
+                title: Translation.tr("Related settings")
 
-            Flow {
-                Layout.fillWidth: true
-                spacing: 8
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 8
 
-                RelatedChip {
-                    pageId: "profile"
-                    label: Translation.tr("Enable Sidebar Banner")
-                    sectionHighlight: Translation.tr("Right Sidebar Banner")
+                    RelatedChip {
+                        pageId: "profile"
+                        label: Translation.tr("Enable Sidebar Banner")
+                        sectionHighlight: Translation.tr("Right Sidebar Banner")
+                    }
                 }
             }
         }

@@ -439,152 +439,170 @@ Item {
         }
 
         // ── Video wallpapers ──────────────────────────────────────────────
-        ContentSection {
-            title: Translation.tr("Video wallpapers")
-            icon: "movie"
+        LazyBlock {
+            placeholderHeight: 340
+            ContentSection {
+                title: Translation.tr("Video wallpapers")
+                icon: "movie"
 
-            Item {
-                id: backends
-                Layout.fillWidth: true
-                implicitHeight: backendFlow.implicitHeight
+                Item {
+                    id: backends
+                    Layout.fillWidth: true
+                    implicitHeight: backendFlow.implicitHeight
 
-                readonly property int columns: backgroundRoot.columnsFor(width, backgroundRoot.backendMin)
-                readonly property real cardWidth: Math.floor((width - backgroundRoot.cardGap * (columns - 1)) / columns)
+                    readonly property int columns: backgroundRoot.columnsFor(width, backgroundRoot.backendMin)
+                    readonly property real cardWidth: Math.floor((width - backgroundRoot.cardGap * (columns - 1)) / columns)
 
-                Flow {
-                    id: backendFlow
-                    width: parent.width
-                    spacing: backgroundRoot.cardGap
+                    Flow {
+                        id: backendFlow
+                        width: parent.width
+                        spacing: backgroundRoot.cardGap
 
-                    BackgroundBackendCard {
-                        width: backends.cardWidth
-                        symbol: "layers"
-                        shapeChosen: MaterialShape.Shape.Cookie12Sided
-                        title: Translation.tr("mpvpaper")
-                        description: Translation.tr("mpvpaper draws the video on its own layer below the shell. It needs no setup, but image effects (window blur, parallax, overview designs) are turned off while it plays.")
-                        pillSymbol: "block"
-                        pillText: Translation.tr("Image effects off")
-                        chosen: !backgroundRoot.shellBackend
-                        onPicked: backgroundRoot.background.videoBackend = "mpvpaper"
-                    }
+                        BackgroundBackendCard {
+                            width: backends.cardWidth
+                            symbol: "layers"
+                            shapeChosen: MaterialShape.Shape.Cookie12Sided
+                            title: Translation.tr("mpvpaper")
+                            description: Translation.tr("mpvpaper draws the video on its own layer below the shell. It needs no setup, but image effects (window blur, parallax, overview designs) are turned off while it plays.")
+                            pillSymbol: "block"
+                            pillText: Translation.tr("Image effects off")
+                            chosen: !backgroundRoot.shellBackend
+                            onPicked: backgroundRoot.background.videoBackend = "mpvpaper"
+                        }
 
-                    BackgroundBackendCard {
-                        width: backends.cardWidth
-                        symbol: "wallpaper"
-                        shapeChosen: MaterialShape.Shape.SoftBurst
-                        title: Translation.tr("Shell")
-                        description: Translation.tr("The shell plays the video inside the wallpaper, so window blur, parallax, the overview zoom and the lock screen effects work with it, and no separate mpvpaper process runs.")
-                        pillSymbol: "auto_awesome"
-                        pillText: Translation.tr("Image effects on")
-                        chosen: backgroundRoot.shellBackend
-                        onPicked: backgroundRoot.background.videoBackend = "shell"
+                        BackgroundBackendCard {
+                            width: backends.cardWidth
+                            symbol: "wallpaper"
+                            shapeChosen: MaterialShape.Shape.SoftBurst
+                            title: Translation.tr("Shell")
+                            description: Translation.tr("The shell plays the video inside the wallpaper, so window blur, parallax, the overview zoom and the lock screen effects work with it, and no separate mpvpaper process runs.")
+                            pillSymbol: "auto_awesome"
+                            pillText: Translation.tr("Image effects on")
+                            chosen: backgroundRoot.shellBackend
+                            onPicked: backgroundRoot.background.videoBackend = "shell"
+                        }
                     }
                 }
-            }
 
-            BackgroundLinkRow {
-                Layout.fillWidth: true
-                symbol: "tune"
-                title: Translation.tr("Playback and set-up")
-                summary: Translation.tr("When the video pauses, its size on screen, the libmpv player and the color frame")
-                onClicked: backgroundRoot.openSubPage("VideoWallpaperConfig.qml")
+                BackgroundLinkRow {
+                    Layout.fillWidth: true
+                    symbol: "tune"
+                    title: Translation.tr("Playback and set-up")
+                    summary: Translation.tr("When the video pauses, its size on screen, the libmpv player and the color frame")
+                    onClicked: backgroundRoot.openSubPage("VideoWallpaperConfig.qml")
+                }
             }
         }
 
         // ── Depth effect ──────────────────────────────────────────────────
-        ContentSection {
-            title: Translation.tr("Depth effect")
-            icon: "layers"
+        LazyBlock {
+            placeholderHeight: 150
+            ContentSection {
+                title: Translation.tr("Depth effect")
+                icon: "layers"
 
-            ColorsFeatureTile {
-                Layout.fillWidth: true
-                Layout.preferredHeight: backgroundRoot.tileHeight
-                enabled: !backgroundRoot.videoLocked
-                opacity: enabled ? 1 : 0.45
-                symbol: "layers"
-                shapeOn: MaterialShape.Shape.Flower
-                title: Translation.tr("Subject in front of widgets")
-                summary: backgroundRoot.depthOn
-                    ? Translation.tr("Subject in front of widgets · %1 model(s) installed").arg(backgroundRoot.depthModels)
-                    : backgroundRoot.depthModels > 0
-                        ? Translation.tr("%1 model(s) installed").arg(backgroundRoot.depthModels)
-                        : Translation.tr("Cut the subject out so a clock can sit behind a person")
-                checked: backgroundRoot.depthOn
-                configurable: true
-                onConfigureRequested: backgroundRoot.openSubPage("DepthEffectConfig.qml")
-                onToggled: value => {
-                    if (DepthEffect.anyInstalled)
-                        backgroundRoot.background.depthEffect.enable = value;
-                    else
-                        backgroundRoot.openSubPage("DepthEffectConfig.qml");
+                ColorsFeatureTile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: backgroundRoot.tileHeight
+                    enabled: !backgroundRoot.videoLocked
+                    opacity: enabled ? 1 : 0.45
+                    symbol: "layers"
+                    shapeOn: MaterialShape.Shape.Flower
+                    title: Translation.tr("Subject in front of widgets")
+                    summary: backgroundRoot.depthOn
+                        ? Translation.tr("Subject in front of widgets · %1 model(s) installed").arg(backgroundRoot.depthModels)
+                        : backgroundRoot.depthModels > 0
+                            ? Translation.tr("%1 model(s) installed").arg(backgroundRoot.depthModels)
+                            : Translation.tr("Cut the subject out so a clock can sit behind a person")
+                    checked: backgroundRoot.depthOn
+                    configurable: true
+                    onConfigureRequested: backgroundRoot.openSubPage("DepthEffectConfig.qml")
+                    onToggled: value => {
+                        if (DepthEffect.anyInstalled)
+                            backgroundRoot.background.depthEffect.enable = value;
+                        else
+                            backgroundRoot.openSubPage("DepthEffectConfig.qml");
+                    }
                 }
             }
         }
 
         // ── Media mode ────────────────────────────────────────────────────
-        ContentSection {
-            title: Translation.tr("Media Mode Background")
-            icon: "music_note"
+        LazyBlock {
+            placeholderHeight: 122
+            ContentSection {
+                title: Translation.tr("Media Mode Background")
+                icon: "music_note"
 
-            ColorsFeatureTile {
-                Layout.fillWidth: true
-                Layout.preferredHeight: backgroundRoot.tileHeight
-                symbol: "music_note"
-                shapeOn: MaterialShape.Shape.Clover4Leaf
-                title: Translation.tr("Media mode background overlay")
-                summary: Translation.tr("A full-screen overlay with lyrics, visualizers and album art while Media Mode is on")
-                checked: backgroundRoot.background.mediaMode.showLyrics ?? true
-                configurable: true
-                onConfigureRequested: backgroundRoot.openSubPage("MediaModeBackgroundConfig.qml")
-                onToggled: value => backgroundRoot.background.mediaMode.showLyrics = value
-            }
+                ColorsFeatureTile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: backgroundRoot.tileHeight
+                    symbol: "music_note"
+                    shapeOn: MaterialShape.Shape.Clover4Leaf
+                    title: Translation.tr("Media mode background overlay")
+                    summary: Translation.tr("A full-screen overlay with lyrics, visualizers and album art while Media Mode is on")
+                    checked: backgroundRoot.background.mediaMode.showLyrics ?? true
+                    configurable: true
+                    onConfigureRequested: backgroundRoot.openSubPage("MediaModeBackgroundConfig.qml")
+                    onToggled: value => backgroundRoot.background.mediaMode.showLyrics = value
+                }
 
-            KeyboardShortcutBox {
-                Layout.fillWidth: true
-                Layout.topMargin: backgroundRoot.cardGap - 4
-                text: Translation.tr("Toggle Media Mode")
-                keys: ["Super", "Z"]
+                KeyboardShortcutBox {
+                    Layout.fillWidth: true
+                    Layout.topMargin: backgroundRoot.cardGap - 4
+                    text: Translation.tr("Toggle Media Mode")
+                    keys: ["Super", "Z"]
+                }
             }
         }
 
         // ── Quality ───────────────────────────────────────────────────────
-        ContentSection {
-            title: Translation.tr("Wallpaper Quality & Performance")
-            icon: "high_quality"
+        LazyBlock {
+            placeholderHeight: 100
+            ContentSection {
+                title: Translation.tr("Wallpaper Quality & Performance")
+                icon: "high_quality"
 
-            ConfigSwitch {
-                buttonIcon: "memory"
-                text: Translation.tr("Downscale wallpaper to reduce VRAM usage")
-                enabled: !backgroundRoot.videoLocked
-                checked: backgroundRoot.background.scaleLargeWallpapers ?? false
-                onCheckedChanged: {
-                    backgroundRoot.background.scaleLargeWallpapers = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("When enabled, decodes large wallpapers at screen resolution to save VRAM. When disabled (default, like upstream end-4), loads wallpapers at full native resolution for maximum sharpness.")
+                ConfigSwitch {
+                    buttonIcon: "memory"
+                    text: Translation.tr("Downscale wallpaper to reduce VRAM usage")
+                    enabled: !backgroundRoot.videoLocked
+                    checked: backgroundRoot.background.scaleLargeWallpapers ?? false
+                    onCheckedChanged: {
+                        backgroundRoot.background.scaleLargeWallpapers = checked;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("When enabled, decodes large wallpapers at screen resolution to save VRAM. When disabled (default, like upstream end-4), loads wallpapers at full native resolution for maximum sharpness.")
+                    }
                 }
             }
         }
 
-        ShortcutBox {
-            Layout.fillWidth: true
-            value: Translation.tr("Desktop Clock Widget settings")
-            targetPageId: "widgets"
-            targetSectionTitle: Translation.tr("Widget Manager")
+        LazyBlock {
+            placeholderHeight: 70
+            ShortcutBox {
+                Layout.fillWidth: true
+                value: Translation.tr("Desktop Clock Widget settings")
+                targetPageId: "widgets"
+                targetSectionTitle: Translation.tr("Widget Manager")
+            }
         }
 
-        ContentSection {
-            icon: "link"
-            title: Translation.tr("Related settings")
+        LazyBlock {
+            placeholderHeight: 100
+            ContentSection {
+                icon: "link"
+                title: Translation.tr("Related settings")
 
-            Flow {
-                Layout.fillWidth: true
-                spacing: 8
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 8
 
-                RelatedChip {
-                    pageId: "lockScreen"
-                    label: Translation.tr("Lock screen blur")
-                    sectionHighlight: Translation.tr("Blur style")
+                    RelatedChip {
+                        pageId: "lockScreen"
+                        label: Translation.tr("Lock screen blur")
+                        sectionHighlight: Translation.tr("Blur style")
+                    }
                 }
             }
         }

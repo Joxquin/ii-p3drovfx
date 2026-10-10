@@ -244,58 +244,61 @@ Item {
         }
 
         // ── Icons & fonts ─────────────────────────────────────────────────
-        ContentSection {
-            title: Translation.tr("Icons & Fonts")
-            icon: "text_format"
+        LazyBlock {
+            placeholderHeight: 300
+            ContentSection {
+                title: Translation.tr("Icons & Fonts")
+                icon: "text_format"
 
-            InterfaceIconsCard {
-                symbol: "magic_button"
-                shapeOn: MaterialShape.Shape.Cookie12Sided
-                title: Translation.tr("Themed icons")
-                summary: checked
-                    ? Translation.tr("The Matugen icon pack, recoloured with your theme (experimental)")
-                    : Translation.tr("Your own icon theme, untouched (experimental option)")
-                checked: interfaceFontsRoot.appearance.icons.enableThemed
-                onConfigureRequested: interfaceFontsRoot.openSubPage("ThemedIconsConfig.qml")
-                onToggled: value => interfaceFontsRoot.appearance.icons.enableThemed = value
-            }
-
-            InterfaceGrid {
-                id: iconGrid
-                minCell: interfaceFontsRoot.tileMin
-                maxColumns: 2
-
-                ColorsFeatureTile {
-                    width: iconGrid.cellWidth
-                    height: interfaceFontsRoot.tileHeight
-                    symbol: "custom_typography"
-                    shapeOn: MaterialShape.Shape.Flower
-                    title: Translation.tr("Custom fonts")
+                InterfaceIconsCard {
+                    symbol: "magic_button"
+                    shapeOn: MaterialShape.Shape.Cookie12Sided
+                    title: Translation.tr("Themed icons")
                     summary: checked
-                        ? Translation.tr("Your own families, set one role at a time")
-                        : Translation.tr("Google Sans Flex, Readex Pro and the other defaults")
-                    checked: interfaceFontsRoot.appearance.fonts.enableCustom
-                    configurable: true
-                    onConfigureRequested: interfaceFontsRoot.openSubPage("CustomFontsConfig.qml")
-                    onToggled: value => interfaceFontsRoot.setCustomFonts(value)
+                        ? Translation.tr("The Matugen icon pack, recoloured with your theme (experimental)")
+                        : Translation.tr("Your own icon theme, untouched (experimental option)")
+                    checked: interfaceFontsRoot.appearance.icons.enableThemed
+                    onConfigureRequested: interfaceFontsRoot.openSubPage("ThemedIconsConfig.qml")
+                    onToggled: value => interfaceFontsRoot.appearance.icons.enableThemed = value
                 }
 
-                ColorsFeatureTile {
-                    id: roundnessTile
-                    width: iconGrid.cellWidth
-                    height: interfaceFontsRoot.tileHeight
-                    symbol: "rounded_corner"
-                    shapeOn: MaterialShape.Shape.Clover4Leaf
-                    title: Translation.tr("Full font roundness")
-                    summary: checked
-                        ? Translation.tr("Letterforms fully rounded (ROND 100)")
-                        : Translation.tr("Letterforms in their regular shape")
-                    checked: interfaceFontsRoot.appearance.fonts.roundnessFull
-                    onToggled: value => interfaceFontsRoot.setFontRoundness(value)
+                InterfaceGrid {
+                    id: iconGrid
+                    minCell: interfaceFontsRoot.tileMin
+                    maxColumns: 2
 
-                    InterfaceFontSample {
-                        rounded: roundnessTile.checked
-                        color: roundnessTile.colContent
+                    ColorsFeatureTile {
+                        width: iconGrid.cellWidth
+                        height: interfaceFontsRoot.tileHeight
+                        symbol: "custom_typography"
+                        shapeOn: MaterialShape.Shape.Flower
+                        title: Translation.tr("Custom fonts")
+                        summary: checked
+                            ? Translation.tr("Your own families, set one role at a time")
+                            : Translation.tr("Google Sans Flex, Readex Pro and the other defaults")
+                        checked: interfaceFontsRoot.appearance.fonts.enableCustom
+                        configurable: true
+                        onConfigureRequested: interfaceFontsRoot.openSubPage("CustomFontsConfig.qml")
+                        onToggled: value => interfaceFontsRoot.setCustomFonts(value)
+                    }
+
+                    ColorsFeatureTile {
+                        id: roundnessTile
+                        width: iconGrid.cellWidth
+                        height: interfaceFontsRoot.tileHeight
+                        symbol: "rounded_corner"
+                        shapeOn: MaterialShape.Shape.Clover4Leaf
+                        title: Translation.tr("Full font roundness")
+                        summary: checked
+                            ? Translation.tr("Letterforms fully rounded (ROND 100)")
+                            : Translation.tr("Letterforms in their regular shape")
+                        checked: interfaceFontsRoot.appearance.fonts.roundnessFull
+                        onToggled: value => interfaceFontsRoot.setFontRoundness(value)
+
+                        InterfaceFontSample {
+                            rounded: roundnessTile.checked
+                            color: roundnessTile.colContent
+                        }
                     }
                 }
             }

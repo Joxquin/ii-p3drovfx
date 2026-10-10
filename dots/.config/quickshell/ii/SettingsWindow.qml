@@ -760,7 +760,11 @@ FloatingWindow {
                     transformOrigin: Item.Left
 
                     active: Config.ready && pageLoadArmed
-                    asynchronous: true
+                    // Built whole inside one frame when the window is on screen:
+                    // incubating asynchronously there gets a few ms per frame while
+                    // anything animates, which made a page take 3-4x longer to show.
+                    // Hidden (the first page, built while the window maps) stays async.
+                    asynchronous: !root.visible
                     // An incubating page is parented as soon as it exists and
                     // would be drawn piece by piece. Show it once it is whole.
                     visible: status === Loader.Ready

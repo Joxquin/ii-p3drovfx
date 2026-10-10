@@ -81,6 +81,8 @@ Item {
             dynamicIslandConfigRoot.tryHost = target.host;
         }
     }
+    /** The password-prompt tiles live in a block built on scroll; it hands them over when it is. */
+    property var askItems: []
     /** Most specific first: a chip before the tile it sits on. */
     function tryTargets() {
         const fn = dynamicIslandConfigRoot.fn;
@@ -91,12 +93,12 @@ Item {
             { item: sessionTile, host: "session", props: {} },
             { item: switcherTile, host: "switcher", props: {} },
             { item: wallpaperTile, host: "wallpaper", props: {} },
-            { item: askSudo, host: "askpass", props: { "kind": "sudo", "style": fn.askpassStyle } },
-            { item: askTerminal, host: "askpass", props: { "kind": "sudo", "style": fn.askpassTerminalStyle } },
-            { item: askPolkit, host: "askpass", props: { "kind": "polkit", "style": fn.askpassStyle } },
-            { item: askSsh, host: "askpass", props: { "kind": "ssh", "style": fn.askpassStyle } },
-            { item: askStyleArray, host: "askpass", props: { "kind": "sudo", "style": fn.askpassStyle } },
-            { item: askTerminalStyleArray, host: "askpass", props: { "kind": "sudo", "style": fn.askpassTerminalStyle } }
+            { item: dynamicIslandConfigRoot.askItems[0], host: "askpass", props: { "kind": "sudo", "style": fn.askpassStyle } },
+            { item: dynamicIslandConfigRoot.askItems[1], host: "askpass", props: { "kind": "sudo", "style": fn.askpassTerminalStyle } },
+            { item: dynamicIslandConfigRoot.askItems[2], host: "askpass", props: { "kind": "polkit", "style": fn.askpassStyle } },
+            { item: dynamicIslandConfigRoot.askItems[3], host: "askpass", props: { "kind": "ssh", "style": fn.askpassStyle } },
+            { item: dynamicIslandConfigRoot.askItems[4], host: "askpass", props: { "kind": "sudo", "style": fn.askpassStyle } },
+            { item: dynamicIslandConfigRoot.askItems[5], host: "askpass", props: { "kind": "sudo", "style": fn.askpassTerminalStyle } }
         ];
     }
     function resolveTry() {
@@ -671,51 +673,55 @@ Item {
         }
 
         // ── Beside the island ─────────────────────────────────────────────
-        AppSettingsSection {
+        LazyBlock {
+            placeholderHeight: 204
             Layout.topMargin: 12
             visible: dynamicIslandConfigRoot.islandOn
-            title: Translation.tr("Beside and on the island")
-            symbol: "bubble_chart"
+            AppSettingsSection {
+                visible: dynamicIslandConfigRoot.islandOn
+                title: Translation.tr("Beside and on the island")
+                symbol: "bubble_chart"
 
-            Item {
-                id: extraTiles
-                Layout.fillWidth: true
-                implicitHeight: extraFlow.implicitHeight
-                readonly property int gap: 12
-                readonly property int columns: width >= 2 * 260 + gap ? 2 : 1
-                readonly property int tileWidth: Math.floor((width - gap * (columns - 1)) / columns)
+                Item {
+                    id: extraTiles
+                    Layout.fillWidth: true
+                    implicitHeight: extraFlow.implicitHeight
+                    readonly property int gap: 12
+                    readonly property int columns: width >= 2 * 260 + gap ? 2 : 1
+                    readonly property int tileWidth: Math.floor((width - gap * (columns - 1)) / columns)
 
-                Flow {
-                    id: extraFlow
-                    width: parent.width
-                    spacing: extraTiles.gap
+                    Flow {
+                        id: extraFlow
+                        width: parent.width
+                        spacing: extraTiles.gap
 
-                    ColorsFeatureTile {
-                        width: extraTiles.tileWidth
-                        height: 176
-                        symbol: "bubble_chart"
-                        shapeOn: MaterialShape.Shape.Sunny
-                        title: Translation.tr("Auxiliary bubbles")
-                        summary: checked ? Translation.tr("Media, workspaces and live activities move into bubbles beside the island; rest on one to open it")
-                            : Translation.tr("Live activities sit beside the clock, in the island itself")
-                        checked: dynamicIslandConfigRoot.fn.auxiliaryBubble
-                        onToggled: value => dynamicIslandConfigRoot.fn.auxiliaryBubble = value
-                    }
-                    ColorsFeatureTile {
-                        width: extraTiles.tileWidth
-                        height: 176
-                        symbol: "subtitles"
-                        shapeOn: MaterialShape.Shape.Cookie7Sided
-                        title: Translation.tr("Teleprompter")
-                        summary: checked ? (Teleprompter.running ? Translation.tr("Reading a script now") : Translation.tr("A script scrolling on the island, for recordings and interviews"))
-                            : Translation.tr("Read a script scrolling on the island, for recordings and interviews")
-                        checked: Config.options.dynamicIsland.widgets.teleprompter.enable === true
-                        configurable: true
-                        onConfigureRequested: subPageOverlay.open(Qt.resolvedUrl("features/TeleprompterConfig.qml"))
-                        onToggled: value => {
-                            Config.options.dynamicIsland.widgets.teleprompter.enable = value;
-                            if (!value)
-                                Teleprompter.stop();
+                        ColorsFeatureTile {
+                            width: extraTiles.tileWidth
+                            height: 176
+                            symbol: "bubble_chart"
+                            shapeOn: MaterialShape.Shape.Sunny
+                            title: Translation.tr("Auxiliary bubbles")
+                            summary: checked ? Translation.tr("Media, workspaces and live activities move into bubbles beside the island; rest on one to open it")
+                                : Translation.tr("Live activities sit beside the clock, in the island itself")
+                            checked: dynamicIslandConfigRoot.fn.auxiliaryBubble
+                            onToggled: value => dynamicIslandConfigRoot.fn.auxiliaryBubble = value
+                        }
+                        ColorsFeatureTile {
+                            width: extraTiles.tileWidth
+                            height: 176
+                            symbol: "subtitles"
+                            shapeOn: MaterialShape.Shape.Cookie7Sided
+                            title: Translation.tr("Teleprompter")
+                            summary: checked ? (Teleprompter.running ? Translation.tr("Reading a script now") : Translation.tr("A script scrolling on the island, for recordings and interviews"))
+                                : Translation.tr("Read a script scrolling on the island, for recordings and interviews")
+                            checked: Config.options.dynamicIsland.widgets.teleprompter.enable === true
+                            configurable: true
+                            onConfigureRequested: subPageOverlay.open(Qt.resolvedUrl("features/TeleprompterConfig.qml"))
+                            onToggled: value => {
+                                Config.options.dynamicIsland.widgets.teleprompter.enable = value;
+                                if (!value)
+                                    Teleprompter.stop();
+                            }
                         }
                     }
                 }
@@ -723,157 +729,165 @@ Item {
         }
 
         // ── Appearance ────────────────────────────────────────────────────────
-        ContentSection {
+        LazyBlock {
+            placeholderHeight: 177
             Layout.topMargin: 12
             visible: dynamicIslandConfigRoot.islandOn
-            icon: "palette"
-            title: Translation.tr("Island appearance")
-            tooltip: Translation.tr("The body's shadow and background color.")
+            ContentSection {
+                visible: dynamicIslandConfigRoot.islandOn
+                icon: "palette"
+                title: Translation.tr("Island appearance")
+                tooltip: Translation.tr("The body's shadow and background color.")
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Appearance.sizes.elevationMargin / 2
 
-                ConfigSwitch {
-                    buttonIcon: "filter_drama"
-                    text: Translation.tr("Floating Island drop-shadow")
-                    checked: Config.options.bar.floatingNotch.dropShadow
-                    onCheckedChanged: {
-                        Config.options.bar.floatingNotch.dropShadow = checked;
+                    ConfigSwitch {
+                        buttonIcon: "filter_drama"
+                        text: Translation.tr("Floating Island drop-shadow")
+                        checked: Config.options.bar.floatingNotch.dropShadow
+                        onCheckedChanged: {
+                            Config.options.bar.floatingNotch.dropShadow = checked;
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Shows a drop shadow underneath the floating island")
+                        }
                     }
 
-                    StyledToolTip {
-                        text: Translation.tr("Shows a drop shadow underneath the floating island")
-                    }
-                }
+                    ConfigSwitch {
+                        buttonIcon: "contrast"
+                        text: Translation.tr("AMOLED background")
+                        checked: Config.options.bar.amoledBackground
+                        onCheckedChanged: {
+                            Config.options.bar.amoledBackground = checked;
+                        }
 
-                ConfigSwitch {
-                    buttonIcon: "contrast"
-                    text: Translation.tr("AMOLED background")
-                    checked: Config.options.bar.amoledBackground
-                    onCheckedChanged: {
-                        Config.options.bar.amoledBackground = checked;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("Pure black, always opaque background for the dynamic island and the bar. Only recolors backgrounds that are visible")
+                        StyledToolTip {
+                            text: Translation.tr("Pure black, always opaque background for the dynamic island and the bar. Only recolors backgrounds that are visible")
+                        }
                     }
                 }
             }
         }
 
         // ── Behavior ──────────────────────────────────────────────────────────
-        ContentSection {
+        LazyBlock {
+            placeholderHeight: 359
             visible: dynamicIslandConfigRoot.islandOn
-            icon: "mouse"
-            title: Translation.tr("Island behavior")
-            tooltip: Translation.tr("When the island shows itself and how it reacts to the pointer.")
+            ContentSection {
+                visible: dynamicIslandConfigRoot.islandOn
+                icon: "mouse"
+                title: Translation.tr("Island behavior")
+                tooltip: Translation.tr("When the island shows itself and how it reacts to the pointer.")
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Appearance.sizes.elevationMargin / 2
 
-                ConfigSwitch {
-                    buttonIcon: "visibility_off"
-                    text: Translation.tr("Always hide floating island")
-                    checked: Config.options.bar.floatingNotch.autoHide
-                    onCheckedChanged: {
-                        Config.options.bar.floatingNotch.autoHide = checked;
+                    ConfigSwitch {
+                        buttonIcon: "visibility_off"
+                        text: Translation.tr("Always hide floating island")
+                        checked: Config.options.bar.floatingNotch.autoHide
+                        onCheckedChanged: {
+                            Config.options.bar.floatingNotch.autoHide = checked;
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Hides the island until a workspace, media, Bluetooth, notification, or other activity trigger reveals it")
+                        }
                     }
 
-                    StyledToolTip {
-                        text: Translation.tr("Hides the island until a workspace, media, Bluetooth, notification, or other activity trigger reveals it")
-                    }
-                }
+                    ConfigSpinBox {
+                        icon: "touch_app"
+                        text: Translation.tr("Hover time to expand (ms)")
+                        visible: Config.options.bar.floatingNotch.autoHide
+                        value: Config.options.bar.floatingNotch.hoverExpandDelayMs
+                        from: 0
+                        to: 5000
+                        stepSize: 100
+                        onValueChanged: {
+                            Config.options.bar.floatingNotch.hoverExpandDelayMs = value;
+                        }
 
-                ConfigSpinBox {
-                    icon: "touch_app"
-                    text: Translation.tr("Hover time to expand (ms)")
-                    visible: Config.options.bar.floatingNotch.autoHide
-                    value: Config.options.bar.floatingNotch.hoverExpandDelayMs
-                    from: 0
-                    to: 5000
-                    stepSize: 100
-                    onValueChanged: {
-                        Config.options.bar.floatingNotch.hoverExpandDelayMs = value;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("Hovering shows the contracted island at once; resting the pointer this long opens the expanded view")
-                    }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "touch_app"
-                    text: Translation.tr("Hold to reveal")
-                    checked: Config.options.dynamicIsland.behavior.holdToReveal
-                    onCheckedChanged: {
-                        if (checked === Config.options.dynamicIsland.behavior.holdToReveal)
-                            return;
-                        Config.options.dynamicIsland.behavior.holdToReveal = checked;
+                        StyledToolTip {
+                            text: Translation.tr("Hovering shows the contracted island at once; resting the pointer this long opens the expanded view")
+                        }
                     }
 
-                    StyledToolTip {
-                        text: Translation.tr("The dashboard opens once the pointer has rested on the island for this long. The island grows a little while it waits, so the hold is visible.")
-                    }
-                }
+                    ConfigSwitch {
+                        buttonIcon: "touch_app"
+                        text: Translation.tr("Hold to reveal")
+                        checked: Config.options.dynamicIsland.behavior.holdToReveal
+                        onCheckedChanged: {
+                            if (checked === Config.options.dynamicIsland.behavior.holdToReveal)
+                                return;
+                            Config.options.dynamicIsland.behavior.holdToReveal = checked;
+                        }
 
-                ConfigSpinBox {
-                    icon: "timer"
-                    text: Translation.tr("Hold time (ms)")
-                    visible: Config.options.dynamicIsland.behavior.holdToReveal
-                    value: Config.options.dynamicIsland.behavior.holdToRevealMs
-                    from: 200
-                    to: 3000
-                    stepSize: 50
-                    onValueChanged: {
-                        Config.options.dynamicIsland.behavior.holdToRevealMs = value;
+                        StyledToolTip {
+                            text: Translation.tr("The dashboard opens once the pointer has rested on the island for this long. The island grows a little while it waits, so the hold is visible.")
+                        }
                     }
 
-                    StyledToolTip {
-                        text: Translation.tr("Hold the pointer on the island to open the dashboard")
-                    }
-                }
+                    ConfigSpinBox {
+                        icon: "timer"
+                        text: Translation.tr("Hold time (ms)")
+                        visible: Config.options.dynamicIsland.behavior.holdToReveal
+                        value: Config.options.dynamicIsland.behavior.holdToRevealMs
+                        from: 200
+                        to: 3000
+                        stepSize: 50
+                        onValueChanged: {
+                            Config.options.dynamicIsland.behavior.holdToRevealMs = value;
+                        }
 
-                ConfigSwitch {
-                    buttonIcon: "memory"
-                    text: Translation.tr("Keep dashboard in memory")
-                    checked: Config.options.dynamicIsland.behavior.keepDashboardLoaded
-                    onCheckedChanged: {
-                        if (checked === Config.options.dynamicIsland.behavior.keepDashboardLoaded)
-                            return;
-                        Config.options.dynamicIsland.behavior.keepDashboardLoaded = checked;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("The dashboard's quick-toggle grid is built once and kept in memory: every opening is instant, but it stays resident and uses extra RAM while idle.")
-                    }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "desktop_windows"
-                    text: Translation.tr("Only show island on single monitor")
-                    checked: Config.options.bar.floatingNotch.onlyShowOnSingleMonitor
-                    onCheckedChanged: {
-                        Config.options.bar.floatingNotch.onlyShowOnSingleMonitor = checked;
-                        if (checked && Config.options.bar.floatingNotch.singleMonitorName === "" && Quickshell.screens.length > 0)
-                            Config.options.bar.floatingNotch.singleMonitorName = Quickshell.screens[0].name;
+                        StyledToolTip {
+                            text: Translation.tr("Hold the pointer on the island to open the dashboard")
+                        }
                     }
 
-                    StyledToolTip {
-                        text: Translation.tr("Display the dynamic island on only one chosen monitor instead of following focus")
+                    ConfigSwitch {
+                        buttonIcon: "memory"
+                        text: Translation.tr("Keep dashboard in memory")
+                        checked: Config.options.dynamicIsland.behavior.keepDashboardLoaded
+                        onCheckedChanged: {
+                            if (checked === Config.options.dynamicIsland.behavior.keepDashboardLoaded)
+                                return;
+                            Config.options.dynamicIsland.behavior.keepDashboardLoaded = checked;
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("The dashboard's quick-toggle grid is built once and kept in memory: every opening is instant, but it stays resident and uses extra RAM while idle.")
+                        }
                     }
-                }
 
-                ContentSubsection {
-                    title: Translation.tr("Selected Monitor")
-                    icon: "settings_input_hdmi"
-                    visible: Config.options.bar.floatingNotch.onlyShowOnSingleMonitor
+                    ConfigSwitch {
+                        buttonIcon: "desktop_windows"
+                        text: Translation.tr("Only show island on single monitor")
+                        checked: Config.options.bar.floatingNotch.onlyShowOnSingleMonitor
+                        onCheckedChanged: {
+                            Config.options.bar.floatingNotch.onlyShowOnSingleMonitor = checked;
+                            if (checked && Config.options.bar.floatingNotch.singleMonitorName === "" && Quickshell.screens.length > 0)
+                                Config.options.bar.floatingNotch.singleMonitorName = Quickshell.screens[0].name;
+                        }
 
-                    MonitorPicker {
-                        currentValue: Config.options.bar.floatingNotch.singleMonitorName
-                        onSelected: (newValue) => {
-                            Config.options.bar.floatingNotch.singleMonitorName = newValue;
+                        StyledToolTip {
+                            text: Translation.tr("Display the dynamic island on only one chosen monitor instead of following focus")
+                        }
+                    }
+
+                    ContentSubsection {
+                        title: Translation.tr("Selected Monitor")
+                        icon: "settings_input_hdmi"
+                        visible: Config.options.bar.floatingNotch.onlyShowOnSingleMonitor
+
+                        MonitorPicker {
+                            currentValue: Config.options.bar.floatingNotch.singleMonitorName
+                            onSelected: (newValue) => {
+                                Config.options.bar.floatingNotch.singleMonitorName = newValue;
+                            }
                         }
                     }
                 }
@@ -883,121 +897,126 @@ Item {
         // ── Password prompts ──────────────────────────────────────────────────
         // Every route is opt-in; see AskpassService for what switching one on changes
         // outside the shell (a client, a sudo wrapper in ~/.local/bin, SUDO_ASKPASS).
-        ContentSection {
+        LazyBlock {
+            placeholderHeight: 481
             visible: dynamicIslandConfigRoot.islandOn
-            icon: "password"
-            title: Translation.tr("Password prompts")
-            tooltip: Translation.tr("Answer sudo, polkit and ssh/git password prompts on the island. Each kind is off until you switch it on, and switching it off undoes what it set up.")
+            ContentSection {
+                visible: dynamicIslandConfigRoot.islandOn
+                icon: "password"
+                Component.onCompleted: dynamicIslandConfigRoot.askItems = [askSudo, askTerminal, askPolkit, askSsh, askStyleArray, askTerminalStyleArray]
+                title: Translation.tr("Password prompts")
+                tooltip: Translation.tr("Answer sudo, polkit and ssh/git password prompts on the island. Each kind is off until you switch it on, and switching it off undoes what it set up.")
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                ConfigSwitch {
-                    id: askSudo
-                    buttonIcon: "admin_panel_settings"
-                    text: Translation.tr("sudo -A and apps asking for sudo")
-                    checked: Config.options.bar.floatingNotch.askpassSudo
-                    onCheckedChanged: Config.options.bar.floatingNotch.askpassSudo = checked
-
-                    StyledToolTip {
-                        text: Translation.tr("Becomes your SUDO_ASKPASS, so `sudo -A` and programs without a terminal ask here. Works without any askpass set up: the shell installs its own client and exports SUDO_ASKPASS for programs started after this")
-                    }
-                }
-
-                ConfigSwitch {
-                    id: askTerminal
-                    buttonIcon: "terminal"
-                    text: Translation.tr("sudo typed in a terminal")
-                    checked: Config.options.bar.floatingNotch.askpassTerminal
-                    onCheckedChanged: Config.options.bar.floatingNotch.askpassTerminal = checked
-
-                    StyledToolTip {
-                        text: Translation.tr("Plain `sudo` in a terminal asks on the island too, as a compact pill, and the terminal keeps its own prompt: answer in either. Installs a small sudo wrapper in ~/.local/bin (never over one that is already there)")
-                    }
-                }
-
-                ConfigSwitch {
-                    id: askPolkit
-                    buttonIcon: "shield_lock"
-                    text: Translation.tr("Polkit (pkexec, apps asking for admin rights)")
-                    checked: Config.options.bar.floatingNotch.askpassPolkit
-                    onCheckedChanged: Config.options.bar.floatingNotch.askpassPolkit = checked
-
-                    StyledToolTip {
-                        text: Translation.tr("Shows polkit prompts on the island instead of the full-screen dialog")
-                    }
-                }
-
-                ConfigSwitch {
-                    id: askSsh
-                    buttonIcon: "key"
-                    text: Translation.tr("SSH and Git passphrases")
-                    checked: Config.options.bar.floatingNotch.askpassSsh
-                    onCheckedChanged: Config.options.bar.floatingNotch.askpassSsh = checked
-
-                    StyledToolTip {
-                        text: Translation.tr("Exports SSH_ASKPASS (with SSH_ASKPASS_REQUIRE=prefer) and GIT_ASKPASS, so key passphrases and HTTPS credentials are asked here. Programs started after this pick it up")
-                    }
-                }
-
-                NoticeBox {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.askpassTerminal
-                        && AskpassService.setupStatus.wrapper === "foreign"
-                    materialIcon: "warning"
-                    text: Translation.tr("~/.local/bin/sudo already exists and isn't the island's wrapper, so it was left alone and terminal sudo won't ask here. Remove or rename it to use this.")
-                }
+                    spacing: Appearance.sizes.elevationMargin / 2
 
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: Config.options.bar.floatingNotch.askpassTerminal
-                        && AskpassService.setupStatus.binOnPath === false
-                    materialIcon: "info"
-                    text: Translation.tr("~/.local/bin is not on your PATH, so terminals won't find the sudo wrapper. Add it to PATH in your shell's config.")
-                }
+                    ConfigSwitch {
+                        id: askSudo
+                        buttonIcon: "admin_panel_settings"
+                        text: Translation.tr("sudo -A and apps asking for sudo")
+                        checked: Config.options.bar.floatingNotch.askpassSudo
+                        onCheckedChanged: Config.options.bar.floatingNotch.askpassSudo = checked
 
-                ContentSubsection {
-                    title: Translation.tr("Prompt style")
-                    icon: "view_agenda"
-                    visible: Config.options.bar.floatingNotch.askpassSudo
-                        || Config.options.bar.floatingNotch.askpassPolkit
-                        || Config.options.bar.floatingNotch.askpassSsh
-
-                    ConfigSelectionArray {
-                        id: askStyleArray
-                        currentValue: Config.options.bar.floatingNotch.askpassStyle
-                        onSelected: newValue => Config.options.bar.floatingNotch.askpassStyle = newValue
-                        options: [{
-                            "displayName": Translation.tr("Card"),
-                            "icon": "web_asset",
-                            "value": "card"
-                        }, {
-                            "displayName": Translation.tr("Pill"),
-                            "icon": "toggle_on",
-                            "value": "pill"
-                        }]
+                        StyledToolTip {
+                            text: Translation.tr("Becomes your SUDO_ASKPASS, so `sudo -A` and programs without a terminal ask here. Works without any askpass set up: the shell installs its own client and exports SUDO_ASKPASS for programs started after this")
+                        }
                     }
-                }
 
-                ContentSubsection {
-                    title: Translation.tr("Terminal prompt style")
-                    icon: "terminal"
-                    visible: Config.options.bar.floatingNotch.askpassTerminal
+                    ConfigSwitch {
+                        id: askTerminal
+                        buttonIcon: "terminal"
+                        text: Translation.tr("sudo typed in a terminal")
+                        checked: Config.options.bar.floatingNotch.askpassTerminal
+                        onCheckedChanged: Config.options.bar.floatingNotch.askpassTerminal = checked
 
-                    ConfigSelectionArray {
-                        id: askTerminalStyleArray
-                        currentValue: Config.options.bar.floatingNotch.askpassTerminalStyle
-                        onSelected: newValue => Config.options.bar.floatingNotch.askpassTerminalStyle = newValue
-                        options: [{
-                            "displayName": Translation.tr("Pill"),
-                            "icon": "toggle_on",
-                            "value": "pill"
-                        }, {
-                            "displayName": Translation.tr("Card"),
-                            "icon": "web_asset",
-                            "value": "card"
-                        }]
+                        StyledToolTip {
+                            text: Translation.tr("Plain `sudo` in a terminal asks on the island too, as a compact pill, and the terminal keeps its own prompt: answer in either. Installs a small sudo wrapper in ~/.local/bin (never over one that is already there)")
+                        }
+                    }
+
+                    ConfigSwitch {
+                        id: askPolkit
+                        buttonIcon: "shield_lock"
+                        text: Translation.tr("Polkit (pkexec, apps asking for admin rights)")
+                        checked: Config.options.bar.floatingNotch.askpassPolkit
+                        onCheckedChanged: Config.options.bar.floatingNotch.askpassPolkit = checked
+
+                        StyledToolTip {
+                            text: Translation.tr("Shows polkit prompts on the island instead of the full-screen dialog")
+                        }
+                    }
+
+                    ConfigSwitch {
+                        id: askSsh
+                        buttonIcon: "key"
+                        text: Translation.tr("SSH and Git passphrases")
+                        checked: Config.options.bar.floatingNotch.askpassSsh
+                        onCheckedChanged: Config.options.bar.floatingNotch.askpassSsh = checked
+
+                        StyledToolTip {
+                            text: Translation.tr("Exports SSH_ASKPASS (with SSH_ASKPASS_REQUIRE=prefer) and GIT_ASKPASS, so key passphrases and HTTPS credentials are asked here. Programs started after this pick it up")
+                        }
+                    }
+
+                    NoticeBox {
+                        Layout.fillWidth: true
+                        visible: Config.options.bar.floatingNotch.askpassTerminal
+                            && AskpassService.setupStatus.wrapper === "foreign"
+                        materialIcon: "warning"
+                        text: Translation.tr("~/.local/bin/sudo already exists and isn't the island's wrapper, so it was left alone and terminal sudo won't ask here. Remove or rename it to use this.")
+                    }
+
+                    NoticeBox {
+                        Layout.fillWidth: true
+                        visible: Config.options.bar.floatingNotch.askpassTerminal
+                            && AskpassService.setupStatus.binOnPath === false
+                        materialIcon: "info"
+                        text: Translation.tr("~/.local/bin is not on your PATH, so terminals won't find the sudo wrapper. Add it to PATH in your shell's config.")
+                    }
+
+                    ContentSubsection {
+                        title: Translation.tr("Prompt style")
+                        icon: "view_agenda"
+                        visible: Config.options.bar.floatingNotch.askpassSudo
+                            || Config.options.bar.floatingNotch.askpassPolkit
+                            || Config.options.bar.floatingNotch.askpassSsh
+
+                        ConfigSelectionArray {
+                            id: askStyleArray
+                            currentValue: Config.options.bar.floatingNotch.askpassStyle
+                            onSelected: newValue => Config.options.bar.floatingNotch.askpassStyle = newValue
+                            options: [{
+                                "displayName": Translation.tr("Card"),
+                                "icon": "web_asset",
+                                "value": "card"
+                            }, {
+                                "displayName": Translation.tr("Pill"),
+                                "icon": "toggle_on",
+                                "value": "pill"
+                            }]
+                        }
+                    }
+
+                    ContentSubsection {
+                        title: Translation.tr("Terminal prompt style")
+                        icon: "terminal"
+                        visible: Config.options.bar.floatingNotch.askpassTerminal
+
+                        ConfigSelectionArray {
+                            id: askTerminalStyleArray
+                            currentValue: Config.options.bar.floatingNotch.askpassTerminalStyle
+                            onSelected: newValue => Config.options.bar.floatingNotch.askpassTerminalStyle = newValue
+                            options: [{
+                                "displayName": Translation.tr("Pill"),
+                                "icon": "toggle_on",
+                                "value": "pill"
+                            }, {
+                                "displayName": Translation.tr("Card"),
+                                "icon": "web_asset",
+                                "value": "card"
+                            }]
+                        }
                     }
                 }
             }

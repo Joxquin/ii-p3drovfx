@@ -221,6 +221,10 @@ Rectangle {
         rowSpacing: root.gap
         visible: opacity > 0
         opacity: grid.current ? 1 : 0
+        // Built the first time it is shown, then kept for the fade back.
+        property bool shown: false
+        onCurrentChanged: if (current) shown = true
+        populated: current || shown
 
         Behavior on opacity {
             enabled: !Appearance.reducedMotion

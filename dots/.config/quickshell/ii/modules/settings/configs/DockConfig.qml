@@ -336,314 +336,333 @@ Item {
                         value: dockConfigRoot.dock.dockRadius < 0 ? 0 : dockConfigRoot.dock.dockRadius
                         onValueChanged: Config.options.dock.dockRadius = value === 0 ? -1 : value
                     }
-                    ConfigSlider {
+                    // Only the islands style has a gap between islands to set.
+                    Loader {
                         Layout.fillWidth: true
-                        visible: hero.savedStyle === "islands"
-                        buttonIcon: "space_bar"
-                        text: Translation.tr("Island spacing")
-                        from: 4
-                        to: 32
-                        stepSize: 1
-                        usePercentTooltip: false
-                        value: dockConfigRoot.dock.islandSpacing ?? 8
-                        onValueChanged: Config.options.dock.islandSpacing = value
+                        active: hero.savedStyle === "islands"
+                        visible: active
+                        sourceComponent: ConfigSlider {
+                            buttonIcon: "space_bar"
+                            text: Translation.tr("Island spacing")
+                            from: 4
+                            to: 32
+                            stepSize: 1
+                            usePercentTooltip: false
+                            value: dockConfigRoot.dock.islandSpacing ?? 8
+                            onValueChanged: Config.options.dock.islandSpacing = value
+                        }
                     }
                 }
             }
         }
 
         // ── Features ──────────────────────────────────────────────────────
-        Item {
-            id: tiles
-            Layout.fillWidth: true
+        LazyBlock {
+            placeholderHeight: 412
             Layout.topMargin: 12
             visible: dockConfigRoot.dockOn
-            implicitHeight: tileFlow.implicitHeight
+            Item {
+                id: tiles
+                Layout.fillWidth: true
+                visible: dockConfigRoot.dockOn
+                implicitHeight: tileFlow.implicitHeight
 
-            readonly property int gap: 12
-            readonly property int fits: Math.max(1, Math.floor((width + gap) / (300 + gap)))
-            // Four tiles: one row of four, two of two or a column, never 3 + 1.
-            readonly property int columns: fits >= 4 ? 4 : fits >= 2 ? 2 : 1
-            readonly property int tileWidth: Math.floor((width - gap * (columns - 1)) / columns)
-            readonly property int tileHeight: 200
+                readonly property int gap: 12
+                readonly property int fits: Math.max(1, Math.floor((width + gap) / (300 + gap)))
+                // Four tiles: one row of four, two of two or a column, never 3 + 1.
+                readonly property int columns: fits >= 4 ? 4 : fits >= 2 ? 2 : 1
+                readonly property int tileWidth: Math.floor((width - gap * (columns - 1)) / columns)
+                readonly property int tileHeight: 200
 
-            Flow {
-                id: tileFlow
-                width: parent.width
-                spacing: tiles.gap
+                Flow {
+                    id: tileFlow
+                    width: parent.width
+                    spacing: tiles.gap
 
-                ColorsFeatureTile {
-                    width: tiles.tileWidth
-                    height: tiles.tileHeight
-                    symbol: "zoom_in"
-                    shapeOn: MaterialShape.Shape.Cookie12Sided
-                    title: Translation.tr("Magnification")
-                    summary: checked
-                        ? Translation.tr("%1× under the pointer · %2 motion")
-                            .arg(Number(dockConfigRoot.dock.magnificationScale ?? 1.5).toFixed(2).replace(/\.?0+$/, ""))
-                            .arg(({ "fast": Translation.tr("Fast"), "balanced": Translation.tr("Balanced"), "smooth": Translation.tr("Smooth") })[dockConfigRoot.dock.magnificationMotion ?? "balanced"] ?? "")
-                        : Translation.tr("Icons swell as the pointer passes over them")
-                    checked: dockConfigRoot.dock.enableMagnification ?? false
-                    configurable: true
-                    onConfigureRequested: dockConfigRoot.openSubPage("DockMagnificationConfig.qml")
-                    onToggled: value => Config.options.dock.enableMagnification = value
-                }
-
-                ColorsFeatureTile {
-                    id: hoverTile
-                    width: tiles.tileWidth
-                    height: tiles.tileHeight
-                    symbol: "preview"
-                    shapeOn: MaterialShape.Shape.Flower
-                    title: Translation.tr("On hover")
-                    summary: dockConfigRoot.dock.enablePreview ? Translation.tr("Window previews over running apps")
-                        : dockConfigRoot.dock.enableAppTooltip ? Translation.tr("The app's name over its icon")
-                        : Translation.tr("Nothing opens over the icons")
-                    checked: dockConfigRoot.dock.enablePreview || dockConfigRoot.dock.enableAppTooltip
-                    onToggled: value => {
-                        Config.options.dock.enablePreview = value;
-                        Config.options.dock.enableAppTooltip = false;
+                    ColorsFeatureTile {
+                        width: tiles.tileWidth
+                        height: tiles.tileHeight
+                        symbol: "zoom_in"
+                        shapeOn: MaterialShape.Shape.Cookie12Sided
+                        title: Translation.tr("Magnification")
+                        summary: checked
+                            ? Translation.tr("%1× under the pointer · %2 motion")
+                                .arg(Number(dockConfigRoot.dock.magnificationScale ?? 1.5).toFixed(2).replace(/\.?0+$/, ""))
+                                .arg(({ "fast": Translation.tr("Fast"), "balanced": Translation.tr("Balanced"), "smooth": Translation.tr("Smooth") })[dockConfigRoot.dock.magnificationMotion ?? "balanced"] ?? "")
+                            : Translation.tr("Icons swell as the pointer passes over them")
+                        checked: dockConfigRoot.dock.enableMagnification ?? false
+                        configurable: true
+                        onConfigureRequested: dockConfigRoot.openSubPage("DockMagnificationConfig.qml")
+                        onToggled: value => Config.options.dock.enableMagnification = value
                     }
 
-                    ColorsChip {
-                        enabled: hoverTile.checked
-                        label: Translation.tr("Name")
-                        symbol: "subtitles"
-                        chosen: dockConfigRoot.dock.enableAppTooltip && !dockConfigRoot.dock.enablePreview
-                        colContent: hoverTile.colContent
-                        colChosen: Appearance.colors.colPrimary
-                        colOnChosen: Appearance.colors.colOnPrimary
-                        onClicked: {
-                            Config.options.dock.enablePreview = false;
-                            Config.options.dock.enableAppTooltip = true;
-                        }
-                    }
-                    ColorsChip {
-                        enabled: hoverTile.checked
-                        label: Translation.tr("Preview")
+                    ColorsFeatureTile {
+                        id: hoverTile
+                        width: tiles.tileWidth
+                        height: tiles.tileHeight
                         symbol: "preview"
-                        chosen: dockConfigRoot.dock.enablePreview
-                        colContent: hoverTile.colContent
-                        colChosen: Appearance.colors.colPrimary
-                        colOnChosen: Appearance.colors.colOnPrimary
-                        onClicked: {
-                            Config.options.dock.enablePreview = true;
+                        shapeOn: MaterialShape.Shape.Flower
+                        title: Translation.tr("On hover")
+                        summary: dockConfigRoot.dock.enablePreview ? Translation.tr("Window previews over running apps")
+                            : dockConfigRoot.dock.enableAppTooltip ? Translation.tr("The app's name over its icon")
+                            : Translation.tr("Nothing opens over the icons")
+                        checked: dockConfigRoot.dock.enablePreview || dockConfigRoot.dock.enableAppTooltip
+                        onToggled: value => {
+                            Config.options.dock.enablePreview = value;
                             Config.options.dock.enableAppTooltip = false;
                         }
-                    }
-                }
 
-                ColorsFeatureTile {
-                    width: tiles.tileWidth
-                    height: tiles.tileHeight
-                    symbol: "category"
-                    shapeOn: MaterialShape.Shape.SoftBurst
-                    title: Translation.tr("Smart grouping")
-                    summary: checked ? Translation.tr("Sorted by category; anything you place by hand stays put")
-                        : Translation.tr("Arrange the dock by app category")
-                    checked: dockConfigRoot.dock.smartGrouping ?? false
-                    onToggled: value => Config.options.dock.smartGrouping = value
-                }
-
-                ColorsFeatureTile {
-                    width: tiles.tileWidth
-                    height: tiles.tileHeight
-                    symbol: "stacks"
-                    shapeOn: MaterialShape.Shape.Clover4Leaf
-                    title: Translation.tr("Widget stack")
-                    summary: {
-                        const n = (dockConfigRoot.dock.widgetStackItems ?? []).length;
-                        if (!checked)
-                            return Translation.tr("Several widgets in one slot, turned with the mouse wheel");
-                        return n === 1 ? Translation.tr("1 widget in the stack · scroll over it to turn")
-                            : Translation.tr("%1 widgets share one slot · scroll over it to turn").arg(n);
+                        ColorsChip {
+                            enabled: hoverTile.checked
+                            label: Translation.tr("Name")
+                            symbol: "subtitles"
+                            chosen: dockConfigRoot.dock.enableAppTooltip && !dockConfigRoot.dock.enablePreview
+                            colContent: hoverTile.colContent
+                            colChosen: Appearance.colors.colPrimary
+                            colOnChosen: Appearance.colors.colOnPrimary
+                            onClicked: {
+                                Config.options.dock.enablePreview = false;
+                                Config.options.dock.enableAppTooltip = true;
+                            }
+                        }
+                        ColorsChip {
+                            enabled: hoverTile.checked
+                            label: Translation.tr("Preview")
+                            symbol: "preview"
+                            chosen: dockConfigRoot.dock.enablePreview
+                            colContent: hoverTile.colContent
+                            colChosen: Appearance.colors.colPrimary
+                            colOnChosen: Appearance.colors.colOnPrimary
+                            onClicked: {
+                                Config.options.dock.enablePreview = true;
+                                Config.options.dock.enableAppTooltip = false;
+                            }
+                        }
                     }
-                    checked: dockConfigRoot.dock.enableWidgetStack ?? false
-                    configurable: true
-                    onConfigureRequested: dockConfigRoot.openSubPage("DockUtilitiesConfig.qml")
-                    onToggled: value => Config.options.dock.enableWidgetStack = value
+
+                    ColorsFeatureTile {
+                        width: tiles.tileWidth
+                        height: tiles.tileHeight
+                        symbol: "category"
+                        shapeOn: MaterialShape.Shape.SoftBurst
+                        title: Translation.tr("Smart grouping")
+                        summary: checked ? Translation.tr("Sorted by category; anything you place by hand stays put")
+                            : Translation.tr("Arrange the dock by app category")
+                        checked: dockConfigRoot.dock.smartGrouping ?? false
+                        onToggled: value => Config.options.dock.smartGrouping = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: tiles.tileWidth
+                        height: tiles.tileHeight
+                        symbol: "stacks"
+                        shapeOn: MaterialShape.Shape.Clover4Leaf
+                        title: Translation.tr("Widget stack")
+                        summary: {
+                            const n = (dockConfigRoot.dock.widgetStackItems ?? []).length;
+                            if (!checked)
+                                return Translation.tr("Several widgets in one slot, turned with the mouse wheel");
+                            return n === 1 ? Translation.tr("1 widget in the stack · scroll over it to turn")
+                                : Translation.tr("%1 widgets share one slot · scroll over it to turn").arg(n);
+                        }
+                        checked: dockConfigRoot.dock.enableWidgetStack ?? false
+                        configurable: true
+                        onConfigureRequested: dockConfigRoot.openSubPage("DockUtilitiesConfig.qml")
+                        onToggled: value => Config.options.dock.enableWidgetStack = value
+                    }
                 }
             }
         }
 
         // ── The sub-pages ─────────────────────────────────────────────────
-        Item {
-            id: entries
-            Layout.fillWidth: true
+        LazyBlock {
+            placeholderHeight: 184
             visible: dockConfigRoot.dockOn
-            readonly property bool stacked: width < 680
-            readonly property int gap: 12
-            readonly property real cardWidth: entries.stacked ? width : Math.floor((width - gap) / 2)
-            implicitHeight: entries.stacked ? widgetsEntry.implicitHeight + gap + looksEntry.implicitHeight
-                : Math.max(widgetsEntry.implicitHeight, looksEntry.implicitHeight)
+            Item {
+                id: entries
+                Layout.fillWidth: true
+                visible: dockConfigRoot.dockOn
+                readonly property bool stacked: width < 680
+                readonly property int gap: 12
+                readonly property real cardWidth: entries.stacked ? width : Math.floor((width - gap) / 2)
+                implicitHeight: entries.stacked ? widgetsEntry.implicitHeight + gap + looksEntry.implicitHeight
+                    : Math.max(widgetsEntry.implicitHeight, looksEntry.implicitHeight)
 
-            DockEntryCard {
-                id: widgetsEntry
-                x: 0
-                y: 0
-                width: entries.cardWidth
-                height: entries.stacked ? implicitHeight : entries.implicitHeight
-                symbol: "widgets"
-                title: Translation.tr("Widgets & buttons")
-                summary: Translation.tr("Media, weather, utilities, buttons and folders")
-                count: dockConfigRoot.widgetGlyphs.length
-                countLabel: Translation.tr("on the dock")
-                glyphs: dockConfigRoot.widgetGlyphs
-                onClicked: dockConfigRoot.openSubPage("DockUtilitiesConfig.qml")
-            }
-
-            DockEntryCard {
-                id: looksEntry
-                x: entries.stacked ? 0 : entries.cardWidth + entries.gap
-                y: entries.stacked ? widgetsEntry.implicitHeight + entries.gap : 0
-                width: entries.cardWidth
-                height: entries.stacked ? implicitHeight : entries.implicitHeight
-                symbol: "palette"
-                shapeRest: MaterialShape.Shape.Flower
-                shapeHover: MaterialShape.Shape.Sunny
-                title: Translation.tr("Icons & motion")
-                summary: {
-                    const d = dockConfigRoot.dock;
-                    const parts = [];
-                    parts.push(d.monochromeIcons ? Translation.tr("Tinted icons") : d.dimInactiveIcons ? Translation.tr("Idle apps dimmed") : Translation.tr("Full-colour icons"));
-                    if (d.enableShapeMask)
-                        parts.push(Translation.tr("Adaptive icons"));
-                    parts.push(Translation.tr("%1 on launch").arg(dockConfigRoot.animationName(d.launchAnimation)));
-                    return parts.join(" · ");
+                DockEntryCard {
+                    id: widgetsEntry
+                    x: 0
+                    y: 0
+                    width: entries.cardWidth
+                    height: entries.stacked ? implicitHeight : entries.implicitHeight
+                    symbol: "widgets"
+                    title: Translation.tr("Widgets & buttons")
+                    summary: Translation.tr("Media, weather, utilities, buttons and folders")
+                    count: dockConfigRoot.widgetGlyphs.length
+                    countLabel: Translation.tr("on the dock")
+                    glyphs: dockConfigRoot.widgetGlyphs
+                    onClicked: dockConfigRoot.openSubPage("DockUtilitiesConfig.qml")
                 }
-                glyphs: []
-                onClicked: dockConfigRoot.openSubPage("DockAppearanceConfig.qml")
+
+                DockEntryCard {
+                    id: looksEntry
+                    x: entries.stacked ? 0 : entries.cardWidth + entries.gap
+                    y: entries.stacked ? widgetsEntry.implicitHeight + entries.gap : 0
+                    width: entries.cardWidth
+                    height: entries.stacked ? implicitHeight : entries.implicitHeight
+                    symbol: "palette"
+                    shapeRest: MaterialShape.Shape.Flower
+                    shapeHover: MaterialShape.Shape.Sunny
+                    title: Translation.tr("Icons & motion")
+                    summary: {
+                        const d = dockConfigRoot.dock;
+                        const parts = [];
+                        parts.push(d.monochromeIcons ? Translation.tr("Tinted icons") : d.dimInactiveIcons ? Translation.tr("Idle apps dimmed") : Translation.tr("Full-colour icons"));
+                        if (d.enableShapeMask)
+                            parts.push(Translation.tr("Adaptive icons"));
+                        parts.push(Translation.tr("%1 on launch").arg(dockConfigRoot.animationName(d.launchAnimation)));
+                        return parts.join(" · ");
+                    }
+                    glyphs: []
+                    onClicked: dockConfigRoot.openSubPage("DockAppearanceConfig.qml")
+                }
             }
         }
 
         // ── Behavior ──────────────────────────────────────────────────────
         // Search clones these controls out of context: nothing here may name a page id.
-        ContentSection {
+        LazyBlock {
+            placeholderHeight: 380
             Layout.topMargin: 12
-            icon: "tune"
-            title: Translation.tr("Behavior")
+            ContentSection {
+                icon: "tune"
+                title: Translation.tr("Behavior")
 
-            ConfigRow {
-                uniform: true
-                ConfigSwitch {
-                    buttonIcon: "toggle_on"
-                    text: Translation.tr("Enable")
-                    checked: Config.options.dock.enable
-                    onCheckedChanged: Config.options.dock.enable = checked
-                    StyledToolTip {
-                        text: Translation.tr("Show the dock on screen")
+                ConfigRow {
+                    uniform: true
+                    ConfigSwitch {
+                        buttonIcon: "toggle_on"
+                        text: Translation.tr("Enable")
+                        checked: Config.options.dock.enable
+                        onCheckedChanged: Config.options.dock.enable = checked
+                        StyledToolTip {
+                            text: Translation.tr("Show the dock on screen")
+                        }
+                    }
+                    ConfigSwitch {
+                        enabled: Config.options.dock.enable
+                        buttonIcon: "push_pin"
+                        text: Translation.tr("Pinned on startup")
+                        checked: Config.options.dock.pinnedOnStartup
+                        onCheckedChanged: Config.options.dock.pinnedOnStartup = checked
+                        StyledToolTip {
+                            text: Translation.tr("Start with the dock kept on screen instead of hiding until you reach for it")
+                        }
                     }
                 }
-                ConfigSwitch {
-                    enabled: Config.options.dock.enable
-                    buttonIcon: "push_pin"
-                    text: Translation.tr("Pinned on startup")
-                    checked: Config.options.dock.pinnedOnStartup
-                    onCheckedChanged: Config.options.dock.pinnedOnStartup = checked
-                    StyledToolTip {
-                        text: Translation.tr("Start with the dock kept on screen instead of hiding until you reach for it")
-                    }
-                }
-            }
 
-            ConfigRow {
-                uniform: true
-                visible: Config.options.dock.enable
-                ConfigSwitch {
-                    buttonIcon: "mouse"
-                    text: Translation.tr("Hover to reveal")
-                    checked: Config.options.dock.hoverToReveal
-                    onCheckedChanged: Config.options.dock.hoverToReveal = checked
-                    StyledToolTip {
-                        text: Translation.tr("Bring the hidden dock back when the pointer reaches its edge")
+                ConfigRow {
+                    uniform: true
+                    visible: Config.options.dock.enable
+                    ConfigSwitch {
+                        buttonIcon: "mouse"
+                        text: Translation.tr("Hover to reveal")
+                        checked: Config.options.dock.hoverToReveal
+                        onCheckedChanged: Config.options.dock.hoverToReveal = checked
+                        StyledToolTip {
+                            text: Translation.tr("Bring the hidden dock back when the pointer reaches its edge")
+                        }
+                    }
+                    ConfigSwitch {
+                        enabled: Config.options.dock.hoverToReveal
+                        buttonIcon: "fullscreen"
+                        text: Translation.tr("Block hover in fullscreen")
+                        checked: Config.options.dock.blockHoverInFullscreen
+                        onCheckedChanged: Config.options.dock.blockHoverInFullscreen = checked
+                        StyledToolTip {
+                            text: Translation.tr("Prevent the dock from revealing on hover when a window or media is fullscreen")
+                        }
                     }
                 }
-                ConfigSwitch {
-                    enabled: Config.options.dock.hoverToReveal
-                    buttonIcon: "fullscreen"
-                    text: Translation.tr("Block hover in fullscreen")
-                    checked: Config.options.dock.blockHoverInFullscreen
-                    onCheckedChanged: Config.options.dock.blockHoverInFullscreen = checked
-                    StyledToolTip {
-                        text: Translation.tr("Prevent the dock from revealing on hover when a window or media is fullscreen")
-                    }
-                }
-            }
 
-            ConfigRow {
-                uniform: true
-                visible: Config.options.dock.enable
-                ConfigSwitch {
-                    buttonIcon: "monitor"
-                    text: Translation.tr("Isolate monitors")
-                    checked: Config.options.dock.isolateMonitors
-                    onCheckedChanged: Config.options.dock.isolateMonitors = checked
-                }
-                ConfigSwitch {
-                    buttonIcon: "center_focus_strong"
-                    text: Translation.tr("Show only on focused monitor")
-                    checked: Config.options.dock.showOnlyOnFocusedMonitor
-                    onCheckedChanged: Config.options.dock.showOnlyOnFocusedMonitor = checked
-                    StyledToolTip {
-                        text: Translation.tr("When workspace is empty, show the dock only on the focused monitor instead of all monitors")
+                ConfigRow {
+                    uniform: true
+                    visible: Config.options.dock.enable
+                    ConfigSwitch {
+                        buttonIcon: "monitor"
+                        text: Translation.tr("Isolate monitors")
+                        checked: Config.options.dock.isolateMonitors
+                        onCheckedChanged: Config.options.dock.isolateMonitors = checked
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "center_focus_strong"
+                        text: Translation.tr("Show only on focused monitor")
+                        checked: Config.options.dock.showOnlyOnFocusedMonitor
+                        onCheckedChanged: Config.options.dock.showOnlyOnFocusedMonitor = checked
+                        StyledToolTip {
+                            text: Translation.tr("When workspace is empty, show the dock only on the focused monitor instead of all monitors")
+                        }
                     }
                 }
-            }
 
-            ConfigRow {
-                uniform: true
-                visible: Config.options.dock.enable
-                ConfigSwitch {
-                    buttonIcon: "lock"
-                    text: Translation.tr("Lock arrangement")
-                    checked: Config.options.dock.lockReorder
-                    onCheckedChanged: Config.options.dock.lockReorder = checked
-                    StyledToolTip {
-                        text: Translation.tr("Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident")
+                ConfigRow {
+                    uniform: true
+                    visible: Config.options.dock.enable
+                    ConfigSwitch {
+                        buttonIcon: "lock"
+                        text: Translation.tr("Lock arrangement")
+                        checked: Config.options.dock.lockReorder
+                        onCheckedChanged: Config.options.dock.lockReorder = checked
+                        StyledToolTip {
+                            text: Translation.tr("Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident")
+                        }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "swipe_vertical"
+                        text: Translation.tr("Switch presets on scroll")
+                        checked: Config.options.dock.switchPresetsOnScroll ?? false
+                        onCheckedChanged: Config.options.dock.switchPresetsOnScroll = checked
+                        StyledToolTip {
+                            text: Translation.tr("Scroll the mouse wheel anywhere over the dock to cycle between presets when more than 1 exists")
+                        }
                     }
                 }
-                ConfigSwitch {
-                    buttonIcon: "swipe_vertical"
-                    text: Translation.tr("Switch presets on scroll")
-                    checked: Config.options.dock.switchPresetsOnScroll ?? false
-                    onCheckedChanged: Config.options.dock.switchPresetsOnScroll = checked
-                    StyledToolTip {
-                        text: Translation.tr("Scroll the mouse wheel anywhere over the dock to cycle between presets when more than 1 exists")
-                    }
-                }
-            }
 
-            ContentSubsection {
-                visible: Config.options.dock.enable
-                title: Translation.tr("Show on")
-                icon: "desktop_windows"
-                Layout.fillWidth: true
-                tooltip: Translation.tr("The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.")
+                ContentSubsection {
+                    visible: Config.options.dock.enable
+                    title: Translation.tr("Show on")
+                    icon: "desktop_windows"
+                    Layout.fillWidth: true
+                    tooltip: Translation.tr("The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.")
 
-                ConfigSelectionArray {
-                    currentValue: {
-                        const wanted = Config.options.dock.monitor ?? "";
-                        return Quickshell.screens.some(screen => screen.name === wanted) ? wanted : "";
+                    ConfigSelectionArray {
+                        currentValue: {
+                            const wanted = Config.options.dock.monitor ?? "";
+                            return Quickshell.screens.some(screen => screen.name === wanted) ? wanted : "";
+                        }
+                        onSelected: newValue => Config.options.dock.monitor = newValue
+                        options: [{
+                            "displayName": Translation.tr("All monitors"),
+                            "icon": "select_all",
+                            "value": ""
+                        }].concat(Quickshell.screens.map(screen => ({
+                            "displayName": screen.model ? (screen.name + " · " + screen.model) : screen.name,
+                            "icon": "monitor",
+                            "value": screen.name
+                        })))
                     }
-                    onSelected: newValue => Config.options.dock.monitor = newValue
-                    options: [{
-                        "displayName": Translation.tr("All monitors"),
-                        "icon": "select_all",
-                        "value": ""
-                    }].concat(Quickshell.screens.map(screen => ({
-                        "displayName": screen.model ? (screen.name + " · " + screen.model) : screen.name,
-                        "icon": "monitor",
-                        "value": screen.name
-                    })))
                 }
             }
         }
 
         // ── Presets ───────────────────────────────────────────────────────
-        DockPresetsPane {
-            Layout.fillWidth: true
+        LazyBlock {
+            placeholderHeight: 296
             Layout.topMargin: 12
             visible: dockConfigRoot.dockOn
+            DockPresetsPane {
+                Layout.fillWidth: true
+                visible: dockConfigRoot.dockOn
+            }
         }
     }
 

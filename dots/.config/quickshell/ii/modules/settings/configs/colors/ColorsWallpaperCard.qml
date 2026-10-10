@@ -263,61 +263,66 @@ Item {
     }
 
     // ── Not set yet ─────────────────────────────────────────────────────
-    RippleButton {
-        id: emptyCard
+    // Only an empty card carries this; a set one never builds it.
+    Loader {
         anchors.fill: parent
-        visible: !root.isSet
-        buttonRadius: root.cardRadius
-        colBackground: Appearance.colors.colLayer1
-        colBackgroundHover: Appearance.colors.colLayer1Hover
-        colRipple: Appearance.colors.colLayer1Active
-        onClicked: root.pickRequested()
+        active: !root.isSet
+        visible: active
+        sourceComponent: RippleButton {
+            id: emptyCard
+            anchors.fill: parent
+            buttonRadius: root.cardRadius
+            colBackground: Appearance.colors.colLayer1
+            colBackgroundHover: Appearance.colors.colLayer1Hover
+            colRipple: Appearance.colors.colLayer1Active
+            onClicked: root.pickRequested()
 
-        contentItem: Item {
-            GridLayout {
-                anchors.centerIn: parent
-                width: parent.width - 32
-                columns: root.compact ? 2 : 1
-                columnSpacing: 12
-                rowSpacing: 10
+            contentItem: Item {
+                GridLayout {
+                    anchors.centerIn: parent
+                    width: parent.width - 32
+                    columns: root.compact ? 2 : 1
+                    columnSpacing: 12
+                    rowSpacing: 10
 
-                MaterialShapeWrappedMaterialSymbol {
-                    Layout.alignment: root.compact ? Qt.AlignVCenter : Qt.AlignHCenter
-                    text: root.symbol
-                    iconSize: root.compact ? 20 : 24
-                    padding: root.compact ? 10 : 14
-                    fill: 1
-                    shape: emptyCard.hovered ? root.emptyShapeHover : root.emptyShape
-                    color: emptyCard.hovered ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
-                    colSymbol: emptyCard.hovered ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
-                    Behavior on color {
-                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    MaterialShapeWrappedMaterialSymbol {
+                        Layout.alignment: root.compact ? Qt.AlignVCenter : Qt.AlignHCenter
+                        text: root.symbol
+                        iconSize: root.compact ? 20 : 24
+                        padding: root.compact ? 10 : 14
+                        fill: 1
+                        shape: emptyCard.hovered ? root.emptyShapeHover : root.emptyShape
+                        color: emptyCard.hovered ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
+                        colSymbol: emptyCard.hovered ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
+                        Behavior on color {
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                        }
                     }
-                }
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
 
-                    StyledText {
-                        Layout.fillWidth: true
-                        horizontalAlignment: root.compact ? Text.AlignLeft : Text.AlignHCenter
-                        text: root.title
-                        font.family: Appearance.font.family.title
-                        font.variableAxes: Appearance.font.variableAxes.titleRounded
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnLayer1
-                        elide: Text.ElideRight
-                    }
-                    StyledText {
-                        Layout.fillWidth: true
-                        horizontalAlignment: root.compact ? Text.AlignLeft : Text.AlignHCenter
-                        text: root.emptyHint
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colSubtext
-                        wrapMode: Text.WordWrap
-                        maximumLineCount: 2
-                        elide: Text.ElideRight
+                        StyledText {
+                            Layout.fillWidth: true
+                            horizontalAlignment: root.compact ? Text.AlignLeft : Text.AlignHCenter
+                            text: root.title
+                            font.family: Appearance.font.family.title
+                            font.variableAxes: Appearance.font.variableAxes.titleRounded
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            color: Appearance.colors.colOnLayer1
+                            elide: Text.ElideRight
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            horizontalAlignment: root.compact ? Text.AlignLeft : Text.AlignHCenter
+                            text: root.emptyHint
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
                     }
                 }
             }

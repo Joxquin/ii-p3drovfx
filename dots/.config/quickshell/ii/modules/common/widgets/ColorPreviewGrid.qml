@@ -41,6 +41,9 @@ GridLayout {
     /// Display name of the swatch under the pointer, "" when none is.
     property string hoveredName: ""
     property bool showTooltips: true
+    /// A host with several grids stacked builds only the one on show; this is
+    /// false for the ones it has not shown yet.
+    property bool populated: true
 
     // The list can change under a live grid (Edit Mode swaps the source in
     // place); pick the loading back up for the schemes not yet reached.
@@ -49,7 +52,7 @@ GridLayout {
     }
 
     Repeater {
-        model: root.colorSchemes
+        model: root.populated ? root.colorSchemes : []
         
         delegate: ColorPreviewButton {
             Layout.fillWidth: true

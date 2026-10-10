@@ -80,8 +80,9 @@ Item {
         y: root.trayY
         spacing: 4
         Repeater {
-            // [share of the width, icons, a widget?]
-            model: [[0.34, 3, false], [0.2, 1, true], [0.12, 1, false]]
+            // [share of the width, icons, a widget?]; empty for the other styles,
+            // whose hidden island row would still build its dozen items.
+            model: root.styleName === "islands" ? [[0.34, 3, false], [0.2, 1, true], [0.12, 1, false]] : []
             delegate: Rectangle {
                 id: island
                 required property var modelData
@@ -114,7 +115,7 @@ Item {
         y: root.trayY + (root.trayHeight - root.dot) / 2
         spacing: root.styleName === "islands" ? 6 : 5
         Repeater {
-            model: 6
+            model: root.styleName === "islands" ? 0 : 6
             delegate: Rectangle {
                 required property int index
                 width: index === 3 ? root.dot * 3 : root.dot

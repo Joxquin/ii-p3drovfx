@@ -136,36 +136,39 @@ Rectangle {
                 spacing: 8
             }
 
-            RippleButton {
-                id: configureButton
-                visible: root.configurable
+            // Built only for a tile that has a sub-page; most do not.
+            Loader {
+                active: root.configurable
+                visible: active
                 Layout.alignment: Qt.AlignRight
-                implicitHeight: 36
-                implicitWidth: configureRow.implicitWidth + 28
-                buttonRadius: height / 2
-                buttonRadiusPressed: Appearance.rounding.small
-                colBackground: ColorUtils.applyAlpha(root.colContent, 0.1)
-                colBackgroundHover: ColorUtils.applyAlpha(root.colContent, 0.18)
-                colBackgroundActive: ColorUtils.applyAlpha(root.colContent, 0.26)
-                colRipple: ColorUtils.applyAlpha(root.colContent, 0.26)
-                onClicked: root.configureRequested()
+                sourceComponent: RippleButton {
+                    implicitHeight: 36
+                    implicitWidth: configureRow.implicitWidth + 28
+                    buttonRadius: height / 2
+                    buttonRadiusPressed: Appearance.rounding.small
+                    colBackground: ColorUtils.applyAlpha(root.colContent, 0.1)
+                    colBackgroundHover: ColorUtils.applyAlpha(root.colContent, 0.18)
+                    colBackgroundActive: ColorUtils.applyAlpha(root.colContent, 0.26)
+                    colRipple: ColorUtils.applyAlpha(root.colContent, 0.26)
+                    onClicked: root.configureRequested()
 
-                contentItem: Item {
-                    RowLayout {
-                        id: configureRow
-                        anchors.centerIn: parent
-                        spacing: 6
+                    contentItem: Item {
+                        RowLayout {
+                            id: configureRow
+                            anchors.centerIn: parent
+                            spacing: 6
 
-                        MaterialSymbol {
-                            text: "tune"
-                            iconSize: Appearance.font.pixelSize.normal
-                            color: root.colContent
-                        }
-                        StyledText {
-                            text: Translation.tr("Configure")
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            font.weight: Font.DemiBold
-                            color: root.colContent
+                            MaterialSymbol {
+                                text: "tune"
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: root.colContent
+                            }
+                            StyledText {
+                                text: Translation.tr("Configure")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.DemiBold
+                                color: root.colContent
+                            }
                         }
                     }
                 }
