@@ -208,6 +208,8 @@ Item {
     property int workspaceZ: 0
     property int windowZ: 1
     property int windowDraggingZ: 99999
+    /** The window whose menu is open, if any: a press anywhere else only closes it. */
+    property OverviewWindow menuOwner: null
     property real workspaceSpacing: OverviewStyle.cellSpacing
 
     // ── The current workspace: one cell that rounds out of the group ─────
@@ -542,6 +544,16 @@ Item {
                     widgetMonitor: HyprlandData.monitors.find(m => m.id == root.monitor.id)
                     windowData: windowByAddress[address]
                     hyprscrollingEnabled: root.hyprscrollingEnabled
+                    onMenuOpenChanged: {
+                        if (window.menuOpen) {
+                            if (root.menuOwner && root.menuOwner !== window)
+                                root.menuOwner.menuOpen = false;
+                            root.menuOwner = window;
+                        } else if (root.menuOwner === window) {
+                            root.menuOwner = null;
+                        }
+                    }
+                    Component.onDestruction: if (root.menuOwner === window) root.menuOwner = null
 
                     // Cascading entrance calculation matching the workspace
                     // cell, driven by the monitor-level clock.
@@ -762,6 +774,12 @@ Item {
                         drag.target: parent
                         drag.onActiveChanged: root.windowDragging = dragArea.drag.active
                         onPressed: mouse => {
+                            // Pressing the card of an open menu only closes the menu: the
+                            // press falls through to the catcher below, which does that.
+                            if (window.menuOpen) {
+                                mouse.accepted = false;
+                                return;
+                            }
                             root.draggingFromWorkspace = windowData?.workspace.id;
                             root.draggingFromWindowAddress = windowData?.address;
                             root.draggingWindowsFloating = windowData?.floating;
@@ -884,6 +902,18 @@ Item {
                     enabled: !root.animationsDisabled
                     animation: OverviewStyle.motionEnter.numberAnimation.createObject(this)
                 }
+            }
+
+            // While a window menu is open: under that window, over everything else on
+            // the surface (the margins reach past the grid and panel), so a press
+            // elsewhere closes the menu instead of reaching what is under it.
+            MouseArea {
+                z: root.windowDraggingZ - 3
+                anchors.fill: parent
+                anchors.margins: -10000
+                visible: root.menuOwner !== null
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                onPressed: if (root.menuOwner) root.menuOwner.menuOpen = false
             }
 
             // Where a dragged window would go: the target cell fills over its windows.
