@@ -26,6 +26,9 @@ Singleton {
     readonly property var cfg: Config.options.contextMenu
     readonly property bool compact: (root.cfg?.style ?? "comfortable") === "compact"
     readonly property bool cascade: (root.cfg?.submenus ?? "inline") === "cascade"
+    // The user's size for every menu (50-200 %). A menu applies it as a scale
+    // on its card, and sizes its window/clamps by the scaled extent.
+    readonly property real scale: Math.max(0.5, Math.min(2, Number(root.cfg?.scale ?? 1) || 1))
 
     // ── Metrics ──────────────────────────────────────────────────────────────
     // Compact: the card fits its content between these, the rows are 34 px.
@@ -47,6 +50,8 @@ Singleton {
     // `submenu`: opens a page (a chevron in the list, the page in a bar icon).
     // `block`: a run of entries supplied at runtime (an app's own actions);
     // it moves and hides as one, its rows are not editable one by one.
+    // `families`: the panel families the entry can appear in; absent is all.
+    // The editor labels the others ("Tablet only") instead of hiding them.
     // `header`: drawn above the entries rather than among them (the
     // wallpaper strip); it can only be shown or hidden (isShown).
     readonly property var menus: [
@@ -61,7 +66,7 @@ Singleton {
                 { "id": "presets", "symbol": "style", "title": "Presets", "submenu": true, "bar": true },
                 { "id": "style", "symbol": "wallpaper", "title": "Wallpaper & style", "defaultHidden": true },
                 { "id": "widgets", "symbol": "widgets", "title": "Desktop widgets", "defaultHidden": true },
-                { "id": "apps", "symbol": "apps", "title": "Home screen apps" },
+                { "id": "apps", "symbol": "apps", "title": "Home screen apps", "families": ["tablet"] },
                 { "id": "edit", "symbol": "edit", "title": "Edit layout", "bar": true },
                 { "id": "separator", "separator": true },
                 { "id": "new", "symbol": "add", "title": "New", "submenu": true },

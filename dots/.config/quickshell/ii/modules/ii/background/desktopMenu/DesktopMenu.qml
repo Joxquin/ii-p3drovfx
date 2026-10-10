@@ -149,8 +149,8 @@ Scope {
                     closing: GlobalStates.desktopMenuClosing
                     surfaceWidth: menuWindow.width
                     surfaceHeight: menuWindow.height
-                    x: Math.min(Math.max(GlobalStates.desktopMenuX, 8), menuWindow.width - width - 8)
-                    y: Math.min(Math.max(GlobalStates.desktopMenuY, 8), menuWindow.height - height - 8)
+                    x: Math.min(Math.max(GlobalStates.desktopMenuX, 8), menuWindow.width - visualWidth - 8)
+                    y: Math.min(Math.max(GlobalStates.desktopMenuY, 8), menuWindow.height - visualHeight - 8)
                     onDismissRequested: GlobalStates.closeDesktopMenu()
                     onExitFinished: GlobalStates.finishDesktopMenuClose()
                 }

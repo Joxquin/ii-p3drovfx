@@ -67,6 +67,8 @@ FocusScope {
     readonly property bool cascade: ContextMenus.cascade
     readonly property int padding: root.dense ? ContextMenus.compactPadding : ContextMenus.comfortablePadding
     readonly property real cardRadius: Appearance.rounding.windowRounding
+    readonly property real headerRowHeight: 40
+    readonly property real headerBlock: root.dense ? root.headerRowHeight + 9 : 0
 
     // The actions in the arrangement's terms; without a menuId they are
     // drawn as given, one run.
@@ -280,7 +282,14 @@ FocusScope {
     // the card widens it, and the cascade card gets that width of its own.
     property real actionsNaturalWidth: 0
     readonly property real compactWidth: Math.max(ContextMenus.compactMinWidth,
-        Math.min(ContextMenus.compactMaxWidth, Math.ceil(root.actionsNaturalWidth + root.padding * 2)))
+        Math.min(ContextMenus.compactMaxWidth, Math.ceil(Math.max(root.actionsNaturalWidth,
+            8 + 28 + 10 + headerMetrics.advanceWidth(root.title) + 8) + root.padding * 2)))
+    FontMetrics {
+        id: headerMetrics
+        font.family: Appearance.font.family.main
+        font.pixelSize: Appearance.font.pixelSize.smallie + 1
+        font.weight: Font.Medium
+    }
     readonly property real pageWidth: root.dense ? Math.max(root.compactWidth, ContextMenus.compactPageWidth) : 300
     readonly property real menuWidth: Math.max(0, Math.min(
         root.dense ? (!root.cascade && root.displayedPage ? root.pageWidth : root.compactWidth) : 300,
@@ -294,15 +303,18 @@ FocusScope {
     property real counterScale: 1
     // Where the row that opened a page sits, in `body`, for the cascade card.
     property real anchorY: 0
+    // The user's menu size (ContextMenus.scale) on top of the Edit Mode undo:
+    // body units times `zoom` are surface units.
+    readonly property real zoom: root.counterScale * ContextMenus.scale
 
     Item {
         id: body
-        x: Math.max(8, Math.min(root.anchorPoint.x / root.counterScale, root.width - width - 8)) * root.counterScale
-        y: Math.max(8, Math.min(root.anchorPoint.y / root.counterScale, root.height - height - 8)) * root.counterScale
+        x: Math.max(8, Math.min(root.anchorPoint.x / root.counterScale, root.width - width * ContextMenus.scale - 8)) * root.counterScale
+        y: Math.max(8, Math.min(root.anchorPoint.y / root.counterScale, root.height - height * ContextMenus.scale - 8)) * root.counterScale
         width: root.menuWidth
         height: cards.implicitHeight
         opacity: motion.reveal
-        scale: root.counterScale * motion.scale
+        scale: root.zoom * motion.scale
         transformOrigin: Item.TopLeft
         enabled: !root.closing
         Behavior on y {
@@ -320,10 +332,12 @@ FocusScope {
             anchors.right: parent.right
             spacing: root.dense ? 4 : 6
 
-            // The plate: what the menu is about.
+            // The plate: what the menu is about. Compact draws it as the
+            // card's first row instead (headerBlock).
             Item {
                 Layout.fillWidth: true
-                implicitHeight: root.dense ? 52 : 88
+                visible: !root.dense
+                implicitHeight: 88
 
                 StyledRectangularShadow {
                     target: plate
@@ -388,8 +402,8 @@ FocusScope {
                     id: card
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    implicitHeight: Math.min(Math.max(64, root.height / root.counterScale - 110),
-                        pageLoader.implicitHeight + root.padding * 2)
+                    implicitHeight: Math.min(Math.max(64, root.height / root.zoom - 110),
+                        root.headerBlock + pageLoader.implicitHeight + root.padding * 2)
                     radius: root.cardRadius
                     color: Appearance.m3colors.m3surfaceContainer
                     clip: true
@@ -399,10 +413,65 @@ FocusScope {
                     }
                     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 
+                    // Compact: the item as the card's first row - its icon at
+                    // row size, the name over the path - and a hairline under
+                    // it, so the menu is one card rather than two.
+                    Item {
+                        visible: root.headerBlock > 0
+                        x: root.padding
+                        y: root.padding
+                        width: parent.width - root.padding * 2
+                        height: root.headerBlock
+
+                        RowLayout {
+                            x: 8
+                            width: parent.width - 16
+                            height: root.headerRowHeight
+                            spacing: 10
+
+                            Image {
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 28
+                                sourceSize: Qt.size(56, 56)
+                                source: root.iconSource
+                                fillMode: Image.PreserveAspectFit
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: root.title
+                                    font.pixelSize: Appearance.font.pixelSize.smallie + 1
+                                    font.weight: Font.Medium
+                                    color: Appearance.colors.colOnSurface
+                                    elide: Text.ElideRight
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    visible: text.length > 0
+                                    text: root.subtitle
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colSubtext
+                                    elide: Text.ElideMiddle
+                                }
+                            }
+                        }
+                        Rectangle {
+                            x: 8
+                            y: root.headerRowHeight + 4
+                            width: parent.width - 16
+                            height: 1
+                            color: Appearance.colors.colOutlineVariant
+                            opacity: 0.6
+                        }
+                    }
+
                     ScrollView {
                         id: pageScroll
                         anchors.fill: parent
                         anchors.margins: root.padding
+                        anchors.topMargin: root.padding + root.headerBlock
                         contentWidth: availableWidth
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                         Loader {
@@ -434,16 +503,16 @@ FocusScope {
         Item {
             id: side
             readonly property real gap: ContextMenus.cascadeGap
-            readonly property real surfaceWidth: root.width / root.counterScale
-            readonly property real bodyX: body.x / root.counterScale
+            readonly property real surfaceWidth: root.width / root.zoom
+            readonly property real bodyX: body.x / root.zoom
             readonly property bool flip: side.bodyX + body.width + side.gap + side.width + 8 > side.surfaceWidth
             visible: root.cascade && body.sideProgress > 0 && root.displayedPage !== null
             width: root.dense ? root.pageWidth : 300
             height: sideCard.implicitHeight
             x: side.flip ? -side.gap - side.width : body.width + side.gap
             y: {
-                const top = (8 - body.y) / root.counterScale;
-                const bottom = (root.height - 8 - body.y) / root.counterScale - side.height;
+                const top = (8 - body.y) / root.zoom;
+                const bottom = (root.height - 8 - body.y) / root.zoom - side.height;
                 return Math.max(top, Math.min(root.anchorY - root.padding, bottom));
             }
             opacity: body.sideProgress
@@ -457,7 +526,7 @@ FocusScope {
                 id: sideCard
                 anchors.left: parent.left
                 anchors.right: parent.right
-                implicitHeight: Math.min(Math.max(64, root.height / root.counterScale - 16),
+                implicitHeight: Math.min(Math.max(64, root.height / root.zoom - 16),
                     sideLoader.implicitHeight + root.padding * 2)
                 radius: root.cardRadius
                 color: Appearance.m3colors.m3surfaceContainer

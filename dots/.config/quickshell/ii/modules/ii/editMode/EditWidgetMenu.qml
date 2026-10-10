@@ -229,7 +229,9 @@ Item {
         Component.onCompleted: motion.playEnter(true)
     }
     opacity: motion.reveal
-    scale: motion.scale
+    // The user's menu size; the parent is in screen units, this card in its own.
+    readonly property real zoom: ContextMenus.scale
+    scale: motion.scale * root.zoom
     transformOrigin: Item.TopLeft
 
     // Whether a side panel is showing, and which side of the card it opens on:
@@ -241,13 +243,13 @@ Item {
     readonly property real chooserWidth: 274
     readonly property real chooserGap: 8
     readonly property real configWidth: Math.min(440, Math.max(300,
-        (root.parent ? root.parent.width : 900) - root.width - root.chooserGap * 4))
+        (root.parent ? root.parent.width : 900) / root.zoom - root.width - root.chooserGap * 4))
     readonly property real configMaxHeight: Math.max(240,
-        (root.parent ? root.parent.height : 720) - 32)
+        (root.parent ? root.parent.height : 720) / root.zoom - 32)
 
     function opensOnLeft(panelWidth) {
         return root.parent !== null
-            && (root.x + root.width + root.chooserGap + panelWidth) > root.parent.width;
+            && (root.x + (root.width + root.chooserGap + panelWidth) * root.zoom) > root.parent.width;
     }
     readonly property bool chooserOnLeft: root.opensOnLeft(root.chooserWidth)
     readonly property bool configOnLeft: root.opensOnLeft(root.configWidth)
@@ -447,7 +449,7 @@ Item {
         y: {
             const h = configLoader.item ? configLoader.item.height : 0;
             const parentHeight = root.parent ? root.parent.height : root.height;
-            return Math.max(16 - root.y, Math.min(0, parentHeight - 16 - root.y - h));
+            return Math.max((16 - root.y) / root.zoom, Math.min(0, (parentHeight - 16 - root.y) / root.zoom - h));
         }
         x: root.configOnLeft
             ? -root.chooserGap - root.configWidth

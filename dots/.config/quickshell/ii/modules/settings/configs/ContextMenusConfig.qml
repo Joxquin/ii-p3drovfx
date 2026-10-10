@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.settings.configs.colors
 import qs.modules.settings.configs.contextMenus
+import qs.modules.settings.configs.interface
 import qs.modules.settings.configs.island
 import qs.modules.settings.configs.windows
 import qs.modules.settings.configs.workspaces
@@ -63,6 +64,21 @@ Item {
                     { value: "compact", title: Translation.tr("Compact"), icon: "density_small", shape: MaterialShape.Shape.Cookie4Sided,
                       summary: Translation.tr("Chosen entries as icons on top, the rest as short rows") }
                 ]
+            }
+
+            InterfaceSliderCard {
+                Layout.fillWidth: true
+                symbol: "zoom_in"
+                title: Translation.tr("Menu size")
+                hint: Translation.tr("Scales every right-click menu, on top of the style")
+                valueText: Math.round(ContextMenus.scale * 100) + "%"
+                markers: ["50%", "100%", "150%", "200%"]
+                from: 0.5
+                to: 2
+                stepSize: 0.05
+                stopIndicatorValues: [1]
+                value: ContextMenus.scale
+                onMoved: next => menusRoot.cfg.scale = Math.round(next * 100) / 100
             }
         }
 

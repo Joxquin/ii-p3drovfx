@@ -159,8 +159,13 @@ Item {
         root.dismissRequested();
     }
 
+    // The user's menu size on top of the motion; the host clamps by
+    // `visualWidth`/`visualHeight`, the extent on screen.
+    readonly property real zoom: ContextMenus.scale
+    readonly property real visualWidth: root.width * root.zoom
+    readonly property real visualHeight: root.height * root.zoom
     opacity: motion.reveal
-    scale: motion.scale
+    scale: motion.scale * root.zoom
     transformOrigin: Item.TopLeft
     enabled: !root.closing
 
@@ -457,8 +462,9 @@ Item {
         id: side
         readonly property real gap: ContextMenus.cascadeGap
         readonly property Item content: root.cascade ? root.pageItem(root.shownPage) : null
+        // In the card's own (unzoomed) units; the surface is in screen units.
         readonly property bool flip: root.surfaceWidth > 0
-            && root.x + root.width + side.gap + side.width + 8 > root.surfaceWidth
+            && root.x + (root.width + side.gap + side.width) * root.zoom + 8 > root.surfaceWidth
         visible: root.cascade && root.sideProgress > 0 && side.content !== null
         width: root.pageWidthFor(root.shownPage)
         height: sideCard.implicitHeight
@@ -467,7 +473,8 @@ Item {
             const want = root.anchorY - root.padding;
             if (root.surfaceHeight <= 0)
                 return want;
-            return Math.max(8 - root.y, Math.min(want, root.surfaceHeight - root.y - side.height - 8));
+            return Math.max((8 - root.y) / root.zoom,
+                Math.min(want, (root.surfaceHeight - root.y - 8) / root.zoom - side.height));
         }
         opacity: root.sideProgress
         scale: 0.95 + 0.05 * root.sideProgress

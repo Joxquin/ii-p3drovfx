@@ -92,7 +92,8 @@ Item {
 
         Item {
             id: menuHolder
-            readonly property real fit: Math.min(1, (root.height - root.menuMargin * 2) / Math.max(1, menu.height))
+            // At the user's size (ContextMenus.scale), smaller only when the stage is shorter.
+            readonly property real fit: Math.min(ContextMenus.scale, (root.height - root.menuMargin * 2) / Math.max(1, menu.height))
             x: Math.round((root.width - (menu.width + (side.visible ? side.width + ContextMenus.cascadeGap : 0)) * menuHolder.fit) / 2)
             y: root.menuMargin
             width: menu.width

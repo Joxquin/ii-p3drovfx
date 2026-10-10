@@ -20,6 +20,16 @@ ColumnLayout {
                 { displayName: Translation.tr("Compact"), icon: "density_small", value: "compact" }
             ]
         }
+
+        ConfigSlider {
+            buttonIcon: "zoom_in"
+            text: Translation.tr("Menu size")
+            from: 0.5
+            to: 2
+            stepSize: 0.05
+            value: Config.options.contextMenu.scale
+            onValueChanged: Config.options.contextMenu.scale = value
+        }
     }
 
     ContentSection {

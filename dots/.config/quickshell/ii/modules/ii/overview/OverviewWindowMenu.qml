@@ -72,11 +72,22 @@ Item {
         }
         return widest + root.padding * 2;
     }
-    implicitWidth: root.dense
+    readonly property real baseWidth: root.dense
         ? Math.max(ContextMenus.compactMinWidth, Math.min(ContextMenus.compactMaxWidth, Math.ceil(root.naturalWidth)))
         : OverviewStyle.menuWidth
-    implicitHeight: content.implicitHeight
+    // The user's menu size: laid out at its own size, scaled from the corner,
+    // and reported to the chip at the size it takes on screen.
+    readonly property real zoom: ContextMenus.scale
+    implicitWidth: root.baseWidth * root.zoom
+    implicitHeight: content.implicitHeight * root.zoom
     opacity: Math.min(1, root.progress * 2)
+
+    Item {
+        id: scaler
+        width: root.baseWidth
+        height: content.implicitHeight
+        scale: root.zoom
+        transformOrigin: Item.TopLeft
 
     // Unrolls from the chip's side; the content keeps its size and is revealed.
     Item {
@@ -168,5 +179,6 @@ Item {
                 }
             }
         }
+    }
     }
 }

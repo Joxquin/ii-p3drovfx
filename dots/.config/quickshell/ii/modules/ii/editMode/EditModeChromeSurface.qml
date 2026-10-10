@@ -825,8 +825,8 @@ PanelWindow {
             EditBarMenu {
                 id: barMenuCard
                 readonly property point at: root.barMenuPoint()
-                x: Math.min(Math.max(at.x, 8), root.width - width - 8)
-                y: Math.min(Math.max(at.y, 8), root.height - height - 8)
+                x: Math.min(Math.max(at.x, 8), root.width - width * ContextMenus.scale - 8)
+                y: Math.min(Math.max(at.y, 8), root.height - height * ContextMenus.scale - 8)
                 controller: GlobalStates.editBarMenuController
                 bucket: GlobalStates.editBarMenuBucket
                 index: GlobalStates.editBarMenuIndex
@@ -851,8 +851,8 @@ PanelWindow {
             }
             EditWidgetMenu {
                 id: menuCard
-                x: Math.min(Math.max(GlobalStates.editWidgetMenuX, 8), root.width - width - 8)
-                y: Math.min(Math.max(GlobalStates.editWidgetMenuY, 8), root.height - height - 8)
+                x: Math.min(Math.max(GlobalStates.editWidgetMenuX, 8), root.width - width * ContextMenus.scale - 8)
+                y: Math.min(Math.max(GlobalStates.editWidgetMenuY, 8), root.height - height * ContextMenus.scale - 8)
                 canvas: GlobalStates.editWidgetMenuCanvas
                 instanceId: GlobalStates.editWidgetMenuInstanceId
                 onDismissRequested: GlobalStates.closeEditWidgetMenu()

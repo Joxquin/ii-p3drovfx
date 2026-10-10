@@ -96,7 +96,7 @@ Rectangle {
         Component.onCompleted: motion.playEnter(true)
     }
     opacity: motion.reveal
-    scale: motion.scale
+    scale: motion.scale * ContextMenus.scale
     transformOrigin: Item.TopLeft
 
     MouseArea {

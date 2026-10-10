@@ -6678,6 +6678,8 @@ Singleton {
                 // "inline" swaps a submenu into the same card; "cascade" opens it
                 // as a second card beside the menu.
                 property string submenus: "inline"
+                // Size of every menu, 0.5-2 (50-200 %), on top of the style.
+                property real scale: 1.0
                 // One object per menu the user arranged:
                 // { menu, order: [entry ids], bar: [entry ids], hidden: [entry ids] }.
                 // A menu without one uses its declared defaults.

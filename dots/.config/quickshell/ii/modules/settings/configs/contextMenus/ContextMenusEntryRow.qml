@@ -145,6 +145,24 @@ RippleButton {
             }
         }
 
+        // An entry this panel family never draws, said in a word.
+        Rectangle {
+            visible: (root.info.onlyIn ?? "") !== ""
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: onlyInLabel.implicitWidth + 20
+            implicitHeight: 24
+            radius: Appearance.rounding.full
+            color: Appearance.colors.colTertiaryContainer
+
+            StyledText {
+                id: onlyInLabel
+                anchors.centerIn: parent
+                text: root.info.onlyIn ?? ""
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colOnTertiaryContainer
+            }
+        }
+
         ContextMenusRowAction {
             visible: !root.ghost && !root.isSeparator
             symbol: "toolbar"

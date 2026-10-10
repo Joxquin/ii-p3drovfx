@@ -59,8 +59,10 @@ PopupWindow {
         }
     }
 
-    implicitHeight: (stackView.currentItem ? stackView.currentItem.implicitHeight : 100) + popupBackground.padding * 2 + root.padding * 2
-    implicitWidth: popupBackground.implicitWidth + root.padding * 2
+    // ContextMenus.scale, ii only like the style.
+    readonly property real zoom: PanelFamily.isIi ? ContextMenus.scale : 1
+    implicitHeight: ((stackView.currentItem ? stackView.currentItem.implicitHeight : 100) + popupBackground.padding * 2) * root.zoom + root.padding * 2
+    implicitWidth: popupBackground.implicitWidth * root.zoom + root.padding * 2
 
     // Mapping before the dbusmenu layout lands sizes the popup for the Pin row only,
     // and Hyprland keeps that size after the entries grow it, cropping the menu.
@@ -155,6 +157,19 @@ PopupWindow {
                 stackView.pop();
         }
 
+        // The user's menu size: the card is laid out at its own size and
+        // scaled from the corner, held to the bar edge it opens from.
+        Item {
+            id: scaler
+            x: root.padding
+            y: BarPlacement.vertical ? (parent.height - scaler.height * root.zoom) / 2
+                : BarPlacement.bottom ? parent.height - root.padding - scaler.height * root.zoom
+                : root.padding
+            width: popupBackground.implicitWidth
+            height: popupBackground.implicitHeight
+            scale: root.zoom
+            transformOrigin: Item.TopLeft
+
         StyledRectangularShadow {
             target: popupBackground
             opacity: popupBackground.opacity
@@ -163,14 +178,7 @@ PopupWindow {
         Rectangle {
             id: popupBackground
             readonly property real padding: root.cardPadding
-            anchors {
-                left: parent.left
-                right: parent.right
-                verticalCenter: BarPlacement.vertical ? parent.verticalCenter : undefined
-                top: BarPlacement.vertical ? undefined : BarPlacement.bottom ? undefined : parent.top
-                bottom: BarPlacement.vertical ? undefined : BarPlacement.bottom ? parent.bottom : undefined
-                margins: root.padding
-            }
+            anchors.fill: parent
 
             color: root.dense ? Appearance.m3colors.m3surfaceContainer : Appearance.colors.colLayer0
             radius: Appearance.rounding.windowRounding
@@ -221,6 +229,7 @@ PopupWindow {
                     mode: "root"
                 }
             }
+        }
         }
     }
 
@@ -431,8 +440,8 @@ PopupWindow {
             property int level: 1
             color: "transparent"
             visible: false
-            implicitWidth: cascadeCard.implicitWidth + root.padding * 2
-            implicitHeight: cascadeCard.implicitHeight + root.padding * 2
+            implicitWidth: cascadeCard.implicitWidth * root.zoom + root.padding * 2
+            implicitHeight: cascadeCard.implicitHeight * root.zoom + root.padding * 2
 
             ContextMenuMotion {
                 id: cascadeMotion
@@ -455,7 +464,7 @@ PopupWindow {
                 border.width: root.dense ? 0 : 1
                 border.color: Appearance.colors.colLayer0Border
                 opacity: cascadeMotion.reveal
-                scale: 0.95 + 0.05 * cascadeMotion.grow
+                scale: root.zoom * (0.95 + 0.05 * cascadeMotion.grow)
                 transformOrigin: Item.TopLeft
                 implicitWidth: root.dense
                     ? Math.max(ContextMenus.compactMinWidth, Math.min(ContextMenus.compactMaxWidth, cascadeLevel.implicitWidth + root.cardPadding * 2))

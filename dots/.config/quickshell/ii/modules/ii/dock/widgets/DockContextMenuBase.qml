@@ -52,15 +52,30 @@ Loader {
     property color surfaceColor: Appearance.m3colors.m3surfaceContainer
     readonly property real cardRadius: Appearance.rounding.windowRounding
     readonly property real cardPadding: root.dense ? ContextMenus.compactPadding : 8
-    readonly property real plateHeight: root.dense ? 52 : 88
-    readonly property real surfaceGap: root.dense ? 4 : 6
+    readonly property real plateHeight: 88
+    readonly property real surfaceGap: 6
+    // Compact has no plate: what the menu is about is the card's own first
+    // row (headerBlock: the row, then a hairline), so the menu is one object.
+    readonly property bool plateShown: root.showHeader && !root.dense
+    readonly property real plateBlock: root.plateShown ? root.plateHeight + root.surfaceGap : 0
+    readonly property real headerRowHeight: 40
+    readonly property real headerBlock: root.showHeader && root.dense ? root.headerRowHeight + 9 : 0
+    FontMetrics {
+        id: headerMetrics
+        font.family: Appearance.font.family.main
+        font.pixelSize: Appearance.font.pixelSize.smallie + 1
+        font.weight: Font.Medium
+    }
+    // 8 + icon 28 + 10 + title + 8, as the header row lays out.
+    readonly property real headerNaturalWidth: root.headerBlock > 0
+        ? 8 + 28 + 10 + headerMetrics.advanceWidth(root.headerText) + 8 : 0
     // Compact: as wide as the rows and the bar need, within ContextMenus'
     // bounds. Arithmetic like the height, so the surface maps at its size.
     readonly property real barHeight: root.barEntries.length > 0 ? 36 + 4 : 0
     readonly property real barNaturalWidth: root.barEntries.length * 36 + Math.max(0, root.barEntries.length - 1) * 4
     readonly property real effectiveMenuWidth: !root.dense ? root.menuWidth
         : Math.max(ContextMenus.compactMinWidth, Math.min(ContextMenus.compactMaxWidth,
-            Math.ceil(Math.max(root._groupsNaturalWidth, root.barNaturalWidth) + root.cardPadding * 2)))
+            Math.ceil(Math.max(root._groupsNaturalWidth, root.barNaturalWidth, root.headerNaturalWidth) + root.cardPadding * 2)))
     property real _groupsNaturalWidth: 0
     // The desktop menu's motion (ContextMenuMotion): `grow` carries the shape
     // (scale + slide out of the dock edge), `reveal` the opacity on a faster
@@ -93,6 +108,8 @@ Loader {
     property string customTarget: ""
     readonly property bool arrangeable: root.menuId !== "" && root.menuGroups !== null && root.contentComponent === null
     readonly property bool dense: root.arrangeable && ContextMenus.compact
+    // The user's menu size; app groups and stacks keep theirs.
+    readonly property real zoom: root.arrangeable ? ContextMenus.scale : 1
     function _flatten(groups) {
         const out = [];
         for (const group of groups ?? []) {
@@ -270,8 +287,8 @@ Loader {
         onTargetContentHeightChanged: reservedContentHeight = Math.max(reservedContentHeight, targetContentHeight)
         Component.onCompleted: reservedContentHeight = targetContentHeight
 
-        implicitWidth: menuContent.implicitWidth + popupWindow.shadowMargin * 2
-        implicitHeight: Math.max(popupWindow.reservedContentHeight, menuContent.implicitHeight) + popupWindow.shadowMargin * 2
+        implicitWidth: menuContent.implicitWidth * root.zoom + popupWindow.shadowMargin * 2
+        implicitHeight: Math.max(popupWindow.reservedContentHeight, menuContent.implicitHeight) * root.zoom + popupWindow.shadowMargin * 2
 
         onImplicitWidthChanged: requestAnchorUpdate()
         onImplicitHeightChanged: requestAnchorUpdate()
@@ -301,7 +318,11 @@ Loader {
             id: menuContent
             // Pinned to the edge that faces the dock, so a card that changes
             // height grows and shrinks away from the dock inside the reserve.
-            x: (parent.width - width) / 2
+            // Zoomed about the dock-facing edge: a side dock pins that edge,
+            // so the card grows away from the dock instead of past the surface.
+            x: root.dockPos === "left" ? popupWindow.shadowMargin
+                : root.dockPos === "right" ? parent.width - popupWindow.shadowMargin - width
+                : (parent.width - width) / 2
             y: root.dockPos === "bottom" ? parent.height - popupWindow.shadowMargin - height
                 : root.dockPos === "top" ? popupWindow.shadowMargin
                 : (parent.height - height) / 2
@@ -314,19 +335,19 @@ Loader {
                 ? root.effectiveMenuWidth - root.cardPadding * 2
                 : contentLoader.implicitWidth
             readonly property real cardContentHeight: dataDriven
-                ? root.barHeight + menuGroupsView.implicitHeight
+                ? root.headerBlock + root.barHeight + menuGroupsView.implicitHeight
                 : contentLoader.implicitHeight
 
             implicitWidth: cardContentWidth + root.cardPadding * 2
-            implicitHeight: (root.showHeader ? root.plateHeight + root.surfaceGap : 0) + card.implicitHeight
+            implicitHeight: root.plateBlock + card.implicitHeight
             // Where the card is heading, not where its animation is.
-            readonly property real targetHeight: (root.showHeader ? root.plateHeight + root.surfaceGap : 0)
+            readonly property real targetHeight: root.plateBlock
                 + menuContent.cardContentHeight + root.cardPadding * 2
 
             // One clock for the pair: the grow runs the whole transition, the
             // fade is over in its first half so the rows are readable at once.
             opacity: root.reveal
-            scale: motion.scale
+            scale: motion.scale * root.zoom
             transformOrigin: root.dockPos === "top" ? Item.Top
                 : root.dockPos === "left" ? Item.Left
                 : root.dockPos === "right" ? Item.Right
@@ -357,7 +378,7 @@ Loader {
             }
             Rectangle {
                 id: plate
-                visible: root.showHeader
+                visible: root.plateShown
                 width: parent.width
                 height: root.plateHeight
                 radius: root.cardRadius
@@ -425,7 +446,7 @@ Loader {
             }
             Rectangle {
                 id: card
-                y: root.showHeader ? root.plateHeight + root.surfaceGap : 0
+                y: root.plateBlock
                 width: parent.width
                 height: implicitHeight
                 implicitHeight: menuContent.cardContentHeight + root.cardPadding * 2
@@ -446,10 +467,75 @@ Loader {
                     }
                 }
 
+                // Compact: the plate's job as the card's first row - the
+                // icon at row size, the name over its one-line state - with
+                // a hairline under it like the separators between groups.
+                Item {
+                    visible: root.headerBlock > 0
+                    x: root.cardPadding
+                    y: root.cardPadding
+                    width: menuContent.cardContentWidth
+                    height: root.headerBlock
+
+                    RowLayout {
+                        x: 8
+                        width: parent.width - 16
+                        height: root.headerRowHeight
+                        spacing: 10
+
+                        Item {
+                            implicitWidth: 28
+                            implicitHeight: 28
+                            Loader {
+                                anchors.centerIn: parent
+                                width: 24
+                                height: 24
+                                active: root.headerBlock > 0 && !!root.headerIcon
+                                sourceComponent: root.headerIcon
+                            }
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                visible: !root.headerIcon && root.headerSymbol !== ""
+                                text: root.headerSymbol
+                                iconSize: 20
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.headerText
+                                font.pixelSize: Appearance.font.pixelSize.smallie + 1
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnSurface
+                                elide: Text.ElideRight
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: text.length > 0
+                                text: root.headerSubtitle
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                                elide: Text.ElideMiddle
+                            }
+                        }
+                    }
+                    Rectangle {
+                        x: 8
+                        y: root.headerRowHeight + 4
+                        width: parent.width - 16
+                        height: 1
+                        color: Appearance.colors.colOutlineVariant
+                        opacity: 0.6
+                    }
+                }
+
                 ContextMenuIconBar {
                     visible: menuContent.dataDriven && root.barEntries.length > 0
                     x: root.cardPadding
-                    y: root.cardPadding
+                    y: root.cardPadding + root.headerBlock
                     width: menuContent.cardContentWidth
                     height: 36
                     entries: menuContent.dataDriven ? root.barEntries : []
@@ -461,7 +547,7 @@ Loader {
                     id: menuGroupsView
                     visible: menuContent.dataDriven
                     x: root.cardPadding
-                    y: root.cardPadding + root.barHeight
+                    y: root.cardPadding + root.headerBlock + root.barHeight
                     width: menuContent.cardContentWidth
                     groups: menuContent.dataDriven ? root.shownGroups : []
                     dense: root.dense
