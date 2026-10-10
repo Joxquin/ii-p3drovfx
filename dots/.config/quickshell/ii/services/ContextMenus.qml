@@ -169,6 +169,34 @@ Singleton {
                 { "id": "__settings", "symbol": "settings", "title": "Widget settings" },
                 { "id": "__remove", "symbol": "remove_circle", "title": "Remove from dock" }
             ]
+        },
+        {
+            "id": "editWidget",
+            "name": "Edit Mode: widget",
+            "icon": "dashboard_customize",
+            "description": "Right-click on a desktop widget while editing the layout",
+            "entries": [
+                { "id": "pin", "symbol": "keep", "title": "Pin position" },
+                { "id": "size", "symbol": "aspect_ratio", "title": "Size" },
+                { "id": "resetSize", "symbol": "fit_screen", "title": "Reset size" },
+                { "id": "options", "symbol": "tune", "title": "Widget options", "submenu": true },
+                { "id": "duplicate", "symbol": "content_copy", "title": "Duplicate", "bar": true },
+                { "id": "lock", "symbol": "lock", "title": "On lock screen", "submenu": true },
+                { "id": "separator", "separator": true },
+                { "id": "remove", "symbol": "delete", "title": "Remove from desktop", "bar": true }
+            ]
+        },
+        {
+            "id": "editBar",
+            "name": "Edit Mode: bar widget",
+            "icon": "toolbar",
+            "description": "Right-click on a bar widget while editing the layout",
+            "entries": [
+                { "id": "appearance", "symbol": "palette", "title": "Appearance & group", "submenu": true },
+                { "id": "center", "symbol": "align_horizontal_center", "title": "Centre this" },
+                { "id": "separator", "separator": true },
+                { "id": "remove", "symbol": "delete", "title": "Remove from the bar" }
+            ]
         }
     ]
 

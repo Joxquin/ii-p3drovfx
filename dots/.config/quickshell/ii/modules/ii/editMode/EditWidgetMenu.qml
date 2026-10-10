@@ -6,6 +6,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.background.widgets
+import qs.modules.ii.contextMenu
 
 /**
  * The per-widget menu of Edit Mode: what it is, whether it is pinned, how big
@@ -86,12 +87,150 @@ Item {
     readonly property real scaleStep: EditModeLogic.nearestSizeStep(root.scaleFactor)
     readonly property bool canGrow: root.widget !== null && EditModeLogic.steppedScale(root.scaleFactor, 1) !== null
     readonly property bool canShrink: root.widget !== null && EditModeLogic.steppedScale(root.scaleFactor, -1) !== null
-    readonly property int padding: 8
+    readonly property bool dense: ContextMenus.compact
+    readonly property int padding: root.dense ? ContextMenus.compactPadding : 8
 
-    implicitWidth: 268
+    // ── The entries ──────────────────────────────────────────────────────────
+    // Every row the menu can carry, arranged by the user under "editWidget"
+    // (ContextMenus). The two side cards stay side cards in either submenu
+    // style: they were designed beside the menu, not inside it.
+    readonly property var liveEntries: [
+        {
+            "id": "pin",
+            "symbol": root.pinned ? "keep_off" : "keep",
+            "title": root.pinned ? Translation.tr("Unpin position") : Translation.tr("Pin position"),
+            "toggle": true,
+            "checked": root.pinned,
+            "enabled": root.instance !== null
+        },
+        {
+            "id": "size",
+            "symbol": "aspect_ratio",
+            "title": Translation.tr("Size"),
+            "stepper": true,
+            "valueText": Math.round(root.scaleStep * 100) + "%",
+            "canStepDown": root.canShrink,
+            "canStepUp": root.canGrow,
+            "enabled": root.widget !== null
+        },
+        // Beside the size, the way back to the plain one - a widget resized
+        // by the grip has no other route to exactly 100%.
+        {
+            "id": "resetSize",
+            "shown": root.widget !== null && Math.abs(root.scaleFactor - 1) > 0.001,
+            "symbol": "fit_screen",
+            "title": Translation.tr("Reset size")
+        },
+        // Everything the widget itself can be told to do. Not a copy of its
+        // Settings page - the page itself, loaded beside the menu - so the
+        // options here are whatever Settings has, without a second list of
+        // them to keep in step.
+        {
+            "id": "options",
+            "shown": root.hasConfigPage,
+            "symbol": "tune",
+            "title": Translation.tr("Widget options"),
+            "submenu": true,
+            "enabled": root.instance !== null
+        },
+        // One more of this one, a step down and to the right. A widget can
+        // be placed more than once, and the catalogue's row gives a fresh
+        // copy at a default spot; this gives one that keeps its settings.
+        {
+            "id": "duplicate",
+            "symbol": "content_copy",
+            "title": Translation.tr("Duplicate"),
+            "enabled": root.instance !== null
+        },
+        {
+            "id": "lock",
+            "symbol": root.currentLockChoice.symbol,
+            "title": Translation.tr("On lock screen"),
+            "subtitle": root.currentLockChoice.title,
+            "submenu": true,
+            "enabled": root.instance !== null
+        },
+        // On the Lockscreen tab a desktop widget is hidden from the lock, not
+        // removed from the desktop; a lock-only one is removed outright.
+        {
+            "id": "remove",
+            "symbol": "delete",
+            "title": GlobalStates.editLockPreview && !root.lockOnly
+                ? Translation.tr("Hide on lock screen") : Translation.tr("Remove from desktop"),
+            "destructive": true,
+            "enabled": root.instance !== null
+                && !(GlobalStates.editLockPreview && root.lockBehavior === "hide")
+        }
+    ].filter(entry => entry.shown !== false)
+    readonly property var arranged: ContextMenus.arrange("editWidget", root.liveEntries)
+
+    // Where the lock row sits, so its chooser opens level with it.
+    property real lockRowY: 0
+
+    function activate(entry: var, from: Item): void {
+        if (entry.custom) {
+            const instanceId = root.instanceId;
+            root.dismissRequested();
+            ContextMenus.runCustom(entry, instanceId);
+            return;
+        }
+        switch (entry.id) {
+        case "pin":
+            Config.updateWidgetPinned(root.instanceId, !root.pinned);
+            break;
+        case "size":
+            break;
+        case "resetSize":
+            if (root.widget && root.widget.commitResizeScale)
+                root.widget.commitResizeScale(1);
+            break;
+        case "options":
+            root.lockChooserOpen = false;
+            root.configOpen = !root.configOpen;
+            break;
+        case "duplicate": {
+            const instanceId = root.instanceId;
+            const monitor = root.instance ? (root.instance.monitorName ?? "") : "";
+            root.dismissRequested();
+            Config.duplicateWidgetInstance(instanceId, monitor);
+            break;
+        }
+        case "lock":
+            if (from)
+                root.lockRowY = from.mapToItem(root, 0, 0).y;
+            root.configOpen = false;
+            root.lockChooserOpen = !root.lockChooserOpen;
+            break;
+        case "remove": {
+            const instanceId = root.instanceId;
+            root.dismissRequested();
+            if (GlobalStates.editLockPreview && !root.lockOnly)
+                Config.updateWidgetLockBehavior(instanceId, "hide");
+            else
+                // THIS copy, not every widget of its kind: the menu is
+                // about the one the pointer opened it on, and a widget can
+                // now be placed more than once.
+                Config.removeWidgetInstance(instanceId);
+            break;
+        }
+        }
+    }
+
+    implicitWidth: !root.dense ? 268
+        : Math.max(ContextMenus.compactMinWidth, Math.min(ContextMenus.compactMaxWidth,
+            Math.ceil(Math.max(list.implicitWidth, iconBar.implicitWidth) + root.padding * 2)))
     implicitHeight: column.implicitHeight + root.padding * 2
     width: implicitWidth
     height: implicitHeight
+
+    // From the corner the pointer is at: the card belongs to a point.
+    ContextMenuMotion {
+        id: motion
+        Component.onCompleted: motion.playEnter(true)
+    }
+    opacity: motion.reveal
+    scale: motion.scale
+    transformOrigin: Item.TopLeft
 
     // Whether a side panel is showing, and which side of the card it opens on:
     // the card is placed at a pointer that can be anywhere, so a panel flips
@@ -157,170 +296,53 @@ Item {
         id: column
         anchors.fill: parent
         anchors.margins: root.padding
-        spacing: 3
+        spacing: root.dense ? 4 : 3
 
         // The title. No body of its own - it names the card rather than
         // offering anything - so it is the one thing here that is not a pill.
         RowLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: 8
+            Layout.leftMargin: root.dense ? 6 : 8
             Layout.rightMargin: 8
             Layout.topMargin: 2
-            Layout.bottomMargin: 4
+            Layout.bottomMargin: root.dense ? 2 : 4
             spacing: 8
 
             MaterialSymbol {
                 text: root.metadata ? (root.metadata.icon || "widgets") : "widgets"
-                iconSize: Appearance.font.pixelSize.larger
+                iconSize: root.dense ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.larger
                 color: Appearance.colors.colOnSurfaceVariant
             }
             StyledText {
                 Layout.fillWidth: true
                 text: root.metadata ? root.metadata.name : Translation.tr("Widget")
-                font.pixelSize: Appearance.font.pixelSize.small
+                font.pixelSize: root.dense ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
                 font.weight: Font.Medium
                 color: Appearance.colors.colOnSurfaceVariant
                 elide: Text.ElideRight
             }
         }
 
-        EditPanelRow {
-            hostRadius: Appearance.rounding.windowRounding
-            hostPadding: root.padding
+        ContextMenuIconBar {
+            id: iconBar
             Layout.fillWidth: true
-            first: true
-            last: false
-            rowEnabled: root.instance !== null
-            symbol: root.pinned ? "keep_off" : "keep"
-            title: root.pinned ? Translation.tr("Unpin position") : Translation.tr("Pin position")
-            trailingKind: "switch"
-            switchChecked: root.pinned
-            onActivated: Config.updateWidgetPinned(root.instanceId, !root.pinned)
+            entries: root.arranged.bar
+            hostPadding: root.padding
+            onActivated: (entry, button) => root.activate(entry, button)
         }
 
-        EditPanelRow {
-            hostRadius: Appearance.rounding.windowRounding
-            hostPadding: root.padding
+        ContextMenuList {
+            id: list
             Layout.fillWidth: true
-            first: false
-            last: false
-            rowEnabled: root.widget !== null
-            symbol: "aspect_ratio"
-            title: Translation.tr("Size")
-            trailingKind: "stepper"
-            valueText: Math.round(root.scaleStep * 100) + "%"
-            stepDownEnabled: root.canShrink
-            stepUpEnabled: root.canGrow
-            onStepDown: root.stepSize(-1)
-            onStepUp: root.stepSize(1)
-        }
-
-        // Beside the size, the way back to the plain one - a widget resized
-        // by the grip has no other route to exactly 100%.
-        EditPanelRow {
-            hostRadius: Appearance.rounding.windowRounding
+            rows: root.arranged.rows
+            dense: root.dense
+            separators: root.dense
             hostPadding: root.padding
-            Layout.fillWidth: true
-            first: false
-            last: false
-            visible: root.widget !== null && Math.abs(root.scaleFactor - 1) > 0.001
-            symbol: "fit_screen"
-            title: Translation.tr("Reset size")
-            trailingKind: "none"
-            onActivated: {
-                if (root.widget && root.widget.commitResizeScale)
-                    root.widget.commitResizeScale(1);
-            }
-        }
-
-        // Everything the widget itself can be told to do. Not a copy of its
-        // Settings page - the page itself, loaded beside the menu - so the
-        // options here are whatever Settings has, without a second list of
-        // them to keep in step.
-        EditPanelRow {
-            id: configRow
-            hostRadius: Appearance.rounding.windowRounding
-            hostPadding: root.padding
-            Layout.fillWidth: true
-            first: false
-            last: false
-            visible: root.hasConfigPage
-            rowEnabled: root.instance !== null
-            symbol: "tune"
-            title: Translation.tr("Widget options")
-            trailingKind: "chevron"
-            selected: root.configOpen
-            onActivated: {
-                root.lockChooserOpen = false;
-                root.configOpen = !root.configOpen;
-            }
-        }
-
-        // One more of this one, a step down and to the right. A widget can
-        // be placed more than once, and the catalogue's row gives a fresh
-        // copy at a default spot; this gives one that keeps its settings.
-        EditPanelRow {
-            hostRadius: Appearance.rounding.windowRounding
-            hostPadding: root.padding
-            Layout.fillWidth: true
-            first: false
-            last: false
-            rowEnabled: root.instance !== null
-            symbol: "content_copy"
-            title: Translation.tr("Duplicate")
-            trailingKind: "none"
-            onActivated: {
-                const instanceId = root.instanceId;
-                const monitor = root.instance ? (root.instance.monitorName ?? "") : "";
-                root.dismissRequested();
-                Config.duplicateWidgetInstance(instanceId, monitor);
-            }
-        }
-
-        EditPanelRow {
-            hostRadius: Appearance.rounding.windowRounding
-            hostPadding: root.padding
-            id: lockRow
-            Layout.fillWidth: true
-            first: false
-            last: false
-            rowEnabled: root.instance !== null
-            symbol: root.currentLockChoice.symbol
-            title: Translation.tr("On lock screen")
-            subtitle: root.currentLockChoice.title
-            trailingKind: "chevron"
-            selected: root.lockChooserOpen
-            onActivated: {
-                root.configOpen = false;
-                root.lockChooserOpen = !root.lockChooserOpen;
-            }
-        }
-
-        // On the Lockscreen tab a desktop widget is hidden from the lock, not
-        // removed from the desktop; a lock-only one is removed outright.
-        EditPanelRow {
-            hostRadius: Appearance.rounding.windowRounding
-            hostPadding: root.padding
-            Layout.fillWidth: true
-            first: false
-            last: true
-            destructive: true
-            rowEnabled: root.instance !== null
-                && !(GlobalStates.editLockPreview && root.lockBehavior === "hide")
-            symbol: "delete"
-            title: GlobalStates.editLockPreview && !root.lockOnly
-                ? Translation.tr("Hide on lock screen") : Translation.tr("Remove from desktop")
-            trailingKind: "none"
-            onActivated: {
-                const instanceId = root.instanceId;
-                root.dismissRequested();
-                if (GlobalStates.editLockPreview && !root.lockOnly)
-                    Config.updateWidgetLockBehavior(instanceId, "hide");
-                else
-                    // THIS copy, not every widget of its kind: the menu is
-                    // about the one the pointer opened it on, and a widget can
-                    // now be placed more than once.
-                    Config.removeWidgetInstance(instanceId);
+            openId: root.lockChooserOpen ? "lock" : root.configOpen ? "options" : ""
+            onActivated: (entry, row) => root.activate(entry, row)
+            onStepped: (entry, delta) => {
+                if (entry.id === "size")
+                    root.stepSize(delta);
             }
         }
     }
@@ -334,7 +356,7 @@ Item {
         active: root.lockChooserOpen && root.instance !== null
         // Top-aligned with the row it belongs to, so the eye goes straight
         // from the chevron to the list.
-        y: Math.min(lockRow.y, root.height - (chooserLoader.item ? chooserLoader.item.height : 0))
+        y: Math.min(root.lockRowY, root.height - (chooserLoader.item ? chooserLoader.item.height : 0))
         x: root.chooserOnLeft
             ? -root.chooserGap - root.chooserWidth
             : root.width + root.chooserGap
@@ -391,6 +413,7 @@ Item {
                     delegate: EditPanelRow {
                         required property var modelData
                         required property int index
+                        dense: root.dense
                         hostRadius: Appearance.rounding.windowRounding
                         hostPadding: root.padding
                         Layout.fillWidth: true

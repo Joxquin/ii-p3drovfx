@@ -832,21 +832,6 @@ PanelWindow {
                 index: GlobalStates.editBarMenuIndex
                 centered: GlobalStates.editBarMenuCentered
                 onDismissRequested: GlobalStates.closeEditBarMenu()
-                transformOrigin: Item.TopLeft
-                scale: 0.85
-                opacity: 0
-                Component.onCompleted: {
-                    scale = 1;
-                    opacity = 1;
-                }
-                Behavior on scale {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(barMenuCard)
-                }
-                Behavior on opacity {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(barMenuCard)
-                }
             }
         }
     }
@@ -871,22 +856,6 @@ PanelWindow {
                 canvas: GlobalStates.editWidgetMenuCanvas
                 instanceId: GlobalStates.editWidgetMenuInstanceId
                 onDismissRequested: GlobalStates.closeEditWidgetMenu()
-                // From the corner the pointer is at: the card belongs to a point.
-                transformOrigin: Item.TopLeft
-                scale: 0.85
-                opacity: 0
-                Component.onCompleted: {
-                    scale = 1.0;
-                    opacity = 1.0;
-                }
-                Behavior on scale {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(menuCard)
-                }
-                Behavior on opacity {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(menuCard)
-                }
             }
         }
     }

@@ -40,6 +40,8 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumWidth: root.buttonSize
+                enabled: button.modelData.enabled !== false
+                opacity: button.enabled ? 1 : 0.45
                 radius: mouse.pressed ? Math.max(Appearance.rounding.verysmall, root.radius - 4) : root.radius
                 color: mouse.pressed ? Appearance.colors.colSurfaceContainerHighestActive
                     : mouse.containsMouse ? Appearance.colors.colSurfaceContainerHighest
