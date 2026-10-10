@@ -177,7 +177,7 @@ Item {
     // dock origins drop them. From the dock, the mode opens on the dock's
     // own page: what was clicked is what gets edited.
     readonly property bool showRecents: PanelFamily.isIi && !root.onBar && !root.onDock
-        && wallpaperStrip.count > 0
+        && wallpaperStrip.count > 0 && ContextMenus.isShown("desktop", "recents")
 
     readonly property var liveEntries: [
         {

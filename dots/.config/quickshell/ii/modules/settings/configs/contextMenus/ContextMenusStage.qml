@@ -39,7 +39,7 @@ Item {
 
     // Every declared entry stands in for itself; a runtime block shows as
     // two sample rows so its place in the order reads.
-    readonly property var liveEntries: (root.definition?.entries ?? []).filter(e => !e.separator).map(e => e.block
+    readonly property var liveEntries: (root.definition?.entries ?? []).filter(e => !e.separator && !e.header).map(e => e.block
         ? {
             "id": e.id,
             "items": [

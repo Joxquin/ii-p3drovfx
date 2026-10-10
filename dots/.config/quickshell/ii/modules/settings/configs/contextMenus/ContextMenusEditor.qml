@@ -50,7 +50,9 @@ WorkspacesPane {
             "symbol": e.symbol,
             "title": Translation.tr(e.title),
             "block": e.block === true,
-            "kind": e.block ? Translation.tr("Supplied by the app; moves and hides as one")
+            "header": e.header === true,
+            "kind": e.header ? Translation.tr("Always on top of the menu")
+                : e.block ? Translation.tr("Supplied by the app; moves and hides as one")
                 : e.submenu ? Translation.tr("Opens a page")
                 : Translation.tr("Built in")
         };

@@ -31,7 +31,7 @@ RippleButton {
     signal removeRequested
 
     readonly property bool isSeparator: root.info.separator === true
-    readonly property bool canBar: !root.isSeparator && root.info.block !== true
+    readonly property bool canBar: !root.isSeparator && root.info.block !== true && root.info.header !== true
 
     implicitHeight: root.isSeparator ? 40 : 54
     buttonRadius: Appearance.rounding.normal
@@ -150,7 +150,8 @@ RippleButton {
             symbol: "toolbar"
             active: root.inBar
             enabled: root.canBar
-            tooltip: !root.canBar ? Translation.tr("Entries from the app cannot go in the icon bar")
+            tooltip: root.info.header ? Translation.tr("Always drawn on top of the menu")
+                : !root.canBar ? Translation.tr("Entries from the app cannot go in the icon bar")
                 : root.inBar ? Translation.tr("In the icon bar (compact style) - click to list it")
                 : Translation.tr("Put it in the icon bar (compact style)")
             onClicked: root.barToggled()

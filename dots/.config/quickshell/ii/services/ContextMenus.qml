@@ -47,6 +47,8 @@ Singleton {
     // `submenu`: opens a page (a chevron in the list, the page in a bar icon).
     // `block`: a run of entries supplied at runtime (an app's own actions);
     // it moves and hides as one, its rows are not editable one by one.
+    // `header`: drawn above the entries rather than among them (the
+    // wallpaper strip); it can only be shown or hidden (isShown).
     readonly property var menus: [
         {
             "id": "desktop",
@@ -54,6 +56,7 @@ Singleton {
             "icon": "desktop_windows",
             "description": "Right-click on the wallpaper, the bar or the dock",
             "entries": [
+                { "id": "recents", "symbol": "photo_library", "title": "Recent wallpapers", "header": true },
                 { "id": "colors", "symbol": "palette", "title": "Colors & themes", "submenu": true, "bar": true },
                 { "id": "presets", "symbol": "style", "title": "Presets", "submenu": true, "bar": true },
                 { "id": "style", "symbol": "wallpaper", "title": "Wallpaper & style", "defaultHidden": true },
@@ -264,6 +267,11 @@ Singleton {
 
     function storedLayout(menuId: string): var {
         return (root.cfg?.layouts ?? []).find(l => l && l.menu === menuId) ?? null;
+    }
+
+    // For entries a menu draws on its own terms (a header): not hidden.
+    function isShown(menuId: string, id: string): bool {
+        return root.layoutFor(menuId).hidden.indexOf(id) < 0;
     }
 
     function isCustomised(menuId: string): bool {
