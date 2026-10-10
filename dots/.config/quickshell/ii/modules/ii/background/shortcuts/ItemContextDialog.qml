@@ -4,19 +4,26 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.editMode
+import qs.modules.ii.contextMenu
 
 /**
  * A menu about one item (a desktop icon, today): a plate naming the item on
  * top, and under it the card of actions, with pages of its own.
  *
  * The card is the desktop menu's (DesktopMenuCard), so the two menus the
- * desktop can open are one kind of object: EditPanelRow rows in a grouped
- * run, the same card, the same enter/exit, pages that slide in from the
- * right with their own header (EditMenuPageHeader). What stays its own is
- * the plate - the item's icon, name and path above the card.
+ * desktop can open are one kind of object: EditPanelRow rows, the same card,
+ * the same enter/exit (ContextMenuMotion), pages that slide in from the
+ * right with their own header (EditMenuPageHeader) - or, in the cascade
+ * style, open on a second card beside this one. What stays its own is the
+ * plate - the item's icon, name and path above the card.
+ *
+ * With a `menuId` the actions go through ContextMenus.arrange(): the user's
+ * order, hidden entries, the compact icon bar and their own command
+ * entries, which run here with the item's path as $II_CONTEXT_TARGET.
  *
  * closeRequested fires only after the exit motion; the host may then unload.
  */
@@ -27,6 +34,9 @@ FocusScope {
     property url iconSource: ""
     property point anchorPoint: Qt.point(0, 0)
     property var actions: []
+    property string menuId: ""
+    // What a custom entry acts on ($II_CONTEXT_TARGET).
+    property string customTarget: ""
     property Component pageComponent: null
     // How deep `pageComponent` sits: 0 is the actions, a page off them is 1,
     // a page off that is 2. It decides which way a page change slides.
@@ -38,11 +48,12 @@ FocusScope {
     // The host's selection, when the menu speaks of a set: Ctrl+A on the
     // action page asks the host to select everything it owns.
     signal selectAllRequested()
-    // The action Repeater, published by the action page on create/destroy.
+    // The rows the arrow keys walk: { count, itemAt(i) }, published by the
+    // action page on create/destroy.
     property var actionRows: null
 
-    // A row that just did its job (a copy) answers in place: it fills with
-    // primary, its icon turns into a check and its label into `doneText`.
+    // A row that just did its job (a copy) answers in place: it fills,
+    // its icon turns into a check and its label into `doneText`.
     // Kept beside `actions`, not in it - a new actions array would rebuild
     // every row and the fill would snap instead of easing in.
     property string doneId: ""
@@ -52,76 +63,97 @@ FocusScope {
         root.doneId = id;
     }
 
-    readonly property int padding: 8
+    readonly property bool dense: ContextMenus.compact
+    readonly property bool cascade: ContextMenus.cascade
+    readonly property int padding: root.dense ? ContextMenus.compactPadding : ContextMenus.comfortablePadding
     readonly property real cardRadius: Appearance.rounding.windowRounding
+
+    // The actions in the arrangement's terms; without a menuId they are
+    // drawn as given, one run.
+    readonly property var arranged: {
+        const live = root.actions.map(a => ({
+            "id": a.id,
+            "symbol": a.icon ?? "",
+            "title": a.text ?? "",
+            "destructive": a.destructive === true,
+            "enabled": a.enabled !== false,
+            "submenu": a.submenu === true,
+            "toggle": a.toggle === true,
+            "checked": a.checked === true
+        }));
+        return root.menuId !== "" ? ContextMenus.arrange(root.menuId, live) : { "bar": [], "rows": live };
+    }
+
+    function trigger(entry: var, from: Item): void {
+        if (entry.custom) {
+            ContextMenus.runCustom(entry, root.customTarget);
+            root.dismiss();
+            return;
+        }
+        if (entry.submenu && from)
+            root.anchorY = from.mapToItem(body, 0, 0).y;
+        // Cascade: a second click on the row whose page is open beside the
+        // menu folds it away.
+        if (root.cascade && entry.submenu && root.pageComponent && root.openActionId === entry.id) {
+            root.backRequested();
+            return;
+        }
+        root.openActionId = entry.submenu ? entry.id : root.openActionId;
+        root.actionTriggered(entry.id);
+    }
+    property string openActionId: ""
+    onPageComponentChanged: {
+        if (!root.pageComponent)
+            root.openActionId = "";
+        root._pageChanged();
+    }
 
     function dismiss() {
         if (root.closing)
             return;
         root.closing = true;
-        enterMotion.stop();
-        exitMotion.restart();
     }
 
     // ── Enter and exit ───────────────────────────────────────────────────────
-    // The desktop menu's motion (DesktopMenuCard): plate and card grow out
-    // of the corner under the pointer as one (0.85 -> 1 on elementMoveEnter)
-    // while fading in on elementMoveFast, and leave as one on
-    // elementMoveExit. No row cascade.
-    property real grow: 0
-    property real reveal: 0
+    // The desktop menu's motion: plate and card grow out of the corner under
+    // the pointer as one while fading in, and leave as one. No row cascade.
+    ContextMenuMotion {
+        id: motion
+        closing: root.closing
+        onExitFinished: root.closeRequested()
+    }
+    readonly property real reveal: motion.reveal
     readonly property bool _motion: !Appearance.reducedMotion
-
-    ParallelAnimation {
-        id: enterMotion
-        NumberAnimation {
-            target: root; property: "grow"; to: 1
-            duration: root._motion ? Appearance.animation.elementMoveEnter.duration : 0
-            easing.type: Appearance.animation.elementMoveEnter.type
-            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
-        }
-        NumberAnimation {
-            target: root; property: "reveal"; to: 1
-            duration: root._motion ? Appearance.animation.elementMoveFast.duration : 0
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
-    ParallelAnimation {
-        id: exitMotion
-        NumberAnimation {
-            target: root; property: "grow"; to: 0.5
-            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
-            easing.type: Appearance.animation.elementMoveExit.type
-            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
-        }
-        NumberAnimation {
-            target: root; property: "reveal"; to: 0
-            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
-            easing.type: Appearance.animation.elementMoveExit.type
-            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
-        }
-        onFinished: root.closeRequested()
-    }
 
     // ── Pages ────────────────────────────────────────────────────────────────
     // The page on show lags the requested one by the out half of the slide:
     // the old page leaves toward where it came from, then the new one comes
     // in from the other side. Deeper slides left, shallower slides right.
+    // Cascaded, the first page simply arrives on the card beside the menu
+    // and the last one leaves with it; only a page off a page slides.
     property Component displayedPage: null
     property int displayedDepth: 0
     property int _slideDir: 1
-    readonly property real pageSlide: 36
+    readonly property real pageSlide: root.dense ? 16 : 36
     property real pageOffset: 0
     property real pageOpacity: 1
 
-    onPageComponentChanged: {
+    function _pageChanged(): void {
         if (root.closing)
             return;
         root._slideDir = root.pageDepth >= root.displayedDepth ? 1 : -1;
-        if (!root._motion || root.reveal < 1) {
-            root.displayedPage = root.pageComponent;
-            root.displayedDepth = root.pageDepth;
+        const instant = !root._motion || root.reveal < 1
+            || (root.cascade && (!root.pageComponent || !root.displayedPage));
+        if (instant) {
+            pageMotion.stop();
+            root.pageOffset = 0;
+            root.pageOpacity = 1;
+            // Cascaded, the card beside the menu keeps its page while it
+            // fades away.
+            if (root.pageComponent || !root.cascade) {
+                root.displayedPage = root.pageComponent;
+                root.displayedDepth = root.pageDepth;
+            }
             return;
         }
         pageMotion.restart();
@@ -131,13 +163,13 @@ FocusScope {
         ParallelAnimation {
             NumberAnimation {
                 target: root; property: "pageOffset"; to: -root._slideDir * root.pageSlide
-                duration: Appearance.animation.elementMoveExit.duration
+                duration: root.dense ? Appearance.animation.popupExit.duration : Appearance.animation.elementMoveExit.duration
                 easing.type: Appearance.animation.elementMoveExit.type
                 easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
             }
             NumberAnimation {
                 target: root; property: "pageOpacity"; to: 0
-                duration: Appearance.animation.elementMoveExit.duration
+                duration: root.dense ? Appearance.animation.popupExit.duration : Appearance.animation.elementMoveExit.duration
                 easing.type: Appearance.animation.elementMoveExit.type
                 easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
             }
@@ -152,7 +184,7 @@ FocusScope {
         ParallelAnimation {
             NumberAnimation {
                 target: root; property: "pageOffset"; to: 0
-                duration: Appearance.animation.elementMoveEnter.duration
+                duration: root.dense ? Appearance.animation.popupEnter.duration : Appearance.animation.elementMoveEnter.duration
                 easing.type: Appearance.animation.elementMoveEnter.type
                 easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
             }
@@ -203,7 +235,7 @@ FocusScope {
             root.forceActiveFocus();
         root.displayedPage = root.pageComponent;
         root.displayedDepth = root.pageDepth;
-        enterMotion.start();
+        motion.playEnter(true);
     }
     Keys.onEscapePressed: event => {
         event.accepted = true;
@@ -242,122 +274,217 @@ FocusScope {
         onWheel: wheel => wheel.accepted = true
     }
 
+    // ── Width ────────────────────────────────────────────────────────────────
+    // Comfortable keeps its 300 px. Compact fits the rows and the bar; a
+    // page's fields and lists want a little more, so a page opened inside
+    // the card widens it, and the cascade card gets that width of its own.
+    property real actionsNaturalWidth: 0
+    readonly property real compactWidth: Math.max(ContextMenus.compactMinWidth,
+        Math.min(ContextMenus.compactMaxWidth, Math.ceil(root.actionsNaturalWidth + root.padding * 2)))
+    readonly property real pageWidth: root.dense ? Math.max(root.compactWidth, ContextMenus.compactPageWidth) : 300
+    readonly property real menuWidth: Math.max(0, Math.min(
+        root.dense ? (!root.cascade && root.displayedPage ? root.pageWidth : root.compactWidth) : 300,
+        root.width - 16))
+
     // Edit Mode shrinks the whole desktop; a menu that shrinks with it is
     // both hard to read and rasterized off its native grid. The host hands in
     // the factor to undo and the cards are laid out in SCREEN pixels:
     // anchorPoint arrives in surface coordinates and is converted here, the
     // clamp runs on the unscaled extent. 1 outside the mode.
     property real counterScale: 1
-    ColumnLayout {
-        id: cards
+    // Where the row that opened a page sits, in `body`, for the cascade card.
+    property real anchorY: 0
+
+    Item {
+        id: body
         x: Math.max(8, Math.min(root.anchorPoint.x / root.counterScale, root.width - width - 8)) * root.counterScale
         y: Math.max(8, Math.min(root.anchorPoint.y / root.counterScale, root.height - height - 8)) * root.counterScale
-        width: Math.max(0, Math.min(300, root.width - 16))
-        spacing: 6
-        opacity: root.reveal
-        scale: root.counterScale * (0.85 + 0.15 * root.grow)
+        width: root.menuWidth
+        height: cards.implicitHeight
+        opacity: motion.reveal
+        scale: root.counterScale * motion.scale
         transformOrigin: Item.TopLeft
         enabled: !root.closing
         Behavior on y {
             enabled: root.counterScale === 1
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
+        Behavior on width {
+            enabled: !Appearance.reducedMotion && root.reveal >= 1 && !root.closing
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        }
 
-        // The plate: what the menu is about.
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: 88
+        ColumnLayout {
+            id: cards
+            anchors.left: parent.left
+            anchors.right: parent.right
+            spacing: root.dense ? 4 : 6
 
-            StyledRectangularShadow {
-                target: plate
-            }
-            Rectangle {
-                id: plate
-                anchors.fill: parent
-                radius: root.cardRadius
-                color: Appearance.m3colors.m3surfaceContainer
-                MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
-                RowLayout {
+            // The plate: what the menu is about.
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: root.dense ? 52 : 88
+
+                StyledRectangularShadow {
+                    target: plate
+                }
+                Rectangle {
+                    id: plate
                     anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 12
-                    Rectangle {
-                        implicitWidth: 64
-                        implicitHeight: 64
-                        radius: Math.max(Appearance.rounding.verysmall, root.cardRadius - 12)
-                        color: Appearance.colors.colSurfaceContainerHigh
-                        Image {
-                            anchors.centerIn: parent
-                            width: 48
-                            height: 48
-                            sourceSize: Qt.size(48, 48)
-                            source: root.iconSource
-                            fillMode: Image.PreserveAspectFit
+                    radius: root.cardRadius
+                    color: Appearance.m3colors.m3surfaceContainer
+                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: root.dense ? 8 : 12
+                        spacing: root.dense ? 10 : 12
+                        Rectangle {
+                            implicitWidth: root.dense ? 36 : 64
+                            implicitHeight: implicitWidth
+                            radius: Math.max(Appearance.rounding.verysmall, root.cardRadius - (root.dense ? 8 : 12))
+                            color: Appearance.colors.colSurfaceContainerHigh
+                            Image {
+                                anchors.centerIn: parent
+                                width: root.dense ? 28 : 48
+                                height: width
+                                sourceSize: Qt.size(48, 48)
+                                source: root.iconSource
+                                fillMode: Image.PreserveAspectFit
+                            }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: root.dense ? 1 : 4
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.title
+                                font.pixelSize: root.dense ? Appearance.font.pixelSize.smallie + 1 : Appearance.font.pixelSize.normal
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnSurface
+                                elide: Text.ElideRight
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.subtitle
+                                visible: text.length > 0
+                                color: Appearance.colors.colSubtext
+                                font.pixelSize: root.dense ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
+                                elide: Text.ElideMiddle
+                            }
                         }
                     }
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 4
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: root.title
-                            font.pixelSize: Appearance.font.pixelSize.normal
-                            font.weight: Font.Medium
-                            color: Appearance.colors.colOnSurface
-                            elide: Text.ElideRight
-                        }
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: root.subtitle
-                            visible: text.length > 0
-                            color: Appearance.colors.colSubtext
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            elide: Text.ElideMiddle
+                }
+            }
+
+            // The card: the actions, or (inline) the page they opened.
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: card.implicitHeight
+
+                StyledRectangularShadow {
+                    target: card
+                }
+                Rectangle {
+                    id: card
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    implicitHeight: Math.min(Math.max(64, root.height / root.counterScale - 110),
+                        pageLoader.implicitHeight + root.padding * 2)
+                    radius: root.cardRadius
+                    color: Appearance.m3colors.m3surfaceContainer
+                    clip: true
+                    Behavior on implicitHeight {
+                        enabled: !Appearance.reducedMotion && root.reveal >= 1
+                        animation: Appearance.animation.elementMove.numberAnimation.createObject(card)
+                    }
+                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
+
+                    ScrollView {
+                        id: pageScroll
+                        anchors.fill: parent
+                        anchors.margins: root.padding
+                        contentWidth: availableWidth
+                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                        Loader {
+                            id: pageLoader
+                            width: pageScroll.availableWidth
+                            readonly property bool inline: !root.cascade
+                            opacity: pageLoader.inline ? root.pageOpacity : 1
+                            transform: Translate { x: pageLoader.inline ? root.pageOffset : 0 }
+                            sourceComponent: pageLoader.inline ? (root.displayedPage ?? actionPage) : actionPage
+                            enabled: !root.closing && (!pageLoader.inline || !pageMotion.running)
+
+                            TouchpadScrollHandler {
+                                flickable: pageScroll.contentItem
+                            }
                         }
                     }
                 }
             }
         }
 
-        // The card: the actions, or the page they opened.
+        // ── The cascade card ─────────────────────────────────────────────────
+        // The page beside the menu, level with the row that opened it, on
+        // whichever side of the menu has room, held inside the surface.
+        property real sideProgress: root.cascade && root.pageComponent ? 1 : 0
+        Behavior on sideProgress {
+            enabled: !Appearance.reducedMotion && root.reveal >= 1
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(body)
+        }
         Item {
-            Layout.fillWidth: true
-            implicitHeight: card.implicitHeight
+            id: side
+            readonly property real gap: ContextMenus.cascadeGap
+            readonly property real surfaceWidth: root.width / root.counterScale
+            readonly property real bodyX: body.x / root.counterScale
+            readonly property bool flip: side.bodyX + body.width + side.gap + side.width + 8 > side.surfaceWidth
+            visible: root.cascade && body.sideProgress > 0 && root.displayedPage !== null
+            width: root.dense ? root.pageWidth : 300
+            height: sideCard.implicitHeight
+            x: side.flip ? -side.gap - side.width : body.width + side.gap
+            y: {
+                const top = (8 - body.y) / root.counterScale;
+                const bottom = (root.height - 8 - body.y) / root.counterScale - side.height;
+                return Math.max(top, Math.min(root.anchorY - root.padding, bottom));
+            }
+            opacity: body.sideProgress
+            scale: 0.95 + 0.05 * body.sideProgress
+            transformOrigin: side.flip ? Item.TopRight : Item.TopLeft
 
             StyledRectangularShadow {
-                target: card
+                target: sideCard
             }
             Rectangle {
-                id: card
+                id: sideCard
                 anchors.left: parent.left
                 anchors.right: parent.right
-                implicitHeight: Math.min(Math.max(64, root.height - 110),
-                    pageLoader.implicitHeight + root.padding * 2)
+                implicitHeight: Math.min(Math.max(64, root.height / root.counterScale - 16),
+                    sideLoader.implicitHeight + root.padding * 2)
                 radius: root.cardRadius
                 color: Appearance.m3colors.m3surfaceContainer
                 clip: true
                 Behavior on implicitHeight {
-                    enabled: !Appearance.reducedMotion && root.reveal >= 1
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(card)
+                    enabled: !Appearance.reducedMotion && body.sideProgress >= 1
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(sideCard)
                 }
                 MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 
                 ScrollView {
-                    id: pageScroll
+                    id: sideScroll
                     anchors.fill: parent
                     anchors.margins: root.padding
                     contentWidth: availableWidth
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                     Loader {
-                        id: pageLoader
-                        width: pageScroll.availableWidth
+                        id: sideLoader
+                        width: sideScroll.availableWidth
+                        active: root.cascade
                         opacity: root.pageOpacity
                         transform: Translate { x: root.pageOffset }
-                        sourceComponent: root.displayedPage ?? actionPage
-                        enabled: !pageMotion.running && !root.closing
+                        sourceComponent: root.displayedPage
+                        enabled: !pageMotion.running && !root.closing && root.pageComponent !== null
 
                         TouchpadScrollHandler {
-                            flickable: pageScroll.contentItem
+                            flickable: sideScroll.contentItem
                         }
                     }
                 }
@@ -368,31 +495,43 @@ FocusScope {
     Component {
         id: actionPage
         ColumnLayout {
-            spacing: 3
-            Repeater {
-                id: actionRepeater
-                model: root.actions
-                Component.onCompleted: root.actionRows = actionRepeater
-                Component.onDestruction: root.actionRows = null
-                delegate: EditPanelRow {
-                    required property var modelData
-                    required property int index
-                    Layout.fillWidth: true
-                    hostRadius: root.cardRadius
-                    hostPadding: root.padding
-                    first: index === 0
-                    last: index === root.actions.length - 1
-                    readonly property bool done: modelData.id === root.doneId
-                    symbol: done ? "check" : (modelData.icon ?? "")
-                    title: done ? root.doneText : (modelData.text ?? "")
-                    destructive: modelData.destructive === true
-                    rowEnabled: modelData.enabled !== false
-                    trailingKind: modelData.submenu === true ? "chevron"
-                        : modelData.toggle === true ? "switch" : "none"
-                    switchChecked: modelData.checked === true
-                    selected: done
-                    onActivated: root.actionTriggered(modelData.id)
+            spacing: root.dense ? 4 : 3
+            Component.onCompleted: {
+                root.actionRows = {
+                    "list": actionList,
+                    get count() { return actionList.focusRows().length; },
+                    itemAt(i) { return actionList.focusRows()[i] ?? null; }
+                };
+            }
+            Component.onDestruction: root.actionRows = null
+
+            ContextMenuIconBar {
+                id: actionBar
+                Layout.fillWidth: true
+                entries: root.arranged.bar
+                hostPadding: root.padding
+                onActivated: (entry, button) => root.trigger(entry, button)
+            }
+            ContextMenuList {
+                id: actionList
+                Layout.fillWidth: true
+                rows: root.arranged.rows
+                dense: root.dense
+                // The comfortable menu has always been one run of pills.
+                separators: root.dense
+                hostRadius: root.cardRadius
+                hostPadding: root.padding
+                doneId: root.doneId
+                doneText: root.doneText
+                openId: root.cascade ? root.openActionId : ""
+                onActivated: (entry, row) => root.trigger(entry, row)
+                // Copied out rather than bound: an inline page unloads this
+                // list, and the card keeps the width it measured.
+                function publishWidth(): void {
+                    root.actionsNaturalWidth = Math.max(actionList.implicitWidth, actionBar.implicitWidth);
                 }
+                onImplicitWidthChanged: actionList.publishWidth()
+                Component.onCompleted: actionList.publishWidth()
             }
         }
     }

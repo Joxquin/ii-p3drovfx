@@ -64,6 +64,27 @@ Singleton {
                 { "id": "separator-2", "separator": true },
                 { "id": "settings", "symbol": "settings", "title": "Settings", "bar": true }
             ]
+        },
+        {
+            "id": "desktopItem",
+            "name": "Desktop icon",
+            "icon": "draft",
+            "description": "Right-click on a file, folder or app on the desktop",
+            "entries": [
+                { "id": "open", "symbol": "open_in_new", "title": "Open" },
+                { "id": "pinDock", "symbol": "push_pin", "title": "Pinned to dock" },
+                { "id": "separator", "separator": true },
+                { "id": "rename", "symbol": "edit", "title": "Rename", "submenu": true, "bar": true },
+                { "id": "icon", "symbol": "image", "title": "Change icon", "submenu": true },
+                { "id": "details", "symbol": "info", "title": "Details", "submenu": true, "bar": true },
+                { "id": "reveal", "symbol": "folder_open", "title": "Show in folder" },
+                { "id": "copy", "symbol": "content_copy", "title": "Copy", "submenu": true, "bar": true },
+                { "id": "separator-2", "separator": true },
+                { "id": "arrange", "symbol": "align_horizontal_left", "title": "Arrange selection", "submenu": true },
+                { "id": "screen", "symbol": "screen_share", "title": "Move to screen", "submenu": true },
+                { "id": "separator-3", "separator": true },
+                { "id": "remove", "symbol": "delete", "title": "Move to trash", "bar": true }
+            ]
         }
     ]
 

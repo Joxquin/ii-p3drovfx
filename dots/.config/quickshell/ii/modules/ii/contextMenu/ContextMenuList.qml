@@ -30,6 +30,10 @@ ColumnLayout {
     property int focusIndex: -1
     // Id of the row showing its submenu beside the card (cascade).
     property string openId: ""
+    // A row that just did its job (a copy) answers in place: a check, this
+    // text, the selected fill (ItemContextDialog.confirmAction).
+    property string doneId: ""
+    property string doneText: ""
 
     signal activated(var entry, Item row)
     signal stepped(var entry, int delta)
@@ -46,8 +50,16 @@ ColumnLayout {
         return i === root.shownRows.length - 1 || root.shownRows[i + 1].separator === true;
     }
 
-    function rowAt(i: int): Item {
-        return repeater.itemAt(i);
+    // The rows that can take the keyboard, in order (separators skipped),
+    // for a host's arrow navigation.
+    function focusRows(): var {
+        const out = [];
+        for (let i = 0; i < repeater.count; i++) {
+            const row = repeater.itemAt(i)?.row;
+            if (row)
+                out.push(row);
+        }
+        return out;
     }
 
     Repeater {
@@ -86,17 +98,18 @@ ColumnLayout {
                 active: !slot.isSeparator
                 sourceComponent: EditPanelRow {
                     readonly property var entry: slot.modelData
+                    readonly property bool done: root.doneId !== "" && entry.id === root.doneId
                     dense: root.dense
                     hostRadius: root.hostRadius
                     hostPadding: root.hostPadding
                     first: root._isFirst(slot.index)
                     last: root._isLast(slot.index)
-                    symbol: entry.symbol ?? ""
-                    iconSource: entry.iconSource ?? ""
-                    title: entry.title ?? ""
+                    symbol: done ? "check" : (entry.symbol ?? "")
+                    iconSource: done ? "" : (entry.iconSource ?? "")
+                    title: done ? root.doneText : (entry.title ?? "")
                     subtitle: entry.subtitle ?? ""
                     valueText: entry.valueText ?? ""
-                    selected: entry.selected === true
+                    selected: done || entry.selected === true
                     highlighted: root.openId !== "" && root.openId === entry.id
                     destructive: entry.destructive === true
                     rowEnabled: entry.enabled !== false
