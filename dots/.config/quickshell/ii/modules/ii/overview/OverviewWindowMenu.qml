@@ -64,7 +64,7 @@ Item {
         font.pixelSize: Appearance.font.pixelSize.smallie + 1
     }
     readonly property real naturalWidth: {
-        let widest = root.barEntries.length * 36 + Math.max(0, root.barEntries.length - 1) * 4;
+        let widest = ContextMenus.barNaturalWidth(root.barEntries.length);
         for (const e of root.arranged.rows) {
             if (e.separator)
                 continue;

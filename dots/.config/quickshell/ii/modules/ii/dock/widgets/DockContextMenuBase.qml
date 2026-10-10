@@ -71,8 +71,9 @@ Loader {
         ? 8 + 28 + 10 + headerMetrics.advanceWidth(root.headerText) + 8 : 0
     // Compact: as wide as the rows and the bar need, within ContextMenus'
     // bounds. Arithmetic like the height, so the surface maps at its size.
-    readonly property real barHeight: root.barEntries.length > 0 ? 36 + 4 : 0
-    readonly property real barNaturalWidth: root.barEntries.length * 36 + Math.max(0, root.barEntries.length - 1) * 4
+    readonly property real barHeight: root.barEntries.length > 0
+        ? ContextMenus.barLayout(root.barEntries.length, root.effectiveMenuWidth - root.cardPadding * 2).height + 4 : 0
+    readonly property real barNaturalWidth: ContextMenus.barNaturalWidth(root.barEntries.length)
     readonly property real effectiveMenuWidth: !root.dense ? root.menuWidth
         : Math.max(ContextMenus.compactMinWidth, Math.min(ContextMenus.compactMaxWidth,
             Math.ceil(Math.max(root._groupsNaturalWidth, root.barNaturalWidth, root.headerNaturalWidth) + root.cardPadding * 2)))
@@ -543,7 +544,7 @@ Loader {
                     x: root.cardPadding
                     y: root.cardPadding + root.headerBlock
                     width: menuContent.cardContentWidth
-                    height: 36
+                    height: implicitHeight
                     entries: menuContent.dataDriven ? root.barEntries : []
                     hostPadding: root.cardPadding
                     onActivated: (entry, button) => root._trigger(String(entry.id ?? ""))

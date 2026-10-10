@@ -78,6 +78,34 @@ Singleton {
     readonly property real cascadeGap: 6
     readonly property real compactPadding: 6
     readonly property real comfortablePadding: 8
+    // The icon bar: buttons 36 px tall, as wide as the row shares out.
+    readonly property real barButtonSize: 36
+    readonly property real barButtonMinWidth: 30
+    readonly property real barSpacing: 4
+
+    /** What the icon bar needs to sit on one row at full size. */
+    function barNaturalWidth(count: int): real {
+        return count * root.barButtonSize + Math.max(0, count - 1) * root.barSpacing;
+    }
+
+    /**
+     * How `count` icon buttons share `width`: one row while every button keeps
+     * barButtonMinWidth, else as few rows as fit, the buttons dealt evenly
+     * (7 → 4 + 3). Each row's buttons fill its width.
+     */
+    function barLayout(count: int, width: real): var {
+        if (count <= 0)
+            return { "rows": [], "height": 0 };
+        const perRow = width > 0 ? Math.max(1, Math.floor((width + root.barSpacing) / (root.barButtonMinWidth + root.barSpacing))) : count;
+        const rowCount = Math.ceil(count / perRow);
+        const rows = [];
+        for (let r = 0, left = count; r < rowCount; r++) {
+            const n = Math.ceil(left / (rowCount - r));
+            rows.push(n);
+            left -= n;
+        }
+        return { "rows": rows, "height": rowCount * root.barButtonSize + (rowCount - 1) * root.barSpacing };
+    }
 
     // ── Declarations ─────────────────────────────────────────────────────────
     // `groups` (menu): the comfortable style draws its separators as gaps
