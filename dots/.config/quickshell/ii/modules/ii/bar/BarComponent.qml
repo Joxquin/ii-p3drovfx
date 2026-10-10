@@ -395,6 +395,7 @@ Item {
     // not the persisted layout flags. A configured widget can stay in the
     // model while its loaded component is invisible (for example, an idle timer).
     readonly property bool hasActiveLeftNeighbor: {
+        console.log("[DEBUG NEIGHBOR]", modelData?.id, "isDefault:", rootItem.isDefault, "hasContent:", rootItem.hasActiveLayoutContent, "parent:", rootItem.parent, "childrenCount:", rootItem.parent?.children?.length);
         if (!rootItem.isDefault || !rootItem.hasActiveLayoutContent)
             return false;
 
@@ -659,7 +660,7 @@ Item {
             return true;
         return false;
     }
-    readonly property bool isDefault: !rootItem.isExpressive && !rootItem.isMaterial && !rootItem.isMinimal && rootItem.widgetStyle === "default"
+    readonly property bool isDefault: !rootItem.isExpressive && !rootItem.isMaterial && !rootItem.isMinimal && (rootItem.widgetStyle === "default" || rootItem.widgetStyle === "classic")
 
     // ── Radius convenience aliases (from upstream/dev) ──────────────────────
     property real startRadius: groupTheme.startRadius

@@ -21,9 +21,15 @@ QtObject {
             case "system_monitor":         return s.resources    ?? "default";
             case "policies_panel_button":  return s.policies     ?? "default";
             case "power":                  return s.power        ?? "default";
-            case "battery":                return s.battery      ?? "default";
+            case "battery": {
+                const b = s.battery ?? "default";
+                return b === "classic" ? "default" : b;
+            }
             case "system_tray":            return s.systray      ?? "default";
-            case "bluetooth_devices":      return s.bluetooth    ?? "default";
+            case "bluetooth_devices": {
+                const bt = s.bluetooth ?? "default";
+                return bt === "classic" ? "default" : bt;
+            }
             case "keyboard_layout":        return s.keyboard     ?? "default";
             case "sports":                 return s.sports       ?? "default";
             case "active_window":          return s.activeWindow ?? "default";
