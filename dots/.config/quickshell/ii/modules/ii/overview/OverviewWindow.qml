@@ -466,7 +466,7 @@ Item { // Window
         z: 3
         active: root.recents && (root.menuOpen || root.menuProgress > 0)
         readonly property real menuHeight: item?.implicitHeight ?? 0
-        readonly property real menuWidth: OverviewStyle.menuWidth
+        readonly property real menuWidth: item?.implicitWidth ?? OverviewStyle.menuWidth
         readonly property real roomBelow: root.gridHeight - (root.y + chip.y + chip.height + OverviewStyle.menuGap)
         readonly property real roomAbove: root.y + chip.y - OverviewStyle.menuGap
         // Below the chip, else above it, else beside it when the grid is too short for either.
@@ -491,6 +491,7 @@ Item { // Window
             upwards: menuLoader.upwards
             progress: root.menuProgress
             animationsEnabled: root.animate
+            customTarget: root.address
             onActionTriggered: id => root.runAction(id)
 
             HoverHandler {

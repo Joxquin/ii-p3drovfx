@@ -208,6 +208,21 @@ Singleton {
                 { "id": "separator", "separator": true },
                 { "id": "appEntries", "symbol": "list", "title": "The app's own entries", "block": true }
             ]
+        },
+        {
+            "id": "overviewWindow",
+            "name": "Overview window",
+            "icon": "overview",
+            "description": "The menu on a window's chip in the Overview (Recents cards)",
+            "entries": [
+                { "id": "screenshot", "symbol": "screenshot_region", "title": "Screenshot" },
+                { "id": "float", "symbol": "picture_in_picture", "title": "Float" },
+                { "id": "fullscreen", "symbol": "fullscreen", "title": "Fullscreen" },
+                { "id": "pin", "symbol": "keep", "title": "Pin" },
+                { "id": "separator", "separator": true },
+                { "id": "close", "symbol": "close", "title": "Close" },
+                { "id": "kill", "symbol": "skull", "title": "Force quit" }
+            ]
         }
     ]
 

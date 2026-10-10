@@ -19,12 +19,17 @@ RippleButton {
     property bool first: false
     property bool last: false
     property bool animationsEnabledHere: true
+    // The compact context menu style: shorter rows, smaller glyphs.
+    property bool dense: false
+    readonly property real itemPadding: root.dense ? 10 : OverviewStyle.menuItemPadding
+    readonly property real iconSize: root.dense ? 18 : OverviewStyle.menuIconSize
+    readonly property real toggleSize: root.dense ? 20 : OverviewStyle.menuToggleSize
 
     readonly property bool engaged: root.hovered || root.down
     readonly property color colContent: root.danger ? (root.engaged ? OverviewStyle.colOnMenuDangerHover : OverviewStyle.colMenuDanger)
         : root.engaged ? OverviewStyle.colOnMenuItemHover : OverviewStyle.colOnMenu
 
-    implicitHeight: OverviewStyle.menuItemHeight
+    implicitHeight: root.dense ? 32 : OverviewStyle.menuItemHeight
     padding: 0
     animationsEnabled: root.animationsEnabledHere
     topLeftRadius: OverviewStyle.menuItemRadius(height, root.first, root.last, true, root.engaged)
@@ -44,10 +49,10 @@ RippleButton {
     contentItem: Item {
         MaterialSymbol {
             id: icon
-            x: OverviewStyle.menuItemPadding
+            x: root.itemPadding
             anchors.verticalCenter: parent.verticalCenter
             text: root.symbol
-            iconSize: OverviewStyle.menuIconSize
+            iconSize: root.iconSize
             fill: root.engaged ? 1 : 0
             color: root.colContent
             Behavior on fill {
@@ -63,16 +68,16 @@ RippleButton {
         StyledText {
             anchors {
                 left: icon.right
-                leftMargin: OverviewStyle.menuItemSpacing
+                leftMargin: root.dense ? 10 : OverviewStyle.menuItemSpacing
                 right: toggleMark.visible ? toggleMark.left : parent.right
-                rightMargin: OverviewStyle.menuItemPadding
+                rightMargin: root.itemPadding
                 verticalCenter: parent.verticalCenter
             }
             text: root.label
             elide: Text.ElideRight
             color: root.colContent
             font.family: Appearance.font.family.main
-            font.pixelSize: OverviewStyle.menuLabelSize
+            font.pixelSize: root.dense ? Appearance.font.pixelSize.smallie + 1 : OverviewStyle.menuLabelSize
             font.variableAxes: root.engaged ? OverviewStyle.menuLabelAxesHover : OverviewStyle.menuLabelAxes
             Behavior on color {
                 enabled: root.animationsEnabledHere
@@ -85,18 +90,18 @@ RippleButton {
             visible: root.toggled
             anchors {
                 right: parent.right
-                rightMargin: OverviewStyle.menuItemPadding - (OverviewStyle.menuToggleSize - OverviewStyle.menuIconSize) / 2
+                rightMargin: root.itemPadding - (root.toggleSize - root.iconSize) / 2
                 verticalCenter: parent.verticalCenter
             }
-            width: OverviewStyle.menuToggleSize
-            height: OverviewStyle.menuToggleSize
+            width: root.toggleSize
+            height: root.toggleSize
             radius: OverviewStyle.radiusFor(height)
             color: OverviewStyle.colMenuToggled
 
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: "check"
-                iconSize: OverviewStyle.menuToggleIconSize
+                iconSize: root.dense ? 14 : OverviewStyle.menuToggleIconSize
                 fill: 1
                 color: OverviewStyle.colOnMenuToggled
             }
