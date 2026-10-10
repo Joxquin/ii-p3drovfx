@@ -197,6 +197,17 @@ Singleton {
                 { "id": "separator", "separator": true },
                 { "id": "remove", "symbol": "delete", "title": "Remove from the bar" }
             ]
+        },
+        {
+            "id": "tray",
+            "name": "System tray",
+            "icon": "more_horiz",
+            "description": "Right-click on an app's icon in the bar's tray",
+            "entries": [
+                { "id": "pin", "symbol": "push_pin", "title": "Pin" },
+                { "id": "separator", "separator": true },
+                { "id": "appEntries", "symbol": "list", "title": "The app's own entries", "block": true }
+            ]
         }
     ]
 
