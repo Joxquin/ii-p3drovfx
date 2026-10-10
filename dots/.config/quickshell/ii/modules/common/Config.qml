@@ -1933,6 +1933,8 @@ Singleton {
     // aliases) is left out on purpose.
     readonly property var enumConstraints: ({
             "panelFamily": ["ii", "tablet", "waffle"],
+            "contextMenu.style": ["comfortable", "compact"],
+            "contextMenu.submenus": ["inline", "cascade"],
             "ai.tools.mode": ["functions", "search", "none"],
             "policies.ai": [0, 1, 2],
             "policies.weeb": [0, 1, 2],
@@ -6664,6 +6666,25 @@ Singleton {
                 property JsonObject scrollingStyle: JsonObject {
                     property string zoomStyle: "out"        // Options: in, out
                 }
+            }
+
+            // Every ii right-click menu (desktop, desktop icon, dock, Edit Mode,
+            // tray, overview window). The menus themselves are declared in
+            // services/ContextMenus.qml; these keys only hold what the user changed.
+            property JsonObject contextMenu: JsonObject {
+                // "comfortable" (58 px pill rows) or "compact" (34 px rows, an
+                // icon bar on top, the card as narrow as its content).
+                property string style: "comfortable"
+                // "inline" swaps a submenu into the same card; "cascade" opens it
+                // as a second card beside the menu.
+                property string submenus: "inline"
+                // One object per menu the user arranged:
+                // { menu, order: [entry ids], bar: [entry ids], hidden: [entry ids] }.
+                // A menu without one uses its declared defaults.
+                property list<var> layouts: []
+                // User entries: { id, menu, symbol, title, command }. The command
+                // runs in bash with $II_CONTEXT_TARGET set to what was clicked.
+                property list<var> customEntries: []
             }
 
             property JsonObject regionSelector: JsonObject {

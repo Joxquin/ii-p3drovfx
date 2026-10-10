@@ -7,6 +7,7 @@ import Quickshell.Io
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.editMode
+import qs.modules.ii.contextMenu
 import qs.modules.ii.background.shortcuts
 
 /**
@@ -15,16 +16,20 @@ import qs.modules.ii.background.shortcuts
  * clicked, the layout editor, the desktop's file operations and Settings.
  *
  * The bar and the dock ask for the same menu. Where the click landed decides
- * the rows: a bar is not a place to pick a wallpaper from, the bar's
- * catalogue row opens the bar's widgets instead of the desktop's, and the
- * dock keeps only its own way into the mode - its page in the catalogue -
- * because the dock's icons already carry their own menu.
+ * which entries apply: a bar is not a place to pick a wallpaper from, the
+ * bar's catalogue entry opens the bar's widgets instead of the desktop's,
+ * and the dock keeps only its own way into the mode - its page in the
+ * catalogue - because the dock's icons already carry their own menu.
  *
- * Drawn as Edit Mode's widget menu is (EditWidgetMenu), minus its title: one
- * grouped run of EditPanelRow pills on the same card, so the two menus the
- * desktop can open read as the same kind of object. The rows are data
- * (`rows`), filtered by origin before they are drawn, so `first`/`last` are
- * the row's place among the VISIBLE ones.
+ * The entries that apply go through ContextMenus.arrange("desktop"), which
+ * puts them in the user's order, drops the hidden ones, adds their own
+ * command entries and - in the compact style - splits off the icon bar.
+ * Comfortable draws the rows as Edit Mode's widget menu does, one grouped
+ * run of EditPanelRow pills; compact as 34 px rows on a card as narrow as
+ * they allow.
+ *
+ * A row with a page opens it inside the card (inline) or on a second card
+ * beside it (cascade, ContextMenus.cascade).
  */
 Item {
     id: root
@@ -42,111 +47,66 @@ Item {
     readonly property bool onBar: root.origin === "bar"
     readonly property bool onDock: root.origin === "dock"
 
-    readonly property int padding: 8
-    implicitWidth: 268
+    // The surface the card sits on, for placing a cascaded page beside it.
+    property real surfaceWidth: 0
+    property real surfaceHeight: 0
+
+    readonly property bool dense: ContextMenus.compact
+    readonly property bool cascade: ContextMenus.cascade
+    readonly property real padding: root.dense ? ContextMenus.compactPadding : ContextMenus.comfortablePadding
+
+    // ── Width ────────────────────────────────────────────────────────────────
+    // Comfortable keeps its fixed card. Compact fits the rows and the bar,
+    // within ContextMenus' bounds; the wallpaper strip takes the full width.
+    // An inline page with a grid on it widens the card while it shows.
+    readonly property real naturalWidth: Math.max(list.implicitWidth, iconBar.implicitWidth) + root.padding * 2
+    readonly property real menuWidth: !root.dense ? 268
+        : root.showRecents ? ContextMenus.compactMaxWidth
+        : Math.max(ContextMenus.compactMinWidth, Math.min(ContextMenus.compactMaxWidth, Math.ceil(root.naturalWidth)))
+    function pageWidthFor(name: string): real {
+        if (!root.dense)
+            return 268;
+        return name === "colors" || name === "presets"
+            ? Math.max(root.menuWidth, ContextMenus.compactPageWidth) : root.menuWidth;
+    }
+    readonly property real cardWidth: root.cascade || root.page === "" ? root.menuWidth : root.pageWidthFor(root.page)
+
+    implicitWidth: root.cardWidth
     implicitHeight: card.implicitHeight
     width: implicitWidth
     height: implicitHeight
+    Behavior on implicitWidth {
+        enabled: !Appearance.reducedMotion && motion.reveal >= 1 && !root.closing
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+    }
 
     // ── Enter and exit ───────────────────────────────────────────────────────
-    // Edit Mode's widget menu motion, so both menus the desktop opens move
-    // alike: the whole card grows out of the corner under the pointer
-    // (0.85 -> 1, elementMoveEnter) while it fades in on the faster
-    // elementMoveFast clock, and leaves as one piece on elementMoveExit. No
-    // per-row cascade: running the rows out in reverse left the empty card
-    // standing for most of the exit, which is the frame the compositor then
-    // faded as a ghost after the unmap.
-    //
-    // Two scalars, both driven by explicit animations rather than Behaviors:
-    // the exit must say when it is DONE, and a re-open mid-exit has to turn
-    // around from wherever the card is.
-    property real grow: 0
-    property real reveal: 0
-    readonly property bool _motion: !Appearance.reducedMotion
-
-    ParallelAnimation {
-        id: enterMotion
-        NumberAnimation {
-            target: root
-            property: "grow"
-            to: 1
-            duration: root._motion ? Appearance.animation.elementMoveEnter.duration : 0
-            easing.type: Appearance.animation.elementMoveEnter.type
-            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
-        }
-        NumberAnimation {
-            target: root
-            property: "reveal"
-            to: 1
-            duration: root._motion ? Appearance.animation.elementMoveFast.duration : 0
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
-    ParallelAnimation {
-        id: exitMotion
-        NumberAnimation {
-            target: root
-            property: "grow"
-            to: 0.5
-            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
-            easing.type: Appearance.animation.elementMoveExit.type
-            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
-        }
-        NumberAnimation {
-            target: root
-            property: "reveal"
-            to: 0
-            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
-            easing.type: Appearance.animation.elementMoveExit.type
-            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
-        }
-        // One more frame before the unmap, so the surface's last committed
-        // buffer is the transparent one and never a half-faded card.
-        onFinished: unmapDelay.restart()
-    }
-    Timer {
-        id: unmapDelay
-        interval: 32
-        onTriggered: { if (root.closing) root.exitFinished(); }
+    // ContextMenuMotion: the card grows out of the corner under the pointer
+    // and leaves as one piece; the compact style runs the shorter version.
+    // No per-row cascade: running the rows out in reverse left the empty
+    // card standing for most of the exit, which is the frame the compositor
+    // then faded as a ghost after the unmap.
+    ContextMenuMotion {
+        id: motion
+        closing: root.closing
+        onExitFinished: root.exitFinished()
     }
 
-    function playEnter(fromStart: bool): void {
-        exitMotion.stop();
-        unmapDelay.stop();
-        if (fromStart) {
-            root.grow = 0;
-            root.reveal = 0;
-        }
-        enterMotion.restart();
-    }
-    function playExit(): void {
-        enterMotion.stop();
-        exitMotion.restart();
-    }
-
-    // The exit is a reaction: `closing` flips while the surface is up. The
-    // enter is an event — beginEnter — because the host window is built once
-    // and then shown per open (DesktopMenu keeps it alive), so completion
-    // only describes the first one. Re-opened mid-exit, the card turns around
-    // from where it is instead of snapping back to the start.
-    onClosingChanged: {
-        if (root.closing)
-            root.playExit();
-        else if (root.reveal > 0)
-            root.playEnter(false);
-    }
     Component.onCompleted: {
-        root.playEnter(true);
+        motion.playEnter(true);
         probePaste();
         wallpaperStrip.reset();
     }
+    // The enter is an event — beginEnter — because the host window is built
+    // once and then shown per open (DesktopMenu keeps it alive), so
+    // completion only describes the first one.
     function beginEnter() {
         // reveal is back at 0 after the exit, so the page Behavior is off
         // and the card lands straight on the menu.
         root.page = "";
+        root.shownPage = "";
         root.loadedPages = {};
-        root.playEnter(true);
+        motion.playEnter(true);
         probePaste();
         wallpaperStrip.reset();
     }
@@ -199,8 +159,8 @@ Item {
         root.dismissRequested();
     }
 
-    opacity: root.reveal
-    scale: 0.85 + 0.15 * root.grow
+    opacity: motion.reveal
+    scale: motion.scale
     transformOrigin: Item.TopLeft
     enabled: !root.closing
 
@@ -210,38 +170,50 @@ Item {
         acceptedButtons: Qt.AllButtons
     }
 
-    // ── The rows ─────────────────────────────────────────────────────────────
-    // Every row the menu can carry, in order; `shown` is the origin rule.
-    // The desktop's file operations sit after the edit rows and before
-    // Settings: they all speak of THIS screen's icons, so bar and dock
-    // origins drop them. From the dock, the mode opens on the dock's own
-    // page: what was clicked is what gets edited.
+    // ── The entries ──────────────────────────────────────────────────────────
+    // Every entry that applies from where the click landed; the user's
+    // arrangement (ContextMenus) decides order, visibility and the bar. The
+    // desktop's file operations speak of THIS screen's icons, so bar and
+    // dock origins drop them. From the dock, the mode opens on the dock's
+    // own page: what was clicked is what gets edited.
     readonly property bool showRecents: PanelFamily.isIi && !root.onBar && !root.onDock
         && wallpaperStrip.count > 0
 
-    readonly property var rows: [
+    readonly property var liveEntries: [
         {
-            "key": "colors",
+            "id": "colors",
             "shown": !root.onBar,
             "symbol": "palette",
             "title": Translation.tr("Colors & themes"),
-            "trailing": "chevron"
+            "submenu": true
         },
         {
-            "key": "presets",
+            "id": "presets",
             "shown": !root.onBar && !root.onDock,
             "symbol": "style",
             "title": Translation.tr("Presets"),
-            "trailing": "chevron"
+            "submenu": true
         },
         {
-            "key": "apps",
+            "id": "style",
+            "shown": !root.onBar,
+            "symbol": "wallpaper",
+            "title": Translation.tr("Wallpaper & style")
+        },
+        {
+            "id": "widgets",
+            "shown": !root.onDock,
+            "symbol": "widgets",
+            "title": root.onBar ? Translation.tr("Bar widgets") : Translation.tr("Desktop widgets")
+        },
+        {
+            "id": "apps",
             "shown": PanelFamily.touchFirst && !root.onBar && !root.onDock,
             "symbol": "apps",
             "title": Translation.tr("Home screen apps")
         },
         {
-            "key": "edit",
+            "id": "edit",
             "shown": true,
             "symbol": GlobalStates.editMode ? "done" : (root.onDock ? (PanelFamily.touchFirst ? "dock_to_bottom" : "dock") : "edit"),
             "title": GlobalStates.editMode ? Translation.tr("Done editing")
@@ -249,45 +221,66 @@ Item {
                 : Translation.tr("Edit layout")
         },
         {
-            "key": "new",
+            "id": "new",
             "shown": !root.onBar && !root.onDock,
             "symbol": "add",
             "title": Translation.tr("New"),
-            "trailing": "chevron"
+            "submenu": true
         },
         {
-            "key": "paste",
+            "id": "paste",
             "shown": root.pasteAvailable,
             "symbol": "content_paste",
             "title": Translation.tr("Paste")
         },
         {
-            "key": "icons",
+            "id": "icons",
             "shown": root.hasIcons,
             "symbol": DesktopShortcuts.hidden ? "visibility_off" : "grid_view",
             "title": Translation.tr("Desktop icons"),
-            "trailing": "chevron"
+            "submenu": true
         },
         {
-            "key": "settings",
+            "id": "settings",
             "shown": true,
             "symbol": "settings",
             "title": Translation.tr("Settings")
         }
-    ].filter(row => row.shown)
+    ].filter(entry => entry.shown)
 
-    function activate(key: string): void {
+    readonly property var arranged: ContextMenus.arrange("desktop", root.liveEntries)
+
+    function activate(entry: var, from: Item): void {
+        if (entry.custom) {
+            root.dismissRequested();
+            ContextMenus.runCustom(entry, "");
+            return;
+        }
+        const key = entry.id;
         if (key === "paste") {
             root.pasteNow();
             return;
         }
         if (key === "colors" || key === "presets" || key === "icons" || key === "new") {
-            root.openPage(key);
+            // A second click on the row whose page is already beside the
+            // menu folds it away again.
+            if (root.cascade && root.page === key)
+                root.back();
+            else
+                root.openPage(key, from);
             return;
         }
         root.dismissRequested();
         const screenName = GlobalStates.desktopMenuScreenName;
         switch (key) {
+        case "style":
+            // The wallpaper has a catalogue of its own; Style is one tap
+            // away from it.
+            GlobalStates.openEditCatalogue("wallpaper", screenName);
+            break;
+        case "widgets":
+            GlobalStates.openEditCatalogue(root.onBar ? "bar" : "widgets", screenName);
+            break;
         case "apps":
             GlobalStates.openEditCatalogue("apps", screenName);
             break;
@@ -305,49 +298,88 @@ Item {
         }
     }
 
+    // Cascade: resting on a row for a moment opens its page beside the menu,
+    // or folds the open one away when the row has none - the way desktop
+    // submenus follow the pointer. A click does the same at once.
+    Timer {
+        id: hoverIntent
+        interval: 220
+        property var entry: null
+        property Item row: null
+        onTriggered: {
+            if (!root.cascade || root.closing || !hoverIntent.entry)
+                return;
+            if (hoverIntent.entry.submenu) {
+                if (root.page !== hoverIntent.entry.id)
+                    root.openPage(hoverIntent.entry.id, hoverIntent.row);
+            } else if (root.page !== "") {
+                root.back();
+            }
+        }
+    }
+
     StyledRectangularShadow {
         target: card
     }
 
     // ── Pages ────────────────────────────────────────────────────────────────
-    // "" is the menu itself; a row can open a page of its own inside the same
-    // card ("colors"). Every open starts on the menu. The card's height
-    // follows the page on show, animated only once the card has landed, so
-    // an open never grows the card from the last page's size.
+    // "" is the menu itself; an entry can open a page of its own ("colors").
+    // Every open starts on the menu. The card's height follows the page on
+    // show, animated only once the card has landed, so an open never grows
+    // the card from the last page's size.
     property string page: ""
     // Pages built this open, by name: each is built on first use and kept
     // until the next open, so going back and forth never rebuilds one.
     property var loadedPages: ({})
-    function openPage(name: string): void {
+    // Where the row that opened the page sits, for the cascade card's top.
+    property real anchorY: 0
+    function openPage(name: string, from: Item): void {
         if (!root.loadedPages[name]) {
             const next = Object.assign({}, root.loadedPages);
             next[name] = true;
             root.loadedPages = next;
         }
+        if (from)
+            root.anchorY = from.mapToItem(root, 0, 0).y;
         root.shownPage = name;
         root.page = name;
     }
-    // The page on the card's right: kept through the way back, so the page
-    // being left still slides out instead of vanishing.
+    // The page on show: kept through the way back, so the page being left
+    // still slides (or fades) out instead of vanishing.
     property string shownPage: ""
     function back(): void {
         root.page = "";
     }
-    readonly property Item currentPage: root.page === "colors" && colorsLoader.item ? colorsLoader.item
-        : root.page === "presets" && presetsLoader.item ? presetsLoader.item
-        : root.page === "icons" && iconsLoader.item ? iconsLoader.item
-        : root.page === "new" && newLoader.item ? newLoader.item
-        : column
-
-    // The page change: 0 on the menu, 1 on a page. The menu slides out to
-    // the left as the page comes in from the right, both fading, and the
-    // page's own elements arrive a step apart (DesktopMenuColorsPage.reveal).
-    readonly property real pageSlide: 36
-    property real pageProgress: root.page === "" ? 0 : 1
-    Behavior on pageProgress {
-        enabled: !Appearance.reducedMotion && root.reveal >= 1
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+    function pageItem(name: string): Item {
+        return name === "colors" ? colorsLoader.item
+            : name === "presets" ? presetsLoader.item
+            : name === "icons" ? iconsLoader.item
+            : name === "new" ? newLoader.item
+            : null;
     }
+    readonly property Item currentPage: (!root.cascade && root.page !== "" && root.pageItem(root.page)) || column
+
+    // The inline page change: 0 on the menu, 1 on a page. The menu slides
+    // out to the left as the page comes in from the right, both fading, and
+    // the page's own elements arrive a step apart (DesktopMenuColorsPage.reveal).
+    // Compact moves half as far.
+    readonly property real pageSlide: root.dense ? 16 : 36
+    property real pageProgress: root.cascade || root.page === "" ? 0 : 1
+    Behavior on pageProgress {
+        enabled: !Appearance.reducedMotion && motion.reveal >= 1
+        NumberAnimation {
+            duration: root.dense ? Appearance.animation.elementMoveFast.duration : Appearance.animation.elementMove.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: root.dense ? Appearance.animation.elementMoveFast.bezierCurve : Appearance.animation.elementMove.bezierCurve
+        }
+    }
+    // The cascade card's own arrival: 0 hidden, 1 settled beside the menu.
+    property real sideProgress: root.cascade && root.page !== "" ? 1 : 0
+    Behavior on sideProgress {
+        enabled: !Appearance.reducedMotion && motion.reveal >= 1
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    readonly property real pageReveal: root.cascade ? root.sideProgress : root.pageProgress
 
     Rectangle {
         id: card
@@ -359,7 +391,7 @@ Item {
         clip: true
 
         Behavior on implicitHeight {
-            enabled: !Appearance.reducedMotion && root.reveal >= 1 && !root.closing
+            enabled: !Appearance.reducedMotion && motion.reveal >= 1 && !root.closing
             animation: Appearance.animation.elementMove.numberAnimation.createObject(card)
         }
 
@@ -369,10 +401,10 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.margins: root.padding
-            spacing: 3
+            spacing: root.dense ? 4 : 3
             opacity: Math.max(0, 1 - root.pageProgress * 1.6)
             visible: opacity > 0
-            enabled: root.page === ""
+            enabled: root.cascade || root.page === ""
             transform: Translate { x: -root.pageProgress * root.pageSlide }
 
             // The recent wallpapers, on top: the desktop's one visual choice
@@ -380,106 +412,175 @@ Item {
             DesktopMenuWallpaperStrip {
                 id: wallpaperStrip
                 Layout.fillWidth: true
-                Layout.bottomMargin: 3
+                Layout.bottomMargin: root.dense ? 0 : 3
+                dense: root.dense
                 visible: root.showRecents
             }
 
-            Repeater {
-                model: root.rows
+            ContextMenuIconBar {
+                id: iconBar
+                Layout.fillWidth: true
+                entries: root.arranged.bar
+                hostPadding: root.padding
+                onActivated: (entry, button) => root.activate(entry, button)
+            }
 
-                delegate: EditPanelRow {
-                    required property var modelData
-                    required property int index
-                    Layout.fillWidth: true
-                    hostRadius: Appearance.rounding.windowRounding
-                    hostPadding: root.padding
-                    first: index === 0
-                    last: index === root.rows.length - 1
-                    symbol: modelData.symbol
-                    title: modelData.title
-                    trailingKind: modelData.trailing ?? "none"
-                    switchChecked: modelData.checked ?? false
-                    onActivated: root.activate(modelData.key)
+            ContextMenuList {
+                id: list
+                Layout.fillWidth: true
+                visible: root.arranged.rows.length > 0
+                rows: root.arranged.rows
+                dense: root.dense
+                // The comfortable menu has always been one run of pills.
+                separators: root.dense
+                hostPadding: root.padding
+                openId: root.cascade ? root.page : ""
+                onActivated: (entry, row) => {
+                    hoverIntent.stop();
+                    root.activate(entry, row);
+                }
+                onHovered: (entry, row) => {
+                    if (!root.cascade)
+                        return;
+                    hoverIntent.entry = entry;
+                    hoverIntent.row = row;
+                    hoverIntent.restart();
                 }
             }
         }
+    }
 
-        // Built on first use and kept for the rest of this open: the swatch
-        // grid is the heavy part, and going back and forth should not
-        // rebuild it. The next open drops it (beginEnter).
-        Loader {
-            id: colorsLoader
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.margins: root.padding
-            active: root.loadedPages["colors"] === true
-            visible: root.pageProgress > 0 && root.shownPage === "colors"
-            enabled: root.page === "colors"
-            transform: Translate { x: (1 - root.pageProgress) * root.pageSlide }
+    // ── The cascade card ─────────────────────────────────────────────────────
+    // The page beside the menu, top level with the row that opened it, on
+    // whichever side has room, held inside the surface.
+    Item {
+        id: side
+        readonly property real gap: ContextMenus.cascadeGap
+        readonly property Item content: root.cascade ? root.pageItem(root.shownPage) : null
+        readonly property bool flip: root.surfaceWidth > 0
+            && root.x + root.width + side.gap + side.width + 8 > root.surfaceWidth
+        visible: root.cascade && root.sideProgress > 0 && side.content !== null
+        width: root.pageWidthFor(root.shownPage)
+        height: sideCard.implicitHeight
+        x: side.flip ? -side.gap - side.width : root.width + side.gap
+        y: {
+            const want = root.anchorY - root.padding;
+            if (root.surfaceHeight <= 0)
+                return want;
+            return Math.max(8 - root.y, Math.min(want, root.surfaceHeight - root.y - side.height - 8));
+        }
+        opacity: root.sideProgress
+        scale: 0.95 + 0.05 * root.sideProgress
+        transformOrigin: side.flip ? Item.TopRight : Item.TopLeft
 
-            sourceComponent: DesktopMenuColorsPage {
-                reveal: root.pageProgress
-                onBackRequested: root.back()
-            }
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            hoverEnabled: true
+            // The pointer reaching the page keeps it open.
+            onEntered: hoverIntent.stop()
         }
 
-        Loader {
-            id: presetsLoader
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.margins: root.padding
-            active: root.loadedPages["presets"] === true
-            visible: root.pageProgress > 0 && root.shownPage === "presets"
-            enabled: root.page === "presets"
-            transform: Translate { x: (1 - root.pageProgress) * root.pageSlide }
-
-            sourceComponent: DesktopMenuPresetsPage {
-                reveal: root.pageProgress
-                onBackRequested: root.back()
-                onDismissRequested: root.dismissRequested()
-            }
+        StyledRectangularShadow {
+            target: sideCard
         }
 
-        Loader {
-            id: iconsLoader
-            anchors.top: parent.top
+        Rectangle {
+            id: sideCard
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.margins: root.padding
-            active: root.loadedPages["icons"] === true
-            visible: root.pageProgress > 0 && root.shownPage === "icons"
-            enabled: root.page === "icons"
-            transform: Translate { x: (1 - root.pageProgress) * root.pageSlide }
+            implicitHeight: (side.content?.implicitHeight ?? 0) + root.padding * 2
+            radius: Appearance.rounding.windowRounding
+            color: Appearance.m3colors.m3surfaceContainer
+            clip: true
 
-            sourceComponent: DesktopMenuIconsPage {
-                screenName: GlobalStates.desktopMenuScreenName
-                reveal: root.pageProgress
-                onBackRequested: root.back()
-                onDismissRequested: root.dismissRequested()
+            Behavior on implicitHeight {
+                enabled: !Appearance.reducedMotion && root.sideProgress >= 1
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(sideCard)
             }
         }
+    }
 
-        Loader {
-            id: newLoader
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.margins: root.padding
-            active: root.loadedPages["new"] === true
-            visible: root.pageProgress > 0 && root.shownPage === "new"
-            enabled: root.page === "new"
-            transform: Translate { x: (1 - root.pageProgress) * root.pageSlide }
+    // Built on first use and kept for the rest of this open: the swatch grid
+    // is the heavy part, and going back and forth should not rebuild it. The
+    // next open drops it (beginEnter). Inline, a page sits on the menu's own
+    // card; cascaded, on the card beside it.
+    Loader {
+        id: colorsLoader
+        parent: root.cascade ? sideCard : card
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: root.padding
+        active: root.loadedPages["colors"] === true
+        visible: root.shownPage === "colors" && (root.cascade ? root.sideProgress > 0 : root.pageProgress > 0)
+        enabled: root.page === "colors"
+        transform: Translate { x: root.cascade ? 0 : (1 - root.pageProgress) * root.pageSlide }
 
-            sourceComponent: DesktopMenuNewPage {
-                screenName: GlobalStates.desktopMenuScreenName
-                targetX: GlobalStates.desktopMenuX
-                targetY: GlobalStates.desktopMenuY
-                reveal: root.pageProgress
-                onBackRequested: root.back()
-                onDismissRequested: root.dismissRequested()
-            }
+        sourceComponent: DesktopMenuColorsPage {
+            reveal: root.pageReveal
+            onBackRequested: root.back()
+        }
+    }
+
+    Loader {
+        id: presetsLoader
+        parent: root.cascade ? sideCard : card
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: root.padding
+        active: root.loadedPages["presets"] === true
+        visible: root.shownPage === "presets" && (root.cascade ? root.sideProgress > 0 : root.pageProgress > 0)
+        enabled: root.page === "presets"
+        transform: Translate { x: root.cascade ? 0 : (1 - root.pageProgress) * root.pageSlide }
+
+        sourceComponent: DesktopMenuPresetsPage {
+            reveal: root.pageReveal
+            onBackRequested: root.back()
+            onDismissRequested: root.dismissRequested()
+        }
+    }
+
+    Loader {
+        id: iconsLoader
+        parent: root.cascade ? sideCard : card
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: root.padding
+        active: root.loadedPages["icons"] === true
+        visible: root.shownPage === "icons" && (root.cascade ? root.sideProgress > 0 : root.pageProgress > 0)
+        enabled: root.page === "icons"
+        transform: Translate { x: root.cascade ? 0 : (1 - root.pageProgress) * root.pageSlide }
+
+        sourceComponent: DesktopMenuIconsPage {
+            screenName: GlobalStates.desktopMenuScreenName
+            reveal: root.pageReveal
+            onBackRequested: root.back()
+            onDismissRequested: root.dismissRequested()
+        }
+    }
+
+    Loader {
+        id: newLoader
+        parent: root.cascade ? sideCard : card
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: root.padding
+        active: root.loadedPages["new"] === true
+        visible: root.shownPage === "new" && (root.cascade ? root.sideProgress > 0 : root.pageProgress > 0)
+        enabled: root.page === "new"
+        transform: Translate { x: root.cascade ? 0 : (1 - root.pageProgress) * root.pageSlide }
+
+        sourceComponent: DesktopMenuNewPage {
+            screenName: GlobalStates.desktopMenuScreenName
+            targetX: GlobalStates.desktopMenuX
+            targetY: GlobalStates.desktopMenuY
+            reveal: root.pageReveal
+            onBackRequested: root.back()
+            onDismissRequested: root.dismissRequested()
         }
     }
 }

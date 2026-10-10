@@ -61,6 +61,8 @@ ColumnLayout {
 
     // ── Header ───────────────────────────────────────────────────────────────
     EditMenuPageHeader {
+        dense: ContextMenus.compact
+        showBack: !ContextMenus.cascade
         title: root.hoveredName !== "" ? root.hoveredName : Translation.tr("Colors & themes")
         opacity: root.slice(0)
         transform: Translate { x: (1 - root.slice(0)) * 16 }

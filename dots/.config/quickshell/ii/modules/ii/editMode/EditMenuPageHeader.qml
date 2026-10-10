@@ -15,18 +15,26 @@ RowLayout {
     property string title: ""
     property string actionSymbol: ""
     property string actionTooltip: ""
+    // The compact context menus: smaller circles and title. A page shown
+    // beside its menu (cascade) has nothing to go back to and drops the
+    // back circle.
+    property bool dense: false
+    property bool showBack: true
+    readonly property real circleSize: root.dense ? 28 : 38
     signal backRequested()
     signal actionRequested()
 
     Layout.fillWidth: true
-    Layout.leftMargin: 2
+    Layout.leftMargin: root.showBack ? 2 : (root.dense ? 8 : 10)
     Layout.rightMargin: 4
-    spacing: 10
+    Layout.topMargin: !root.showBack && root.dense ? 4 : 0
+    spacing: root.dense ? 8 : 10
 
     Rectangle {
         Layout.alignment: Qt.AlignVCenter
-        implicitWidth: 38
-        implicitHeight: 38
+        visible: root.showBack
+        implicitWidth: root.circleSize
+        implicitHeight: root.circleSize
         radius: width / 2
         color: backMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
             : backMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighest
@@ -40,7 +48,7 @@ RowLayout {
         MaterialSymbol {
             anchors.centerIn: parent
             text: "arrow_back"
-            iconSize: 22
+            iconSize: root.dense ? 18 : 22
             color: Appearance.colors.colOnSurface
         }
 
@@ -56,7 +64,7 @@ RowLayout {
     StyledText {
         Layout.fillWidth: true
         text: root.title
-        font.pixelSize: Appearance.font.pixelSize.large
+        font.pixelSize: root.dense ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.large
         font.weight: Font.DemiBold
         color: Appearance.colors.colOnSurface
         elide: Text.ElideRight
@@ -65,8 +73,8 @@ RowLayout {
     Rectangle {
         Layout.alignment: Qt.AlignVCenter
         visible: root.actionSymbol !== ""
-        implicitWidth: 38
-        implicitHeight: 38
+        implicitWidth: root.circleSize
+        implicitHeight: root.circleSize
         radius: width / 2
         color: actionMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
             : actionMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighest
@@ -82,7 +90,7 @@ RowLayout {
         MaterialSymbol {
             anchors.centerIn: parent
             text: root.actionSymbol
-            iconSize: 20
+            iconSize: root.dense ? 17 : 20
             color: Appearance.colors.colOnSurface
         }
 
