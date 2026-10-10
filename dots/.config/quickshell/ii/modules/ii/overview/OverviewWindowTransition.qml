@@ -99,7 +99,46 @@ Scope {
     // it to start the zoom, the close to drop the captures.
     property bool windowHandoffApplied: false
 
+    // ── Handoff across monitors ──────────────────────────────────────────────
+    // One hide/restore rule serves every monitor, so it waits for all of them: the
+    // windows are hidden once every participating layer has its captures, and
+    // restored once every zoom is back at 0.
+    property bool handoffRequestedForOpen: false
+    function layers() {
+        return transitionVariants.instances ?? [];
+    }
+    function requestOpenHandoff() {
+        if (transitionScope.handoffRequestedForOpen || !GlobalStates.classicOverviewOpen || !transitionScope.featureEnabled)
+            return;
+        const active = transitionScope.layers().filter(layer => layer.isGnomeLike && layer.isOverviewActive);
+        if (active.length === 0 || !active.every(layer => layer.incomingCapturesReady))
+            return;
+        transitionScope.handoffRequestedForOpen = true;
+        transitionScope.setWindowHandoffActive(true);
+    }
+    function tryRestoreWindows() {
+        if (GlobalStates.classicOverviewOpen)
+            return;
+        const pending = transitionScope.layers().filter(layer => layer.closeHandoffPending);
+        if (pending.length === 0)
+            return;
+        if (!pending.every(layer => !layer.overviewController || layer.overviewController.progress === 0))
+            return;
+        for (const layer of pending) {
+            layer.closeHandoffPending = false;
+            layer.cancelRestoreFallback();
+        }
+        transitionScope.handoffRequestedForOpen = false;
+        transitionScope.setWindowHandoffActive(false);
+    }
+
     function setWindowHandoffActive(active) {
+        // Several layers and fallback timers ask for the same state; once it is
+        // requested (or applied) another hyprctl round trip only re-fires the
+        // restore settle and the no_anim rule dance.
+        if (transitionScope.windowHandoffDesiredActive === active
+                && (transitionScope.windowHandoffApplied || windowHandoffProcess.running || transitionScope.windowHandoffCommandQueued))
+            return;
         transitionScope.windowHandoffDesiredActive = active;
         transitionScope.windowHandoffApplied = false;
         if (windowHandoffProcess.running) {
@@ -138,11 +177,12 @@ Scope {
     }
     Component.onDestruction: transitionScope.forceWindowHandoffInactive()
 
-    IpcHandler { // DRAGTEST
-        target: "realGnomeDragTest" // DRAGTEST
-        function shift(n: int): void { GlobalStates.realGnomeDragShift = n; } // DRAGTEST
-        function commit(ws: int): void { GlobalStates.realGnomeDragCommitWs = ws; Hyprland.dispatch(`hl.dsp.focus({ workspace = ${ws} })`); } // DRAGTEST
-    } // DRAGTEST
+
+    // Real Gnome on every monitor: input for the monitors that do not hold the search.
+    Loader {
+        active: GlobalStates.realGnomeMirrored && transitionScope.featureEnabled
+        source: Qt.resolvedUrl("RealGnomeMirrorHost.qml")
+    }
 
     Variants {
         id: transitionVariants
@@ -167,7 +207,10 @@ Scope {
             // `undefined == undefined` would activate every transition layer.
             readonly property string screenName: modelData ? modelData.name : ""
             readonly property string focusedMonitorName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+            // Real Gnome opens on every monitor (GlobalStates.realGnomeMirrored), so
+            // the "focused" gate is open everywhere there.
             readonly property bool monitorFocused: Quickshell.screens.length <= 1
+                || GlobalStates.realGnomeMirrored
                 || (screenName !== "" && focusedMonitorName !== "" && screenName === focusedMonitorName)
             readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 0
 
@@ -283,8 +326,13 @@ Scope {
                     easing.bezierCurve: [0.22, 1, 0.36, 1, 1, 1]
                 }
             }
+            // Only the screen a held window is being dragged over previews a shift.
+            readonly property int dragShiftHere: GlobalStates.realGnomeDragTargetScreen === tRoot.screenName
+                ? GlobalStates.realGnomeDragShift : 0
+            readonly property bool commitHere: GlobalStates.realGnomeDragCommitScreen === tRoot.screenName
+                && GlobalStates.realGnomeDragCommitWs > 0
             function applyDragShift() {
-                const shift = GlobalStates.realGnomeDragShift;
+                const shift = tRoot.dragShiftHere;
                 if (!tRoot.isRealGnome || !tRoot.monitorFocused || tRoot.sliding)
                     return;
                 if (shift !== 0) {
@@ -292,7 +340,7 @@ Scope {
                     tRoot.beginPlaneHandover();
                     if (tRoot.planeHandedOver)
                         tRoot.dragCenterOffset = shift;
-                } else if (GlobalStates.realGnomeDragCommitWs <= 0) {
+                } else if (!tRoot.commitHere) {
                     tRoot.pendingDragShift = 0;
                     tRoot.dragCenterOffset = 0;
                     dragSettleTimer.restart();
@@ -308,7 +356,7 @@ Scope {
                 interval: Math.round(Math.max(1, Math.min(10, Number(Config.options.appearance.appLaunchAnimation.speed) || 4))
                     * 100 * Appearance.animMultiplier) + 40
                 onTriggered: {
-                    if (GlobalStates.realGnomeDragShift === 0 && !tRoot.sliding && tRoot.dragCenterOffset === 0)
+                    if (tRoot.dragShiftHere === 0 && !tRoot.sliding && tRoot.dragCenterOffset === 0)
                         tRoot.returnPlane();
                 }
             }
@@ -317,18 +365,21 @@ Scope {
                 id: dragCommitFallbackTimer
                 interval: 600
                 onTriggered: {
-                    if (GlobalStates.realGnomeDragCommitWs <= 0)
+                    if (!tRoot.commitHere)
                         return;
                     GlobalStates.realGnomeDragCommitWs = 0;
+                    GlobalStates.realGnomeDragCommitScreen = "";
                     GlobalStates.realGnomeDragShift = 0;
+                    GlobalStates.realGnomeDragTargetScreen = "";
                     tRoot.applyDragShift();
                 }
             }
             Connections {
                 target: GlobalStates
                 function onRealGnomeDragShiftChanged() { tRoot.applyDragShift(); }
+                function onRealGnomeDragTargetScreenChanged() { tRoot.applyDragShift(); }
                 function onRealGnomeDragCommitWsChanged() {
-                    if (GlobalStates.realGnomeDragCommitWs > 0 && tRoot.monitorFocused)
+                    if (tRoot.commitHere && tRoot.monitorFocused)
                         dragCommitFallbackTimer.restart();
                 }
             }
@@ -361,7 +412,7 @@ Scope {
                 onTriggered: {
                     if (!tRoot.stripFullMode)
                         return;
-                    GlobalStates.realGnomePlaneHiddenScreen = tRoot.screenName;
+                    GlobalStates.setRealGnomePlaneHidden(tRoot.screenName, true);
                     tRoot.planeHandedOver = true;
                 }
             }
@@ -383,8 +434,7 @@ Scope {
             function returnPlane() {
                 planeHideTimer.stop();
                 tRoot.planeHandedOver = false;
-                if (GlobalStates.realGnomePlaneHiddenScreen === tRoot.screenName)
-                    GlobalStates.realGnomePlaneHiddenScreen = "";
+                GlobalStates.setRealGnomePlaneHidden(tRoot.screenName, false);
                 if (tRoot.stripFullMode)
                     planeReturnTimer.restart();
             }
@@ -397,8 +447,7 @@ Scope {
                 planeReturnTimer.stop();
                 tRoot.planeHandedOver = false;
                 tRoot.stripFullMode = false;
-                if (GlobalStates.realGnomePlaneHiddenScreen === tRoot.screenName)
-                    GlobalStates.realGnomePlaneHiddenScreen = "";
+                GlobalStates.setRealGnomePlaneHidden(tRoot.screenName, false);
             }
             Timer {
                 id: stripAnchorTimer
@@ -775,7 +824,7 @@ Scope {
                 tRoot.transitionProgress = 1.0;
                 tRoot.outgoingToplevels = [];
                 tRoot.displayedWsId = tRoot.activeWsId;
-                if (tRoot.isGnomeLike && Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0])
+                if (tRoot.isGnomeLike)
                     tRoot.beginOpenHandoff();
                 Qt.callLater(tRoot.scheduleToplevelUpdate);
             }
@@ -792,39 +841,41 @@ Scope {
             // Closing: the real windows return when the zoom is exactly back at
             // 0, and the captures leave once Hyprland has shown them. The timers
             // below are only fallbacks.
-            readonly property bool isHandoffScreen: Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]
-            property bool openHandoffRequested: false
             property bool closeHandoffPending: false
             readonly property int closeDuration: tRoot.isRealGnome && tRoot.overviewController
                 ? tRoot.overviewController.realGnomeCloseDuration
                 : Appearance.animation.elementMove.duration
 
             function beginOpenHandoff() {
-                tRoot.openHandoffRequested = false;
+                transitionScope.handoffRequestedForOpen = false;
                 if (tRoot.monitorFocused && !transitionScope.animationsDisabled)
                     GlobalStates.overviewZoomHeld = true;
                 openDelayTimer.restart();
                 Qt.callLater(tRoot.requestOpenHandoff);
             }
             function requestOpenHandoff() {
-                if (tRoot.openHandoffRequested || !tRoot.isGnomeLike || !tRoot.isOverviewActive
-                        || !GlobalStates.classicOverviewOpen || !transitionScope.featureEnabled || !tRoot.incomingCapturesReady)
-                    return;
-                tRoot.openHandoffRequested = true;
-                if (tRoot.isHandoffScreen)
-                    transitionScope.setWindowHandoffActive(true);
-                else
-                    tRoot.releaseOpenHold();
+                transitionScope.requestOpenHandoff();
             }
             function releaseOpenHold() {
                 if (tRoot.monitorFocused && GlobalStates.overviewZoomHeld)
                     GlobalStates.overviewZoomHeld = false;
             }
             function restoreRealWindows() {
-                tRoot.closeHandoffPending = false;
                 restoreWindowsTimer.stop();
-                if (tRoot.isGnomeLike && tRoot.isHandoffScreen)
-                    transitionScope.setWindowHandoffActive(false);
+                // The fallback timer forces it; otherwise it waits for every zoom.
+                if (restoreForced) {
+                    for (const layer of transitionScope.layers())
+                        layer.closeHandoffPending = false;
+                    transitionScope.handoffRequestedForOpen = false;
+                    if (tRoot.isGnomeLike)
+                        transitionScope.setWindowHandoffActive(false);
+                    return;
+                }
+                transitionScope.tryRestoreWindows();
+            }
+            property bool restoreForced: false
+            function cancelRestoreFallback() {
+                restoreWindowsTimer.stop();
             }
             function finishExit() {
                 exitAnimTimer.stop();
@@ -855,7 +906,7 @@ Scope {
                 function onProgressChanged() {
                     if (tRoot.closeHandoffPending && !GlobalStates.classicOverviewOpen
                             && tRoot.overviewController.progress === 0)
-                        tRoot.restoreRealWindows();
+                        transitionScope.tryRestoreWindows();
                 }
             }
 
@@ -864,9 +915,9 @@ Scope {
                 // Fallback: never hold the zoom longer than this.
                 interval: 220
                 onTriggered: {
-                    if (tRoot.isGnomeLike && tRoot.isHandoffScreen && !tRoot.openHandoffRequested
+                    if (tRoot.isGnomeLike && !transitionScope.handoffRequestedForOpen
                             && GlobalStates.classicOverviewOpen) {
-                        tRoot.openHandoffRequested = true;
+                        transitionScope.handoffRequestedForOpen = true;
                         transitionScope.setWindowHandoffActive(true);
                     }
                     tRoot.releaseOpenHold();
@@ -877,7 +928,11 @@ Scope {
                 id: restoreWindowsTimer
                 // Fallback for a close whose progress never lands on 0.
                 interval: tRoot.closeDuration + 150
-                onTriggered: tRoot.restoreRealWindows()
+                onTriggered: {
+                    tRoot.restoreForced = true;
+                    tRoot.restoreRealWindows();
+                    tRoot.restoreForced = false;
+                }
             }
 
             Timer {
@@ -1117,15 +1172,20 @@ Scope {
                 slideFromCenter = center
                 // A dropped drag lands here: the strip is already on this
                 // workspace, so the preview offset folds into the switch.
-                if (tRoot.isRealGnome && (GlobalStates.realGnomeDragCommitWs === activeWsId || tRoot.dragCenterOffset !== 0)) {
+                if (tRoot.isRealGnome && ((tRoot.commitHere && GlobalStates.realGnomeDragCommitWs === activeWsId) || tRoot.dragCenterOffset !== 0)) {
                     dragCommitFallbackTimer.stop()
                     tRoot.dragOffsetAnimated = false
                     tRoot.dragCenterOffset = 0
                     tRoot.dragOffsetAnimated = true
                     tRoot.pendingDragShift = 0
-                    GlobalStates.realGnomeDragCommitWs = 0
-                    if (GlobalStates.realGnomeDragShift !== 0)
+                    if (tRoot.commitHere) {
+                        GlobalStates.realGnomeDragCommitWs = 0
+                        GlobalStates.realGnomeDragCommitScreen = ""
+                    }
+                    if (tRoot.dragShiftHere !== 0) {
                         GlobalStates.realGnomeDragShift = 0
+                        GlobalStates.realGnomeDragTargetScreen = ""
+                    }
                 }
                 slideFromWs = displayedWsId
                 slideToWs = activeWsId
@@ -1164,7 +1224,7 @@ Scope {
                         if (tRoot.isGnomeLike) {
                             // Start the legacy handoff only after the capture
                             // layer has had a frame to render.
-                            if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0])
+                            if (tRoot.monitorFocused)
                                 tRoot.beginOpenHandoff();
                             tRoot.exitAnimating = false;
                             tRoot.isOverviewActive = tRoot.monitorFocused;
@@ -1188,12 +1248,12 @@ Scope {
                         if (tRoot.isGnomeLike) {
                             openDelayTimer.stop();
                             tRoot.releaseOpenHold();
-                            if (tRoot.isHandoffScreen) {
+                            if (tRoot.monitorFocused) {
                                 tRoot.closeHandoffPending = true;
                                 restoreWindowsTimer.restart();
                                 // Closed before the zoom moved: nothing to wait for.
                                 if (tRoot.overviewController && tRoot.overviewController.progress === 0)
-                                    Qt.callLater(tRoot.restoreRealWindows);
+                                    Qt.callLater(transitionScope.tryRestoreWindows);
                             }
                             tRoot.exitAnimating = tRoot.monitorFocused;
                             if (tRoot.monitorFocused)
@@ -1267,18 +1327,33 @@ Scope {
                     opacity: tRoot.overviewController ? tRoot.overviewController.dimAmount : 0.0
                 }
 
-                // ── NEIGHBOURING WORKSPACES (Real Gnome) ───────────────────
-                // Cards of the previous and next workspace beside the plane,
-                // one plane width plus the gap away: they arrive from off
-                // screen with the zoom, as in GNOME Shell.
-                //
-                // The strip is drawn once, off screen, and shown only outside
-                // the plane: inside it the window slots draw the same windows
-                // (live, and with the hover/picker state).
+                // ── WORKSPACE STRIP (Real Gnome) ────────────────────────────
+                // The workspaces beside the plane, one plane width plus the gap
+                // away: they arrive from off screen with the zoom, as in GNOME
+                // Shell. The strip is laid out once at the plane's unscaled size
+                // and zoomed by one transform - the plane's own - so the zoom
+                // never re-renders a card (resizing them every frame re-rendered
+                // each card's masked layer and was the open's heaviest item in the
+                // render thread). The displayed workspace's own card shows only
+                // while the strip carries it (a slide); at rest the plane draws it.
                 Item {
-                    id: stripSource
-                    anchors.fill: parent
+                    id: stripUnit
+                    width: tRoot.width
+                    height: tRoot.height
                     visible: tRoot.isRealGnome && tRoot.shouldBeActive && tRoot.pickerProgress > 0.001
+                    opacity: tRoot.captureOpacity
+                    transform: [
+                        Scale {
+                            origin.x: tRoot.captureOriginX
+                            origin.y: tRoot.captureOriginY
+                            xScale: tRoot.captureScale
+                            yScale: tRoot.captureScale
+                        },
+                        Translate {
+                            x: tRoot.captureTranslateX
+                            y: tRoot.captureTranslateY
+                        }
+                    ]
 
                     Repeater {
                         model: ScriptModel {
@@ -1289,34 +1364,6 @@ Scope {
                             workspaceId: modelData
                         }
                     }
-                }
-                // One render of the strip per frame, shown in two bands beside
-                // the plane (above/below it, vertical); inside the plane the
-                // window slots draw. Each band copies only its part of the
-                // texture. An inverted MultiEffect mask was tried here: with an
-                // invisible mask item it let the whole strip through (the
-                // displayed workspace's card under translucent windows), with a
-                // rendered one it darkened the screen.
-                ShaderEffectSource {
-                    id: stripTexture
-                    anchors.fill: parent
-                    sourceItem: stripSource
-                    hideSource: true
-                    live: true
-                    visible: stripSource.visible
-                }
-                StripBand {
-                    x: 0
-                    y: 0
-                    width: tRoot.stripFullMode || tRoot.isVertical ? tRoot.width : Math.max(0, slotViewport.planeX)
-                    height: tRoot.stripFullMode || !tRoot.isVertical ? tRoot.height : Math.max(0, slotViewport.planeY)
-                }
-                StripBand {
-                    visible: !tRoot.stripFullMode && stripSource.visible && width > 1 && height > 1
-                    x: tRoot.isVertical ? 0 : slotViewport.planeX + tRoot.width * tRoot.captureScale
-                    y: tRoot.isVertical ? slotViewport.planeY + tRoot.height * tRoot.captureScale : 0
-                    width: tRoot.isVertical ? tRoot.width : Math.max(0, tRoot.width - x)
-                    height: tRoot.isVertical ? Math.max(0, tRoot.height - y) : tRoot.height
                 }
 
                 // Real Gnome clips the slide to the plane: workspaces pass
@@ -1428,58 +1475,72 @@ Scope {
         ]
     }
 
-    // ── Part of the workspace strip beside the plane (Real Gnome) ──────────
-    component StripBand: ShaderEffectSource {
-        sourceItem: stripTexture
-        hideSource: true
-        live: true
-        sourceRect: Qt.rect(x, y, width, height)
-        visible: stripSource.visible && width > 1 && height > 1
-        opacity: tRoot.captureOpacity
-    }
-
     // ── A workspace card on the strip (Real Gnome) ──────────────────────────
     component WorkspacePeek: Item {
         id: peek
         required property int workspaceId
 
-        readonly property var toplevels: {
-            const _ = tRoot.windowDataRevision;
-            return tRoot.toplevelsOnWorkspace(peek.workspaceId);
+        // Recomputed only while the overview is up: the cards stay built (and keep
+        // their last windows) between openings, but must not redo this on every
+        // window-list change of an idle desktop.
+        property var toplevels: []
+        property var layout: ({})
+        function refresh() {
+            peek.toplevels = tRoot.toplevelsOnWorkspace(peek.workspaceId);
+            peek.layout = tRoot.computePickerLayout(peek.toplevels);
         }
-        readonly property var layout: tRoot.computePickerLayout(peek.toplevels)
+        Component.onCompleted: peek.refresh()
+        onWorkspaceIdChanged: peek.refresh()
+        Connections {
+            target: tRoot
+            function onWindowDataRevisionChanged() {
+                if (tRoot.shouldBeActive)
+                    peek.refresh();
+            }
+            function onShouldBeActiveChanged() {
+                if (tRoot.shouldBeActive)
+                    peek.refresh();
+            }
+        }
 
-        readonly property real planeX: tRoot.captureOriginX * (1.0 - tRoot.captureScale)
-        readonly property real planeY: tRoot.captureOriginY * (1.0 - tRoot.captureScale)
-        readonly property real offset: (peek.workspaceId - tRoot.stripCenter) * tRoot.workspaceSlideDistance
+        // Unit space: the card is the plane at scale 1, and the strip's transform
+        // zooms it. The step keeps the gap the slots use at rest (the plane's final
+        // scale), so a card sits exactly where its slot-side neighbour would.
+        readonly property real finalScale: Math.max(0.05, tRoot.pickerFinalScale)
+        readonly property real step: (tRoot.isVertical ? tRoot.height : tRoot.width) + tRoot.pickerSpacing * 2 / peek.finalScale
+        readonly property real offset: (peek.workspaceId - tRoot.stripCenter) * peek.step
 
-        x: planeX + (!tRoot.isVertical ? peek.offset : 0)
-        y: planeY + (tRoot.isVertical ? peek.offset : 0)
-        width: tRoot.width * tRoot.captureScale
-        height: tRoot.height * tRoot.captureScale
+        x: !tRoot.isVertical ? peek.offset : 0
+        y: tRoot.isVertical ? peek.offset : 0
+        width: tRoot.width
+        height: tRoot.height
+        // Only the cards that are, or are about to be, on screen render: the others
+        // sit a full step further out, and a card's masked layer is the strip's cost.
         visible: peek.workspaceId > 0
+            && Math.abs(peek.workspaceId - tRoot.stripCenter) < 1.6
+            && (tRoot.stripFullMode || peek.workspaceId !== tRoot.displayedWsId)
 
         StyledRectangularShadow {
             target: peekCard
-            blur: 32
+            blur: 32 / peek.finalScale
             opacity: 0.5 * tRoot.pickerProgress
-            offset: Qt.vector2d(0, 4)
+            offset: Qt.vector2d(0, 4 / peek.finalScale)
         }
 
         Item {
             id: peekCard
             anchors.fill: parent
             layer.enabled: true
+            // Rendered at the size it settles at; the zoom only scales the texture.
+            layer.textureSize: Qt.size(Math.ceil(width * peek.finalScale), Math.ceil(height * peek.finalScale))
+            layer.smooth: true
             layer.effect: OverviewRoundedMask {
-                cornerRadius: tRoot.overviewController ? tRoot.overviewController.realGnomeRadius : Appearance.rounding.large
+                cornerRadius: (tRoot.overviewController ? tRoot.overviewController.realGnomeRadius : Appearance.rounding.large) / peek.finalScale
             }
 
-            // The workspace at its real size, scaled into the card.
             Item {
                 width: tRoot.width
                 height: tRoot.height
-                scale: tRoot.captureScale
-                transformOrigin: Item.TopLeft
 
                 // The background plane's own picture: same file, same box, same
                 // decode size (one shared decode in the pixmap cache), so the
@@ -1539,8 +1600,12 @@ Scope {
         // Real Gnome holds the frames still while a workspace slides: a live
         // capture makes Hyprland re-render every hidden window per frame, and
         // the slide dropped to every third or fourth frame (measured).
+        // Live captures make the compositor re-render every captured window each
+        // frame (measured: ~20% of the shell and ~30% of the compositor while the
+        // overview just sat open). Real Gnome never uses them: its windows are the
+        // frame taken as the overview opened.
         property bool liveCapture: Config.options.background.windowZoomLiveCapture
-            && !(tRoot.isRealGnome && tRoot.sliding)
+            && !tRoot.isRealGnome
         // Peeks show nothing until the capture has a frame.
         property bool requireFrame: false
 
@@ -1625,10 +1690,17 @@ Scope {
         // Real Gnome: the hovered window lifts toward the pointer.
         readonly property bool hovered: tRoot.isRealGnome && tile.address !== ""
             && GlobalStates.realGnomeHoveredWindow === tile.address && tRoot.pickerSettled
-        scale: tile.hovered ? 1.0 + 12 / Math.max(80, tile.width * tRoot.captureScale) : 1.0
+        // GNOME's press: the card dips under the pointer, then springs back on release.
+        readonly property bool pressed: tRoot.isRealGnome && tile.address !== ""
+            && GlobalStates.realGnomePressedWindow === tile.address
+        scale: tile.pressed ? 0.95 : (tile.hovered ? 1.0 + 12 / Math.max(80, tile.width * tRoot.captureScale) : 1.0)
         Behavior on scale {
             enabled: !transitionScope.animationsDisabled
-            NumberAnimation { duration: Math.round(200 * Appearance.animMultiplier); easing.type: Easing.OutCubic }
+            NumberAnimation {
+                duration: Math.round((tile.pressed ? 120 : 260) * Appearance.animMultiplier)
+                easing.type: tile.pressed ? Easing.OutCubic : Easing.OutBack
+                easing.overshoot: 1.6
+            }
         }
         // Windows opened while the picker is up fade in at their slot.
         property real appear: 1.0

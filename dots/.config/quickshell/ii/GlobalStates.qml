@@ -1338,7 +1338,35 @@ Singleton {
     // Real Gnome overview: screen name -> the free area under the workspace
     // thumbnails (screen coordinates), where the wallpaper plane lands.
     property var realGnomeAreas: ({})
+    // The screen that last measured its own area (the one holding the search): the
+    // others derive theirs from it so every monitor's plane lands the same way.
+    property string realGnomeAreaScreen: ""
+    // Real Gnome opens on every monitor, not only the one under the pointer.
+    readonly property bool realGnomeMirrored: Quickshell.screens.length > 1
+        && (Config.options?.background?.overviewBackgroundStyle ?? "") === "real-gnome"
+        && Persistent.states.hyprland.layout !== "scrolling"
+        && !(Config.options?.background?.useBackgroundOverviewAlways ?? false)
+    function realGnomeAreaFor(screenName) {
+        const own = root.realGnomeAreas[screenName];
+        const source = root.realGnomeAreaScreen;
+        if (source === "" || source === screenName)
+            return own;
+        const sourceRect = root.realGnomeAreas[source];
+        const sourceScreen = Quickshell.screens.find(s => s.name === source);
+        const screen = Quickshell.screens.find(s => s.name === screenName);
+        if (!sourceRect || !sourceScreen || !screen)
+            return own;
+        const monitors = HyprlandData.monitors ?? [];
+        const sourceReserved = monitors.find(m => m.name === source)?.reserved ?? [0, 0, 0, 0];
+        const reserved = monitors.find(m => m.name === screenName)?.reserved ?? [0, 0, 0, 0];
+        const topInset = sourceRect.y - sourceReserved[1];
+        const bottomInset = (sourceScreen.height - sourceReserved[3]) - (sourceRect.y + sourceRect.height);
+        return Qt.rect(reserved[0], reserved[1] + topInset,
+            screen.width - reserved[0] - reserved[2],
+            screen.height - reserved[1] - reserved[3] - topInset - bottomInset);
+    }
     function setRealGnomeArea(screenName, rect) {
+        root.realGnomeAreaScreen = screenName;
         const current = root.realGnomeAreas[screenName];
         if (current && Math.abs(current.x - rect.x) < 0.5 && Math.abs(current.y - rect.y) < 0.5
                 && Math.abs(current.width - rect.width) < 0.5 && Math.abs(current.height - rect.height) < 0.5)
@@ -1377,14 +1405,35 @@ Singleton {
         next[screenName] = value;
         root.realGnomePlaneWallpapers = next;
     }
-    property string realGnomePlaneHiddenScreen: ""
-    // Real Gnome window drag: the window being dragged (hidden at its slot), how many
-    // workspaces the strip is previewed away from the active one (a real switch would
-    // end the drag, so it only happens on drop), and the workspace a drop is
-    // switching to, so the strip lands there without sliding again.
+    // Screens whose plane is hidden while the strip's cards carry the workspaces.
+    property var realGnomePlaneHiddenScreens: ({})
+    function setRealGnomePlaneHidden(screenName, hidden) {
+        if (Boolean(root.realGnomePlaneHiddenScreens[screenName]) === hidden)
+            return;
+        const next = Object.assign({}, root.realGnomePlaneHiddenScreens);
+        if (hidden)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.realGnomePlaneHiddenScreens = next;
+    }
+    // Real Gnome window drag. The held window (hidden at its slot), the screen it is
+    // being dragged over, how many workspaces that screen's strip is previewed away
+    // from its active one (a real switch would end the drag, so it only happens on
+    // drop), and the workspace a drop is switching to, so the strip lands there
+    // without sliding again. The proxy is drawn by every monitor's picker from one
+    // rect in global (layout) coordinates.
     property string realGnomeDraggedWindow: ""
+    property string realGnomePressedWindow: ""
+    // "", "drag" (held), "return" (springing back to its slot) or "drop" (landed elsewhere).
+    property string realGnomeDragPhase: ""
+    property string realGnomeDragTargetScreen: ""
     property int realGnomeDragShift: 0
     property int realGnomeDragCommitWs: 0
+    property string realGnomeDragCommitScreen: ""
+    property rect realGnomeDragRect: Qt.rect(0, 0, 0, 0)
+    property real realGnomeDragOpacity: 1.0
+    property real realGnomeDragScale: 1.0
     // Gnome-like overviews: the focused monitor's zoom waits at 0 until the window
     // captures have a frame and Hyprland has hidden the real windows under them.
     property bool overviewZoomHeld: false

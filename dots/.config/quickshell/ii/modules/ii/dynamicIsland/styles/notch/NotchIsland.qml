@@ -2021,6 +2021,41 @@ Scope {
             }
         }
 
+        // Moving the pointer to another monitor takes the focus - and so the grab -
+        // away from this window, which used to read as a click away and closed the
+        // search with the overview. With several monitors the clear is judged a
+        // beat later: if the focused monitor changed meanwhile it was only a hop,
+        // so the overview stays and the grab is taken again on the new monitor.
+        property double monitorHopAt: 0
+        property double grabClearedAt: 0
+        property string grabClearedMonitor: ""
+        property bool grabSuspended: false
+        Connections {
+            target: Hyprland
+            function onFocusedMonitorChanged() {
+                win.monitorHopAt = Date.now();
+            }
+        }
+        Timer {
+            id: grabClearJudge
+            interval: 140
+            onTriggered: {
+                const now = Hyprland.focusedMonitor?.name ?? "";
+                const hopped = now !== win.grabClearedMonitor || win.monitorHopAt >= win.grabClearedAt - 250;
+                if (hopped && root.searchActive) {
+                    win.grabSuspended = true;
+                    grabRearm.restart();
+                } else if (root.searchActive) {
+                    GlobalStates.closeOverview();
+                }
+            }
+        }
+        Timer {
+            id: grabRearm
+            interval: 120
+            onTriggered: win.grabSuspended = false
+        }
+
         HyprlandFocusGrab {
             windows: [win]
             // The dashboard joins the two that already grabbed: it is as much an open
@@ -2031,9 +2066,9 @@ Scope {
             // editing: it pins the island against the pointer leaving, not against a click.
             // The wallpaper browser needs it too: the surface is only OnDemand, so
             // without the grab it had no keyboard until it was clicked.
-            active: root.searchActive || root.sessionActive || root.wallpaperActive
+            active: !win.grabSuspended && (root.searchActive || root.sessionActive || root.wallpaperActive
                 || (root.dashboardActive && !notchContent.dashboardGridEditing)
-                || (root.askpassActive && root.askpassFocused)
+                || (root.askpassActive && root.askpassFocused))
             // A menu is a question put to the pointer, so clicking away is an answer -
             // and so is clicking away from the launcher, as it is everywhere else the
             // launcher is drawn.
@@ -2044,8 +2079,15 @@ Scope {
                     root.askpassFocused = false;
                 if (root.sessionActive)
                     GlobalStates.sessionOpen = false;
-                if (root.searchActive)
-                    GlobalStates.closeOverview();
+                if (root.searchActive) {
+                    if (Quickshell.screens.length > 1) {
+                        win.grabClearedAt = Date.now();
+                        win.grabClearedMonitor = Hyprland.focusedMonitor?.name ?? "";
+                        grabClearJudge.restart();
+                    } else {
+                        GlobalStates.closeOverview();
+                    }
+                }
                 if (root.wallpaperActive)
                     GlobalStates.wallpaperSelectorOpen = false;
                 if (root.dashboardActive && !notchContent.dashboardGridEditing) {

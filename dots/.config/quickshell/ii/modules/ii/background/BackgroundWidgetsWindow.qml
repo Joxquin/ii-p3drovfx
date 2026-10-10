@@ -643,7 +643,9 @@ PanelWindow {
         visible: opacity > 0
         Behavior on opacity {
             NumberAnimation {
-                duration: Math.round(350 * Appearance.animMultiplier)
+                // Real Gnome hides the widgets while the zoom starts; letting them fade
+                // for 350 ms kept the whole canvas rendering under the busiest frames.
+                duration: Math.round((bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isRealGnome ? 140 : 350) * Appearance.animMultiplier)
                 easing.type: Easing.OutCubic
             }
         }

@@ -33,85 +33,261 @@ Item {
     readonly property var slots: GlobalStates.realGnomePickerSlots[root.screenName] ?? []
     readonly property var controller: GlobalStates.overviewBackgroundControllerFor(root.screenName)
 
-    // ── Drag to another workspace ───────────────────────────────────────────
-    // A held window follows the pointer; resting it at the plane's side edge
-    // previews the neighbouring workspace by sliding the strip (a real switch
-    // would end the drag - Hyprland releases a held pointer on a focus change).
-    // Dropping moves the window to the workspace in the middle and switches
-    // there; dropping straight onto a neighbour beside the plane only moves it.
+    // ── Drag to another workspace or monitor ────────────────────────────────
+    // A held window follows the pointer. Resting it at the side edge of a monitor's
+    // plane previews the neighbouring workspace by sliding that monitor's strip (a
+    // real switch would end the drag - Hyprland releases a held pointer on a focus
+    // change). Dropping on a plane moves the window to that monitor's workspace (the
+    // previewed one, which it then switches to); dropping straight onto a neighbour
+    // beside the plane only moves it; anywhere else it springs back to its slot.
+    // The picker that took the press owns the gesture; every monitor's picker draws
+    // the held window from the one global rect.
     property string dragAddress: ""
-    property point dragPos: Qt.point(0, 0)
-    property point dragGrab: Qt.point(0, 0)
-    property size dragSize: Qt.size(0, 0)
-    readonly property bool dragging: root.dragAddress !== ""
-    readonly property var monitor: Hyprland.monitors.values.find(m => m.name === root.screenName) ?? null
-    readonly property int activeWs: Math.max(1, root.monitor?.activeWorkspace?.id ?? 1)
-    readonly property rect plane: {
-        const t = root.controller ? root.controller.realGnomeTarget : Qt.rect(0, 0, 0, 0);
-        return Qt.rect(t.x + root.offsetX, t.y + root.offsetY, t.width, t.height);
+    property point pointer: Qt.point(0, 0)        // global (layout) coordinates
+    property point grabFrac: Qt.point(0.5, 0.5)   // where in the slot it was taken
+    property rect slotRectG: Qt.rect(0, 0, 0, 0)  // the slot at press, global
+    property size shrunk: Qt.size(0, 0)
+    property real shrinkT: 0
+    property real returnT: 0
+    property real dropT: 0
+    property rect releaseRect: Qt.rect(0, 0, 0, 0)
+    property string phase: ""
+    readonly property bool ownsDrag: root.dragAddress !== ""
+    readonly property bool dragging: GlobalStates.realGnomeDragPhase === "drag"
+
+    readonly property var screenObj: Quickshell.screens.find(s => s.name === root.screenName) ?? null
+    readonly property real screenX: root.screenObj ? root.screenObj.x : 0
+    readonly property real screenY: root.screenObj ? root.screenObj.y : 0
+
+    function screenAt(gx, gy) {
+        return Quickshell.screens.find(s => gx >= s.x && gx < s.x + s.width && gy >= s.y && gy < s.y + s.height) ?? null;
     }
-    readonly property int edgeSide: !root.dragging || root.plane.width <= 0 ? 0
-        : root.dragPos.x < root.plane.x ? -1
-        : root.dragPos.x > root.plane.x + root.plane.width ? 1 : 0
-    readonly property var dragToplevel: {
-        if (!root.dragging)
+    function planeOf(screen) {
+        if (!screen)
+            return Qt.rect(0, 0, 0, 0);
+        const controller = GlobalStates.overviewBackgroundControllerFor(screen.name);
+        const t = controller ? controller.realGnomeTarget : Qt.rect(0, 0, 0, 0);
+        return Qt.rect(screen.x + t.x, screen.y + t.y, t.width, t.height);
+    }
+    function activeWsOf(screenName) {
+        const monitor = Hyprland.monitors.values.find(m => m.name === screenName);
+        return Math.max(1, monitor?.activeWorkspace?.id ?? 1);
+    }
+
+    readonly property var pointerScreen: root.ownsDrag ? root.screenAt(root.pointer.x, root.pointer.y) : null
+    readonly property string pointerScreenName: root.pointerScreen ? root.pointerScreen.name : ""
+    readonly property rect pointerPlane: root.planeOf(root.pointerScreen)
+    readonly property int edgeSide: root.phase !== "drag" || root.pointerPlane.width <= 0 ? 0
+        : root.pointer.x < root.pointerPlane.x ? -1
+        : root.pointer.x > root.pointerPlane.x + root.pointerPlane.width ? 1 : 0
+    onPointerScreenNameChanged: {
+        if (!root.ownsDrag || root.phase !== "drag")
+            return;
+        GlobalStates.realGnomeDragShift = 0;
+        GlobalStates.realGnomeDragTargetScreen = root.pointerScreenName;
+    }
+
+    readonly property real shrinkEase: root.shrinkT
+    readonly property size curSize: Qt.size(
+        root.slotRectG.width + (root.shrunk.width - root.slotRectG.width) * root.shrinkEase,
+        root.slotRectG.height + (root.shrunk.height - root.slotRectG.height) * root.shrinkEase)
+    readonly property rect liveRect: Qt.rect(
+        root.pointer.x - root.grabFrac.x * root.curSize.width,
+        root.pointer.y - root.grabFrac.y * root.curSize.height,
+        root.curSize.width, root.curSize.height)
+    // Springing back eases the rect from where it was let go to its slot; landing
+    // elsewhere shrinks it a little as it fades.
+    readonly property rect proxyRect: {
+        if (root.phase === "return") {
+            const t = root.returnT;
+            const r = root.releaseRect, s = root.slotRectG;
+            return Qt.rect(r.x + (s.x - r.x) * t, r.y + (s.y - r.y) * t,
+                r.width + (s.width - r.width) * t, r.height + (s.height - r.height) * t);
+        }
+        if (root.phase === "drop") {
+            const k = 1 - 0.14 * root.dropT;
+            const r = root.liveRect;
+            return Qt.rect(r.x + r.width * (1 - k) / 2, r.y + r.height * (1 - k) / 2, r.width * k, r.height * k);
+        }
+        return root.liveRect;
+    }
+    onProxyRectChanged: {
+        if (root.ownsDrag)
+            GlobalStates.realGnomeDragRect = root.proxyRect;
+    }
+    onDropTChanged: {
+        if (root.ownsDrag && root.phase === "drop")
+            GlobalStates.realGnomeDragOpacity = 1 - root.dropT;
+    }
+
+    readonly property var heldToplevel: {
+        const address = GlobalStates.realGnomeDraggedWindow;
+        if (address === "" || GlobalStates.realGnomeDragPhase === "")
             return null;
         return (ToplevelManager.toplevels.values ?? []).find(toplevel => {
             const raw = String(toplevel?.HyprlandToplevel?.address ?? "");
             const key = raw.toLowerCase().indexOf("0x") === 0 ? "0x" + raw.slice(2) : "0x" + raw;
-            return key === root.dragAddress;
+            return key === address;
         }) ?? null;
     }
 
-    function beginDrag(address, pos, grab, size) {
+    readonly property int animDuration: Math.round(Math.max(1, Math.min(10, Number(Config.options.appearance.appLaunchAnimation.speed) || 4))
+        * 55 * Appearance.animMultiplier)
+
+    NumberAnimation {
+        id: shrinkAnim
+        target: root
+        property: "shrinkT"
+        from: 0
+        to: 1
+        duration: root.animDuration
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: [0.22, 1, 0.36, 1, 1, 1]
+    }
+    NumberAnimation {
+        id: returnAnim
+        target: root
+        property: "returnT"
+        from: 0
+        to: 1
+        duration: root.animDuration + 40
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: [0.22, 1, 0.36, 1, 1, 1]
+        onFinished: root.finishDrag()
+    }
+    NumberAnimation {
+        id: dropAnim
+        target: root
+        property: "dropT"
+        from: 0
+        to: 1
+        duration: root.animDuration
+        easing.type: Easing.OutCubic
+        onFinished: root.finishDrag()
+    }
+
+    function beginDrag(address, pos, grab, slotRect) {
         GlobalStates.realGnomeHoveredWindow = "";
-        clearDraggedTimer.stop();
+        GlobalStates.realGnomePressedWindow = "";
         root.dragAddress = address;
-        root.dragGrab = grab;
-        root.dragSize = size;
-        root.dragPos = pos;
+        root.slotRectG = slotRect;
+        root.grabFrac = grab;
+        root.pointer = pos;
+        // GNOME shrinks the held window to a handy size, growing the gap smoothly.
+        const factor = Math.min(1, 320 / Math.max(1, slotRect.width));
+        root.shrunk = Qt.size(slotRect.width * factor, slotRect.height * factor);
+        root.shrinkT = 0;
+        root.returnT = 0;
+        root.dropT = 0;
+        root.phase = "drag";
         GlobalStates.realGnomeDraggedWindow = address;
+        GlobalStates.realGnomeDragOpacity = 1;
+        GlobalStates.realGnomeDragRect = root.proxyRect;
+        GlobalStates.realGnomeDragTargetScreen = root.screenName;
+        GlobalStates.realGnomeDragShift = 0;
+        GlobalStates.realGnomeDragPhase = "drag";
+        if (transitionAnimationsOff())
+            root.shrinkT = 1;
+        else
+            shrinkAnim.restart();
+    }
+    function transitionAnimationsOff() {
+        return Config.options.overview.animationStyle === "none";
     }
     function moveDrag(pos) {
-        root.dragPos = pos;
+        root.pointer = pos;
+    }
+    function startReturn() {
+        root.releaseRect = root.liveRect;
+        root.phase = "return";
+        GlobalStates.realGnomeDragPhase = "return";
+        GlobalStates.realGnomeDragTargetScreen = "";
+        GlobalStates.realGnomeDragShift = 0;
+        if (root.transitionAnimationsOff()) {
+            root.returnT = 1;
+            root.finishDrag();
+        } else {
+            returnAnim.restart();
+        }
+    }
+    function startDrop() {
+        root.phase = "drop";
+        GlobalStates.realGnomeDragPhase = "drop";
+        if (root.transitionAnimationsOff()) {
+            root.dropT = 1;
+            root.finishDrag();
+        } else {
+            dropAnim.restart();
+        }
+    }
+    function finishDrag() {
+        shrinkAnim.stop();
+        returnAnim.stop();
+        dropAnim.stop();
+        root.dragAddress = "";
+        root.phase = "";
+        GlobalStates.realGnomeDragPhase = "";
+        GlobalStates.realGnomeDraggedWindow = "";
+        GlobalStates.realGnomeDragOpacity = 1;
+    }
+    // Torn down without ceremony: the overview closed or the item went away.
+    function abortDrag() {
+        if (!root.ownsDrag)
+            return;
+        dwellTimer.stop();
+        root.finishDrag();
+        GlobalStates.realGnomeDragTargetScreen = "";
+        GlobalStates.realGnomeDragShift = 0;
     }
     function endDrag(dropped) {
-        if (!root.dragging)
+        if (!root.ownsDrag || root.phase !== "drag")
             return;
-        const address = root.dragAddress;
-        const shift = GlobalStates.realGnomeDragShift;
-        const side = root.edgeSide;
-        root.dragAddress = "";
         dwellTimer.stop();
-        if (dropped && shift !== 0) {
-            const target = root.activeWs + shift;
-            GlobalStates.realGnomeDragCommitWs = target;
-            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${target}, follow = false, window = "address:${address}" })`);
-            Hyprland.dispatch(`hl.dsp.focus({ workspace = ${target} })`);
-        } else {
-            if (dropped && side !== 0 && root.activeWs + side >= 1)
-                Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${root.activeWs + side}, follow = false, window = "address:${address}" })`);
-            GlobalStates.realGnomeDragShift = 0;
+        const address = root.dragAddress;
+        const target = root.pointerScreenName;
+        const targetActive = root.activeWsOf(target);
+        const shift = GlobalStates.realGnomeDragTargetScreen === target ? GlobalStates.realGnomeDragShift : 0;
+        const side = root.edgeSide;
+        if (!dropped || target === "") {
+            root.startReturn();
+            return;
         }
-        // The window leaves its slot a moment after the dispatch; showing the
-        // tile again at once would flash it where it was.
-        clearDraggedTimer.restart();
-    }
-    Timer {
-        id: clearDraggedTimer
-        interval: 160
-        onTriggered: GlobalStates.realGnomeDraggedWindow = ""
+        if (shift !== 0 && targetActive + shift >= 1) {
+            // The strip is already on that workspace: move there and switch for real.
+            const ws = targetActive + shift;
+            GlobalStates.realGnomeDragCommitScreen = target;
+            GlobalStates.realGnomeDragCommitWs = ws;
+            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${ws}, follow = false, window = "address:${address}" })`);
+            Hyprland.dispatch(`hl.dsp.focus({ workspace = ${ws} })`);
+            root.startDrop();
+            return;
+        }
+        GlobalStates.realGnomeDragShift = 0;
+        GlobalStates.realGnomeDragTargetScreen = "";
+        if (target !== root.screenName) {
+            // Another monitor: onto the workspace it shows (or the neighbour it was dropped beside).
+            const ws = side !== 0 && targetActive + side >= 1 ? targetActive + side : targetActive;
+            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${ws}, follow = false, window = "address:${address}" })`);
+            root.startDrop();
+        } else if (side !== 0 && targetActive + side >= 1) {
+            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${targetActive + side}, follow = false, window = "address:${address}" })`);
+            root.startDrop();
+        } else {
+            root.startReturn();
+        }
     }
     // Resting at an edge steps the preview one workspace, then one more per beat.
     Timer {
         id: dwellTimer
         interval: 450
         repeat: true
-        running: root.dragging && root.edgeSide !== 0
+        running: root.ownsDrag && root.phase === "drag" && root.edgeSide !== 0
         onTriggered: {
-            const next = GlobalStates.realGnomeDragShift + root.edgeSide;
-            if (root.activeWs + next < 1)
+            const current = GlobalStates.realGnomeDragTargetScreen === root.pointerScreenName ? GlobalStates.realGnomeDragShift : 0;
+            const next = current + root.edgeSide;
+            if (root.activeWsOf(root.pointerScreenName) + next < 1)
                 return;
+            GlobalStates.realGnomeDragTargetScreen = root.pointerScreenName;
             GlobalStates.realGnomeDragShift = next;
             dwellTimer.interval = 700;
         }
@@ -130,15 +306,14 @@ Item {
     onShownChanged: {
         if (!root.shown) {
             GlobalStates.realGnomeHoveredWindow = "";
-            root.endDrag(false);
+            GlobalStates.realGnomePressedWindow = "";
+            root.abortDrag();
         }
     }
     Component.onDestruction: {
         GlobalStates.realGnomeHoveredWindow = "";
-        if (root.dragging) {
-            GlobalStates.realGnomeDraggedWindow = "";
-            GlobalStates.realGnomeDragShift = 0;
-        }
+        GlobalStates.realGnomePressedWindow = "";
+        root.abortDrag();
     }
 
     Repeater {
@@ -152,7 +327,7 @@ Item {
             required property var modelData
 
             readonly property string address: slot.modelData.address
-            readonly property bool hovered: slotHover.hovered && !root.dragging
+            readonly property bool hovered: slotHover.hovered && GlobalStates.realGnomeDragPhase === ""
             readonly property string iconSource: {
                 const _ = TaskbarApps.iconThemeRevision;
                 return Quickshell.iconPath(AppSearch.guessIcon(slot.modelData.appClass), "image-missing");
@@ -166,7 +341,7 @@ Item {
             HoverHandler {
                 id: slotHover
                 onHoveredChanged: {
-                    if (root.dragging)
+                    if (GlobalStates.realGnomeDragPhase !== "")
                         return;
                     if (slotHover.hovered)
                         GlobalStates.realGnomeHoveredWindow = slot.address;
@@ -176,46 +351,55 @@ Item {
             }
 
             // The dragged window leaves its slot (the capture hides too).
-            opacity: root.dragAddress === slot.address ? 0 : 1
+            opacity: GlobalStates.realGnomeDraggedWindow === slot.address ? 0 : 1
             Component.onDestruction: {
                 if (root.dragAddress === slot.address)
-                    root.endDrag(false);
+                    root.abortDrag();
             }
 
             MouseArea {
                 id: slotMouse
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                cursorShape: root.dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+                cursorShape: GlobalStates.realGnomeDragPhase === "drag" ? Qt.ClosedHandCursor : Qt.PointingHandCursor
                 property point pressPoint: Qt.point(0, 0)
                 property bool moved: false
+                // Screen -> global (layout) coordinates for a point in this picker.
+                function toGlobal(pos) {
+                    return Qt.point(root.screenX + pos.x - root.offsetX, root.screenY + pos.y - root.offsetY);
+                }
                 onPressed: mouse => {
                     slotMouse.pressPoint = Qt.point(mouse.x, mouse.y);
                     slotMouse.moved = false;
+                    if (mouse.button === Qt.LeftButton)
+                        GlobalStates.realGnomePressedWindow = slot.address;
                 }
                 onPositionChanged: mouse => {
                     if (!(slotMouse.pressedButtons & Qt.LeftButton))
                         return;
-                    const pos = slotMouse.mapToItem(root, mouse.x, mouse.y);
+                    const pos = slotMouse.toGlobal(slotMouse.mapToItem(root, mouse.x, mouse.y));
                     if (!slotMouse.moved) {
                         const dx = mouse.x - slotMouse.pressPoint.x;
                         const dy = mouse.y - slotMouse.pressPoint.y;
                         if (dx * dx + dy * dy < 64)
                             return;
                         slotMouse.moved = true;
-                        // GNOME shrinks the held window to a handy size.
-                        const factor = Math.min(1, 320 / Math.max(1, slot.width));
+                        const origin = slotMouse.toGlobal(slotMouse.mapToItem(root, 0, 0));
                         root.beginDrag(slot.address, pos,
-                            Qt.point(slotMouse.pressPoint.x * factor, slotMouse.pressPoint.y * factor),
-                            Qt.size(slot.width * factor, slot.height * factor));
+                            Qt.point(slotMouse.pressPoint.x / Math.max(1, slot.width), slotMouse.pressPoint.y / Math.max(1, slot.height)),
+                            Qt.rect(origin.x, origin.y, slot.width, slot.height));
                     }
                     root.moveDrag(pos);
                 }
                 onReleased: {
+                    if (GlobalStates.realGnomePressedWindow === slot.address)
+                        GlobalStates.realGnomePressedWindow = "";
                     if (slotMouse.moved)
                         root.endDrag(true);
                 }
                 onCanceled: {
+                    if (GlobalStates.realGnomePressedWindow === slot.address)
+                        GlobalStates.realGnomePressedWindow = "";
                     if (slotMouse.moved)
                         root.endDrag(false);
                 }
@@ -307,14 +491,18 @@ Item {
         }
     }
 
-    // The held window under the pointer.
+    // The held window under the pointer, on whichever monitor it is over.
     Item {
         id: dragProxy
-        visible: root.dragging
-        x: root.dragPos.x - root.dragGrab.x
-        y: root.dragPos.y - root.dragGrab.y
-        width: root.dragSize.width
-        height: root.dragSize.height
+        readonly property rect g: GlobalStates.realGnomeDragRect
+        visible: GlobalStates.realGnomeDragPhase !== "" && root.heldToplevel !== null
+            && g.x < root.screenX + (root.screenObj ? root.screenObj.width : 0) && g.x + g.width > root.screenX
+            && g.y < root.screenY + (root.screenObj ? root.screenObj.height : 0) && g.y + g.height > root.screenY
+        x: g.x - root.screenX + root.offsetX
+        y: g.y - root.screenY + root.offsetY
+        width: g.width
+        height: g.height
+        opacity: GlobalStates.realGnomeDragOpacity
 
         StyledRectangularShadow {
             target: dragCapture
@@ -331,7 +519,7 @@ Item {
             }
             ScreencopyView {
                 anchors.fill: parent
-                captureSource: root.dragging ? root.dragToplevel : null
+                captureSource: dragProxy.visible ? root.heldToplevel : null
                 live: true
                 paintCursor: false
             }

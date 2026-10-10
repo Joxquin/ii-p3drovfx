@@ -167,7 +167,7 @@ PanelWindow {
         id: overviewController
         active: (Config.options.background.useBackgroundOverviewAlways ?? false)
             || bgRoot.lockEffectRequested
-            || (GlobalStates.overviewBackgroundActive && bgRoot.isMonitorFocused)
+            || (GlobalStates.overviewBackgroundActive && (bgRoot.isMonitorFocused || bgRoot.mirroredOverview))
             || (Boolean(Config.options.background?.zoomOutEnabled) && bgRoot.scratchpadOpenOnMonitor)
         // Only where the overview is what would zoom this wallpaper in the first place.
         held: GlobalStates.overviewDragging && bgRoot.isMonitorFocused && !bgRoot.lockEffectRequested
@@ -177,7 +177,7 @@ PanelWindow {
         heldProgress: GlobalStates.gestureDragProgress
         style: bgRoot.lockEffectActive ? bgRoot.lockEffectStyle : Config.options.background.overviewBackgroundStyle
         lockDriven: bgRoot.lockEffectActive
-        openHold: GlobalStates.overviewZoomHeld && bgRoot.isMonitorFocused && !bgRoot.lockEffectActive
+        openHold: GlobalStates.overviewZoomHeld && (bgRoot.isMonitorFocused || bgRoot.mirroredOverview) && !bgRoot.lockEffectActive
         legacyStyle: Config.options.background.zoomOutStyle
         videoEffectsDisabled: bgRoot.videoEffectsDisabled
         screenWidth: bgRoot.screen.width
@@ -199,7 +199,7 @@ PanelWindow {
             : GlobalStates.scrollingOverviewTargets[bgRoot.screen?.name ?? ""] ?? Qt.rect(0, 0, 0, 0)
         realGnomeArea: {
             const name = bgRoot.screen?.name ?? "";
-            const area = GlobalStates.realGnomeAreas[name] ?? Persistent.states.overview?.realGnomeAreas?.[name];
+            const area = GlobalStates.realGnomeAreaFor(name) ?? Persistent.states.overview?.realGnomeAreas?.[name];
             return area ? Qt.rect(area.x, area.y, area.width, area.height) : Qt.rect(0, 0, 0, 0);
         }
     }
@@ -275,6 +275,8 @@ PanelWindow {
         const spec = bgRoot.thisMonitorData?.specialWorkspace;
         return Boolean(spec && spec.name !== "" && (spec.id ?? 0) !== 0);
     }
+    // Real Gnome shows the overview on every monitor, not just the focused one.
+    readonly property bool mirroredOverview: GlobalStates.realGnomeMirrored && overviewController.isRealGnome
     readonly property bool isMonitorFocused: Quickshell.screens.length <= 1 || ((Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : ""))
     readonly property bool loopEnabled: !videoEffectsDisabled && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]

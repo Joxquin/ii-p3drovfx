@@ -719,8 +719,7 @@ Item {
 
         // Real Gnome: the plane steps aside while the transition layer's cards
         // (painting this exact wallpaper, published below) slide the workspaces.
-        readonly property bool realGnomePlaneHidden: GlobalStates.realGnomePlaneHiddenScreen !== ""
-            && GlobalStates.realGnomePlaneHiddenScreen === wallpaperImageRoot.screenName
+        readonly property bool realGnomePlaneHidden: Boolean(GlobalStates.realGnomePlaneHiddenScreens[wallpaperImageRoot.screenName])
         function publishRealGnomeWallpaper() {
             if (!wallpaperImageRoot.overviewController || !wallpaperImageRoot.overviewController.isRealGnome
                     || wallpaperImageRoot.screenName === "" || wallpaper.imageSource === "")
@@ -742,8 +741,9 @@ Item {
         Connections {
             target: wallpaperImageRoot
             function onOverviewAnimationVisibleChanged() { realGnomeWallpaperTimer.restart(); }
-            function onEffectiveParallaxXChanged() { realGnomeWallpaperTimer.restart(); }
-            function onEffectiveParallaxYChanged() { realGnomeWallpaperTimer.restart(); }
+            // Parallax moves all day; only an open Real Gnome overview reads the box.
+            function onEffectiveParallaxXChanged() { if (wallpaperImageRoot.overviewAnimationVisible && wallpaperImageRoot.overviewController.isRealGnome) realGnomeWallpaperTimer.restart(); }
+            function onEffectiveParallaxYChanged() { if (wallpaperImageRoot.overviewAnimationVisible && wallpaperImageRoot.overviewController.isRealGnome) realGnomeWallpaperTimer.restart(); }
             function onStableDecodeSizeChanged() { realGnomeWallpaperTimer.restart(); }
         }
         Connections {

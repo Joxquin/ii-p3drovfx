@@ -63,14 +63,14 @@ class RealGnomeStyleTests(unittest.TestCase):
         # Plain Gnome Like still runs on elementMove; only Real Gnome swaps curves.
         self.assertIn(": Appearance.animation.elementMove.duration", CONTROLLER)
         self.assertIn(": Appearance.animation.elementMove.bezierCurve", CONTROLLER)
-        self.assertIn("realGnomeOpenCurve: [0.22, 1, 0.36, 1, 1, 1]", CONTROLLER)
+        self.assertIn("realGnomeOpenCurve: [0.25, 0, 0.1, 1, 1, 1]", CONTROLLER)
         # No overshoot in either Real Gnome curve.
         for name in ("realGnomeOpenCurve", "realGnomeCloseCurve"):
             values = [float(v) for v in re.search(name + r": \[([^\]]+)\]", CONTROLLER).group(1).split(",")]
             self.assertTrue(all(0.0 <= v <= 1.0 for v in values), name)
 
     def test_plane_aims_under_the_thumbnails(self):
-        self.assertIn("GlobalStates.realGnomeAreas[name]", BG_ROOT)
+        self.assertIn("GlobalStates.realGnomeAreaFor(name)", BG_ROOT)
         self.assertIn("function setRealGnomeArea(screenName, rect)", GLOBAL_STATES)
         self.assertIn("realGnomeAimed ? realGnomeTarget.x / (1.0 - realGnomeScale)", CONTROLLER)
         # No workspace grid: the plane and its neighbours are the workspaces.
@@ -87,7 +87,7 @@ class RealGnomeStyleTests(unittest.TestCase):
     def test_open_zoom_waits_for_the_handoff(self):
         # The zoom is held at 0 until the captures have a frame and Hyprland hid the windows.
         self.assertIn("property bool overviewZoomHeld: false", GLOBAL_STATES)
-        self.assertIn("openHold: GlobalStates.overviewZoomHeld && bgRoot.isMonitorFocused", BG_ROOT)
+        self.assertIn("openHold: GlobalStates.overviewZoomHeld && (bgRoot.isMonitorFocused || bgRoot.mirroredOverview)", BG_ROOT)
         self.assertIn("(active && !root.openHold ? 1.0 : 0.0)", CONTROLLER)
         self.assertIn("onIncomingCapturesReadyChanged", TRANSITION)
         self.assertIn("transitionScope.windowHandoffApplied = true;", TRANSITION)
@@ -106,7 +106,7 @@ class RealGnomeStyleTests(unittest.TestCase):
         # plane steps aside only once a card covers it, and returns before the card leaves.
         self.assertIn("GlobalStates.setRealGnomePlaneWallpaper(wallpaperImageRoot.screenName", WALLPAPER_IMAGE)
         self.assertIn("opacity: wallpaperPlanes.realGnomePlaneHidden ? 0 : 1", WALLPAPER_IMAGE)
-        self.assertIn("GlobalStates.realGnomePlaneHiddenScreen = tRoot.screenName;", TRANSITION)
+        self.assertIn("GlobalStates.setRealGnomePlaneHidden(tRoot.screenName, true);", TRANSITION)
         self.assertIn("(tRoot.isRealGnome && !tRoot.planeHandedOver)", TRANSITION)
         self.assertIn("tRoot.returnPlane()", TRANSITION)
         self.assertIn("clip: tRoot.isRealGnome && ((tRoot.sliding && !tRoot.stripFullMode) || tRoot.searchSlide > 0.001)", TRANSITION)
@@ -121,9 +121,41 @@ class RealGnomeStyleTests(unittest.TestCase):
         # The plane leaves the bottom strip to it.
         self.assertIn("root.realGnomeIndicatorRoom - top", NOTCH_ISLAND)
 
-    def test_strip_is_shown_in_bands_not_through_a_mask(self):
-        self.assertIn("component StripBand: ShaderEffectSource", TRANSITION)
-        self.assertNotIn("maskInverted", TRANSITION)
+    def test_overview_mirrors_on_every_monitor(self):
+        self.assertIn("readonly property bool realGnomeMirrored: Quickshell.screens.length > 1", GLOBAL_STATES)
+        self.assertIn("|| GlobalStates.realGnomeMirrored", TRANSITION)
+        self.assertIn("(bgRoot.isMonitorFocused || bgRoot.mirroredOverview)", BG_ROOT)
+        self.assertIn("RealGnomeMirrorHost.qml", TRANSITION)
+        host = (ROOT / "modules/ii/overview/RealGnomeMirrorHost.qml").read_text()
+        self.assertIn("RealGnomeWindowPicker {", host)
+        self.assertIn("RealGnomeWorkspaceIndicator {", host)
+        # One hide/restore rule waits for every monitor.
+        self.assertIn("active.every(layer => layer.incomingCapturesReady)", TRANSITION)
+        self.assertIn("pending.every(layer => !layer.overviewController || layer.overviewController.progress === 0)", TRANSITION)
+
+    def test_monitor_hop_does_not_close_the_overview(self):
+        self.assertIn("function onFocusedMonitorChanged()", NOTCH_ISLAND)
+        self.assertIn("grabClearJudge.restart();", NOTCH_ISLAND)
+        self.assertIn("active: !win.grabSuspended && (root.searchActive", NOTCH_ISLAND)
+
+    def test_drag_crosses_monitors_with_scale_animations(self):
+        picker = (ROOT / "modules/ii/overview/RealGnomeWindowPicker.qml").read_text()
+        for needle in ("id: shrinkAnim", "id: returnAnim", "id: dropAnim", "function startReturn()", "function startDrop()",
+                       "root.screenAt(root.pointer.x, root.pointer.y)", "GlobalStates.realGnomeDragRect"):
+            self.assertIn(needle, picker)
+        # Press dips the card, release springs it back.
+        self.assertIn("GlobalStates.realGnomePressedWindow === tile.address", TRANSITION)
+        self.assertIn("easing.type: tile.pressed ? Easing.OutCubic : Easing.OutBack", TRANSITION)
+
+    def test_strip_is_a_static_layout_zoomed_by_one_transform(self):
+        # Cards keep their unscaled size; only the strip's transform follows the zoom, so a
+        # zoom frame never re-renders a card's masked layer.
+        self.assertIn("id: stripUnit", TRANSITION)
+        self.assertIn("layer.textureSize: Qt.size(Math.ceil(width * peek.finalScale)", TRANSITION)
+        self.assertIn("&& (tRoot.stripFullMode || peek.workspaceId !== tRoot.displayedWsId)", TRANSITION)
+        self.assertIn("Math.abs(peek.workspaceId - tRoot.stripCenter) < 1.6", TRANSITION)
+        for gone in ("maskInverted", "StripBand", "stripTexture", "stripSource"):
+            self.assertNotIn(gone, TRANSITION)
 
     def test_close_restores_windows_when_the_zoom_lands(self):
         self.assertIn("tRoot.overviewController.progress === 0)", TRANSITION)
@@ -136,7 +168,7 @@ class RealGnomeStyleTests(unittest.TestCase):
         self.assertIn("scale: tRoot.isRealGnome ? 1.0", TRANSITION)
         # One strip: slots and neighbour cards are both placed from stripCenter.
         self.assertIn("((incoming ? tRoot.displayedWsId : tRoot.slideFromWs) - tRoot.stripCenter) * tRoot.workspaceSlideDistance", TRANSITION)
-        self.assertIn("(peek.workspaceId - tRoot.stripCenter) * tRoot.workspaceSlideDistance", TRANSITION)
+        self.assertIn("(peek.workspaceId - tRoot.stripCenter) * peek.step", TRANSITION)
         self.assertIn("slideFromCenter = center", TRANSITION)
         # Neighbours never fade out for a slide.
         self.assertNotIn("peekOpacity", TRANSITION)
@@ -156,7 +188,8 @@ class RealGnomeStyleTests(unittest.TestCase):
         self.assertGreater(reset, 0)
 
     def test_captures_hold_still_while_sliding(self):
-        self.assertIn("&& !(tRoot.isRealGnome && tRoot.sliding)", TRANSITION)
+        self.assertIn("&& !tRoot.isRealGnome", TRANSITION)
+        self.assertNotIn("liveCaptureAllowed", TRANSITION)
 
     def test_search_slides_windows_out_of_the_plane(self):
         # Windows leave vertically, away from the search; neighbours stay (no fade of the container).

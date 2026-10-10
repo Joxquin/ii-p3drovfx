@@ -225,9 +225,12 @@ Item {
     // curve and speed (Settings -> Windows), closing is shorter and lands
     // softly on the real windows.
     readonly property real realGnomeWindowSpeed: Math.max(1, Math.min(10, Number(Config.options.appearance.appLaunchAnimation.speed) || 4))
-    readonly property int realGnomeOpenDuration: Math.round(realGnomeWindowSpeed * 100 * Appearance.animMultiplier)
+    // Longer than the compositor's window motion: the zoom moves the whole screen.
+    readonly property int realGnomeOpenDuration: Math.round(realGnomeWindowSpeed * 120 * Appearance.animMultiplier)
     readonly property int realGnomeCloseDuration: Math.round(realGnomeWindowSpeed * 75 * Appearance.animMultiplier)
-    readonly property var realGnomeOpenCurve: [0.22, 1, 0.36, 1, 1, 1]
+    // Eases in as well as out: a curve that starts steep spends most of the zoom in the
+    // first few frames, exactly where the open is busiest, and reads as a jump.
+    readonly property var realGnomeOpenCurve: [0.25, 0, 0.1, 1, 1, 1]
     readonly property var realGnomeCloseCurve: [0.25, 0.46, 0.45, 0.94, 1, 1]
     /** GNOME's radial shade over the blurred backing. */
     readonly property real vignetteAmount: isRealGnome ? progress : 0.0
