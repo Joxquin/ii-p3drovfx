@@ -165,6 +165,7 @@ DockButton {
         headerText: root.actionId === "overview" ? Translation.tr("Overview") : Translation.tr("Pin")
         headerSubtitle: root.actionId === "overview" ? Translation.tr("Dock button") : Translation.tr("Drop an app here to pin it")
         headerSymbol: root.symbolName
+        menuId: "dockButton"
         menuGroups: actionMenu.menuOpen ? [
             root.actionId === "overview" ? [
                 { id: "open", icon: "open_in_full", text: Translation.tr("Open overview") }

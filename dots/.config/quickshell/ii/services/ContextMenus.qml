@@ -85,6 +85,90 @@ Singleton {
                 { "id": "separator-3", "separator": true },
                 { "id": "remove", "symbol": "delete", "title": "Move to trash", "bar": true }
             ]
+        },
+        {
+            "id": "dockApp",
+            "name": "Dock app",
+            "icon": "apps",
+            "description": "Right-click on an app in the dock",
+            "entries": [
+                { "id": "appActions", "symbol": "arrow_outward", "title": "App actions", "block": true },
+                { "id": "separator", "separator": true },
+                { "id": "launch", "symbol": "launch", "title": "Launch", "bar": true },
+                { "id": "livePreview", "symbol": "live_tv", "title": "Live Preview", "bar": true },
+                { "id": "pin", "symbol": "keep", "title": "Pin to dock" },
+                { "id": "edit", "symbol": "edit", "title": "Edit dock", "bar": true },
+                { "id": "separator-2", "separator": true },
+                { "id": "close", "symbol": "close", "title": "Close window", "bar": true }
+            ]
+        },
+        {
+            "id": "dockFile",
+            "name": "Dock file",
+            "icon": "draft",
+            "description": "Right-click on a file or folder pinned to the dock",
+            "entries": [
+                { "id": "open", "symbol": "open_in_new", "title": "Open" },
+                { "id": "openContaining", "symbol": "folder_open", "title": "Open containing folder" },
+                { "id": "separator", "separator": true },
+                { "id": "remove", "symbol": "do_not_disturb_on", "title": "Remove from dock" }
+            ]
+        },
+        {
+            "id": "dockPhone",
+            "name": "Dock phone",
+            "icon": "smartphone",
+            "description": "Right-click on the phone button in the dock",
+            "entries": [
+                { "id": "mirror", "symbol": "cast", "title": "Open mirror" },
+                { "id": "stop", "symbol": "stop_circle", "title": "Stop mirror" },
+                { "id": "separator", "separator": true },
+                { "id": "sendFile", "symbol": "upload_file", "title": "Send file…", "bar": true },
+                { "id": "sendClipboard", "symbol": "content_paste", "title": "Send clipboard", "bar": true },
+                { "id": "browse", "symbol": "folder_open", "title": "Browse files", "bar": true },
+                { "id": "ring", "symbol": "ring_volume", "title": "Ring phone", "bar": true },
+                { "id": "separator-2", "separator": true },
+                { "id": "remove", "symbol": "do_not_disturb_on", "title": "Remove from dock" }
+            ]
+        },
+        {
+            "id": "dockTrash",
+            "name": "Dock trash",
+            "icon": "delete",
+            "description": "Right-click on the trash in the dock",
+            "entries": [
+                { "id": "open", "symbol": "folder_open", "title": "Open Trash" },
+                { "id": "separator", "separator": true },
+                { "id": "empty", "symbol": "delete_sweep", "title": "Empty Trash" }
+            ]
+        },
+        {
+            "id": "dockButton",
+            "name": "Dock buttons",
+            "icon": "radio_button_checked",
+            "description": "Right-click on the overview or pin button in the dock",
+            "entries": [
+                { "id": "open", "symbol": "open_in_full", "title": "Open overview" },
+                { "id": "separator", "separator": true },
+                { "id": "settings", "symbol": "settings", "title": "Dock settings" },
+                { "id": "remove", "symbol": "remove_circle", "title": "Remove from dock" }
+            ]
+        },
+        {
+            "id": "dockWidget",
+            "name": "Dock widget",
+            "icon": "widgets",
+            "description": "Right-click on a utility widget in the dock",
+            "entries": [
+                { "id": "widgetActions", "symbol": "bolt", "title": "Widget actions", "block": true },
+                { "id": "__panel", "symbol": "open_in_full", "title": "Open" },
+                { "id": "separator", "separator": true },
+                { "id": "__square", "symbol": "crop_square", "title": "Make square" },
+                { "id": "__wide", "symbol": "crop_16_9", "title": "Make wide" },
+                { "id": "separator-2", "separator": true },
+                { "id": "__settings", "symbol": "settings", "title": "Widget settings" },
+                { "id": "__remove", "symbol": "remove_circle", "title": "Remove from dock" }
+            ]
         }
     ]
 

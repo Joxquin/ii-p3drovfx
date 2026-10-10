@@ -102,6 +102,14 @@ Item {
         enterMotion.stop();
         exitMotion.restart();
     }
+    // Back to hidden at once, for a host that unloaded its surface.
+    function stop(): void {
+        enterMotion.stop();
+        exitMotion.stop();
+        unmapDelay.stop();
+        root.grow = 0;
+        root.reveal = 0;
+    }
 
     onClosingChanged: {
         if (root.closing)
