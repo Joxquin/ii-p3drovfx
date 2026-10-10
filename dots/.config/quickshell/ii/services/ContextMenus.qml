@@ -40,6 +40,9 @@ Singleton {
     readonly property real comfortablePadding: 8
 
     // ── Declarations ─────────────────────────────────────────────────────────
+    // `groups` (menu): the comfortable style draws its separators as gaps
+    // between groups; without it comfortable is one run and only compact
+    // draws them.
     // `bar`: placed in the compact icon bar unless the user moved it.
     // `submenu`: opens a page (a chevron in the list, the page in a bar icon).
     // `block`: a run of entries supplied at runtime (an app's own actions);
@@ -88,6 +91,7 @@ Singleton {
         },
         {
             "id": "dockApp",
+            "groups": true,
             "name": "Dock app",
             "icon": "apps",
             "description": "Right-click on an app in the dock",
@@ -104,6 +108,7 @@ Singleton {
         },
         {
             "id": "dockFile",
+            "groups": true,
             "name": "Dock file",
             "icon": "draft",
             "description": "Right-click on a file or folder pinned to the dock",
@@ -116,6 +121,7 @@ Singleton {
         },
         {
             "id": "dockPhone",
+            "groups": true,
             "name": "Dock phone",
             "icon": "smartphone",
             "description": "Right-click on the phone button in the dock",
@@ -133,6 +139,7 @@ Singleton {
         },
         {
             "id": "dockTrash",
+            "groups": true,
             "name": "Dock trash",
             "icon": "delete",
             "description": "Right-click on the trash in the dock",
@@ -144,6 +151,7 @@ Singleton {
         },
         {
             "id": "dockButton",
+            "groups": true,
             "name": "Dock buttons",
             "icon": "radio_button_checked",
             "description": "Right-click on the overview or pin button in the dock",
@@ -156,6 +164,7 @@ Singleton {
         },
         {
             "id": "dockWidget",
+            "groups": true,
             "name": "Dock widget",
             "icon": "widgets",
             "description": "Right-click on a utility widget in the dock",
@@ -200,6 +209,7 @@ Singleton {
         },
         {
             "id": "tray",
+            "groups": true,
             "name": "System tray",
             "icon": "more_horiz",
             "description": "Right-click on an app's icon in the bar's tray",
@@ -211,6 +221,7 @@ Singleton {
         },
         {
             "id": "overviewWindow",
+            "groups": true,
             "name": "Overview window",
             "icon": "overview",
             "description": "The menu on a window's chip in the Overview (Recents cards)",

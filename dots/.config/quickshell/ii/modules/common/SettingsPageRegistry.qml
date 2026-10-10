@@ -100,6 +100,17 @@ Singleton {
             "aliases": ["Shade", "Home screen", "Dock", "App drawer", "Gestures", "Android"]
         },
         {
+            "id": "contextMenus",
+            "name": "Context menus",
+            "icon": "menu_open",
+            "component": "modules/settings/configs/ContextMenusConfig.qml",
+            // The waffle and tablet families draw their own menus.
+            "families": ["ii"],
+            "searchComponent": false,
+            "searchSources": ["sections/ContextMenusOptionsSection.qml"],
+            "aliases": ["Right-click menu", "Menus", "Menu entries", "Compact menu", "Custom commands"]
+        },
+        {
             "id": "sidebars",
             "name": "Sidebars",
             "icon": "side_navigation",
@@ -457,7 +468,7 @@ Singleton {
         {
             "id": "lookAndFeel",
             "name": "Look & Feel",
-            "pageIds": ["colors", "bar", "interfaceFonts", "presets"]
+            "pageIds": ["colors", "bar", "interfaceFonts", "contextMenus", "presets"]
         },
         {
             "id": "modules",
