@@ -15,7 +15,7 @@ import qs.modules.common
  *
  * Painted only where the canvas has pixels ("source atop", depthCutoutMask.frag).
  * The compositor blurs whatever sits behind a half-transparent pixel of the
- * widgets surface (Appearance.backgroundWidgetsBlur): drawn plainly, the
+ * widgets surface (Appearance.backgroundWidgetsTranslucent): drawn plainly, the
  * cutout's soft edge over bare wallpaper showed that blur as a fringe. Masked,
  * the surface stays transparent there and the screen is the wallpaper itself;
  * over a widget the subject covers it, soft edges and all.

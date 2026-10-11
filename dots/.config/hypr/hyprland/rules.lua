@@ -182,9 +182,10 @@ hl.layer_rule({ match = { namespace = "quickshell.*" }, ignore_alpha = 0.19})
 hl.layer_rule({ match = { namespace = "quickshell.*" }, xray = false})
 -- Background is a Bottom-layer wallpaper surface; compositor blur here causes double-blur
 hl.layer_rule({ match = { namespace = "quickshell:background" }, blur = false})
--- Off until the shell pushes its own rule (Appearance.backgroundWidgetsBlur): on for see-through
--- widgets, off while they blur themselves under open windows (a hard-edged patch otherwise)
-hl.layer_rule({ match = { namespace = "quickshell:backgroundWidgets" }, blur = false})
+-- Off until the shell pushes its own per-screen rule (Appearance.backgroundWidgetsRules): on for
+-- see-through widgets, off on a screen whose widgets blur themselves under open windows
+-- (a hard-edged patch otherwise). One namespace per screen: quickshell:backgroundWidgets:<screen>
+hl.layer_rule({ match = { namespace = "quickshell:backgroundWidgets:.*" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, order = -1})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, ignore_alpha = 0.0})

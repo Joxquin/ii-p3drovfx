@@ -401,22 +401,37 @@ Singleton {
     // left unblurred. Opaque widgets need no blur, and a screen whose widgets blur
     // themselves under open windows (BackgroundWidgetsWindow) turns it off: over the
     // already blurred wallpaper it only adds a hard-edged, noise-grained patch.
+    // Every screen's widget layer has its own namespace (quickshell:backgroundWidgets:<screen>),
+    // so each gets its own rule and one screen's windows never touch another's glass.
     // Bound by BackgroundWidgetsWindow, so the two singletons never build each other.
     property real widgetBackgroundAlpha: 1
     property var widgetSelfBlurScreens: ({})
     function setWidgetSelfBlur(screenName: string, active: bool): void {
-        if (screenName === "" || (root.widgetSelfBlurScreens[screenName] === true) === active)
+        if (screenName === "" || root.widgetSelfBlurScreens[screenName] === active)
             return;
         const next = Object.assign({}, root.widgetSelfBlurScreens);
-        if (active)
-            next[screenName] = true;
-        else
-            delete next[screenName];
+        next[screenName] = active;
         root.widgetSelfBlurScreens = next;
     }
-    readonly property bool backgroundWidgetsBlur: root.widgetBackgroundAlpha > 0.01 && root.widgetBackgroundAlpha < 0.99
-        && Object.keys(root.widgetSelfBlurScreens).length === 0
+    function forgetWidgetScreen(screenName: string): void {
+        if (!(screenName in root.widgetSelfBlurScreens))
+            return;
+        const next = Object.assign({}, root.widgetSelfBlurScreens);
+        delete next[screenName];
+        root.widgetSelfBlurScreens = next;
+    }
+    readonly property bool backgroundWidgetsTranslucent: root.widgetBackgroundAlpha > 0.01 && root.widgetBackgroundAlpha < 0.99
     readonly property real backgroundWidgetsIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, root.widgetBackgroundAlpha - 0.01))
+    // Serialised so the rules are re-pushed only when a screen's answer changes.
+    readonly property string backgroundWidgetsRules: {
+        let out = "";
+        for (const screen of Object.keys(root.widgetSelfBlurScreens)) {
+            const blur = root.backgroundWidgetsTranslucent && root.widgetSelfBlurScreens[screen] !== true;
+            out += "hl.layer_rule({ name = 'ii:appearance:background-widgets:" + screen + "', match = { namespace = '^quickshell:backgroundWidgets:" + screen + "$' }, blur = "
+                + (blur ? "true" : "false") + ", ignore_alpha = " + root.backgroundWidgetsIgnoreAlpha + " }) ";
+        }
+        return out;
+    }
 
     function getLayerRulesScript(): string {
         var a = root.ignoreAlpha;
@@ -437,10 +452,9 @@ Singleton {
         }
         script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
-        // See backgroundWidgetsBlur. Re-declared on every change; rules.lua keeps it off
-        // until the shell has pushed this one.
-        script += "hl.layer_rule({ name = 'ii:appearance:background-widgets', match = { namespace = 'quickshell:backgroundWidgets' }, blur = "
-            + (root.backgroundWidgetsBlur ? "true" : "false") + ", ignore_alpha = " + root.backgroundWidgetsIgnoreAlpha + " }) ";
+        // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
+        // until the shell has pushed these.
+        script += root.backgroundWidgetsRules;
         // Both Media Mode designs share this namespace. The classic one relies on
         // compositor blur; the Immersive one draws its own and, over the music video,
         // compositor blur would hit only the pixels above ignore_alpha and carve
@@ -475,8 +489,7 @@ Singleton {
 
     onIgnoreAlphaChanged: root.pushHyprlandLayerRules()
     onBarIgnoreAlphaChanged: root.pushHyprlandLayerRules()
-    onBackgroundWidgetsBlurChanged: root.pushHyprlandLayerRules()
-    onBackgroundWidgetsIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onBackgroundWidgetsRulesChanged: root.pushHyprlandLayerRules()
     onPopupBlurEnabledChanged: root.pushHyprlandLayerRules()
     onPopupIgnoreAlphaChanged: root.pushHyprlandLayerRules()
     readonly property bool mediaModeImmersive: Config.options?.background?.mediaMode?.immersive ?? false

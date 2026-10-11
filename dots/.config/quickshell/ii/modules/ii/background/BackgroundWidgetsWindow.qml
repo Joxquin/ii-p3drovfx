@@ -86,7 +86,9 @@ PanelWindow {
         0, 0, 0, 1)
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Bottom
-    WlrLayershell.namespace: "quickshell:backgroundWidgets"
+    // One namespace per screen: the compositor blur rule is per namespace, and a screen whose
+    // widgets blur themselves under windows must not strip the glass off the others.
+    WlrLayershell.namespace: "quickshell:backgroundWidgets:" + bgWidgetsWindow.editScreenName
     // Wayland gives no client the global key stream: without keyboard focus,
     // Qt's modifier state stays empty and mouse.modifiers is always 0, which
     // makes the Ctrl-to-bypass-snap drag gesture undetectable. While a widget
@@ -595,7 +597,7 @@ PanelWindow {
     // Compositor blur behind the widgets steps aside while they blur themselves.
     readonly property bool widgetSelfBlurShown: bgWidgetsWindow.visible && bgWidgetsWindow.windowBlurActive
     onWidgetSelfBlurShownChanged: Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, bgWidgetsWindow.widgetSelfBlurShown)
-    Component.onDestruction: Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, false)
+    Component.onDestruction: Appearance.forgetWidgetScreen(bgWidgetsWindow.editScreenName)
     // Fades in alongside the wallpaper's blur and drops at once with it, like WindowBlur. It is
     // the cross-fade's weight, never the radius: the wallpaper fades a fully blurred copy in over
     // the sharp one, so the widgets do the same (see widgetBlurLoader). A growing radius read as
