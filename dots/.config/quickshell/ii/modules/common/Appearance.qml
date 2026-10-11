@@ -387,7 +387,16 @@ Singleton {
     // Dynamic Island variants use colLayer0, whose opacity follows the
     // configured background transparency. Keep the threshold below that
     // rendered opacity, otherwise the entire island is excluded from blur.
-    readonly property real barIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+    //
+    // A transparent bar (barBackgroundStyle 0) draws only the group pills, which
+    // are colLayer1 (content transparency), and their rounded edges are
+    // antialiased. A low threshold blurs every partly covered edge pixel too, so
+    // a 1px ring of the blurred backdrop (bright wherever a window sits under
+    // the bar) outlines each pill. Hold the threshold just under the pill's own
+    // opacity: the body still blurs, the edge pixels keep the sharp backdrop.
+    readonly property real barIgnoreAlpha: (Config.options?.bar?.barBackgroundStyle ?? 1) === 0
+        ? Math.max(0, 1 - root.contentTransparency - 0.01)
+        : Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
     // Popups only need compositor blur when transparency is enabled; for opaque popups,
     // compositor blur behind a 100% opaque surface is completely invisible and causes
