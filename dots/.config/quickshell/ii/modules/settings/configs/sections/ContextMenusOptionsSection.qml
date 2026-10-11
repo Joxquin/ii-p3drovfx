@@ -4,9 +4,10 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 
-// Search proxy for the Context menus page: every option its stage, cards, segmented
+// Search proxy for Background → Context menus: every option its stage, cards, segmented
 // toggle and entry editor draw, as the original controls. SearchRegistry indexes this
-// file (see SettingsPageRegistry `searchSources`) so they stay searchable.
+// file (see SettingsPageRegistry `searchSources`) so they stay searchable, and its
+// results open the sub-page (`searchSubPages`).
 ColumnLayout {
     ContentSection {
         icon: "density_small"

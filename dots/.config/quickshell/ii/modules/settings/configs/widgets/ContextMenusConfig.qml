@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.background
 import qs.modules.settings.configs.colors
 import qs.modules.settings.configs.contextMenus
 import qs.modules.settings.configs.interface
@@ -11,7 +12,8 @@ import qs.modules.settings.configs.workspaces
 import qs.services
 
 /**
- * Settings → Context menus.
+ * Settings → Background → Context menus (a sub-page; the desktop's own menu is the
+ * one most people meet first).
  *
  * Leads with the menu being edited, live, drawn by the shell's own menu pieces over the
  * wallpaper. Under it: the style every ii right-click menu shares (comfortable or
@@ -28,14 +30,19 @@ Item {
     readonly property var cfg: Config.options.contextMenu
     property string menuId: "desktop"
 
-    property alias contentY: page.contentY
-    property alias activeSubPage: subPageOverlay.activeSubPage
+    property bool showBackButton: false
+    signal goBack()
 
     ContentPage {
         id: page
         anchors.fill: parent
         forceWidth: false
-        opacity: subPageOverlay.slideProgress
+
+        BackgroundSubPageHeader {
+            visible: menusRoot.showBackButton
+            title: Translation.tr("Context menus")
+            onBackRequested: menusRoot.goBack()
+        }
 
         ContextMenusStage {
             Layout.fillWidth: true
@@ -164,11 +171,5 @@ Item {
                 }
             }
         }
-    }
-
-    ConfigSubPageHost {
-        id: subPageOverlay
-        anchors.fill: parent
-        z: 10
     }
 }

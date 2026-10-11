@@ -16,6 +16,8 @@ import Quickshell
  *  - component:  page file, relative to the ii config root
  *  - subPages:   widget config files opened from this page, relative to
  *                modules/settings/configs/ (used for search indexing)
+ *  - searchSubPages: { searchSource: subPage } for a search source that indexes
+ *                a sub-page's options, so its results open that sub-page
  *  - aliases:    extra untranslated search terms (old page names etc.)
  *  - hidden:     not shown in the sidebar, excluded from keyboard cycling.
  *                Hidden pages must stay at the END of the list.
@@ -62,8 +64,10 @@ Singleton {
             "component": "modules/settings/configs/BackgroundConfig.qml",
             "subPages": ["widgets/ParallaxConfig.qml", "widgets/MediaModeBackgroundConfig.qml", "widgets/DepthEffectConfig.qml", "widgets/VideoWallpaperConfig.qml"],
             "searchComponent": false,
-            "searchSources": ["sections/BackgroundOptionsSection.qml"],
-            "aliases": ["Wallpaper", "Backgrounds", "Wallpaper Engine"]
+            "searchSources": ["sections/BackgroundOptionsSection.qml", "sections/ContextMenusOptionsSection.qml"],
+            // The context menus page is a sub-page here; its options open it.
+            "searchSubPages": { "sections/ContextMenusOptionsSection.qml": "widgets/ContextMenusConfig.qml" },
+            "aliases": ["Wallpaper", "Backgrounds", "Wallpaper Engine", "Context menus", "Right-click menu", "Compact menu", "Custom commands"]
         },
         {
             "id": "interfaceFonts",
@@ -98,17 +102,6 @@ Singleton {
             "families": ["tablet"],
             "subPages": [],
             "aliases": ["Shade", "Home screen", "Dock", "App drawer", "Gestures", "Android"]
-        },
-        {
-            "id": "contextMenus",
-            "name": "Context menus",
-            "icon": "menu_open",
-            "component": "modules/settings/configs/ContextMenusConfig.qml",
-            // The waffle and tablet families draw their own menus.
-            "families": ["ii"],
-            "searchComponent": false,
-            "searchSources": ["sections/ContextMenusOptionsSection.qml"],
-            "aliases": ["Right-click menu", "Menus", "Menu entries", "Compact menu", "Custom commands"]
         },
         {
             "id": "sidebars",
@@ -468,7 +461,7 @@ Singleton {
         {
             "id": "lookAndFeel",
             "name": "Look & Feel",
-            "pageIds": ["colors", "bar", "interfaceFonts", "contextMenus", "presets"]
+            "pageIds": ["colors", "bar", "interfaceFonts", "presets"]
         },
         {
             "id": "modules",

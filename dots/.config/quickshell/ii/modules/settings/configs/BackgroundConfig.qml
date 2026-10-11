@@ -547,6 +547,25 @@ Item {
             }
         }
 
+        // ── Context menus ─────────────────────────────────────────────────
+        // The desktop's right-click menu leads, but the sub-page styles every ii menu.
+        // The waffle and tablet families draw their own menus.
+        ContentSection {
+            visible: PanelFamily.current === "ii"
+            title: Translation.tr("Context menus")
+            icon: "menu_open"
+
+            BackgroundLinkRow {
+                Layout.fillWidth: true
+                symbol: "menu_open"
+                title: Translation.tr("Right-click menus")
+                summary: (ContextMenus.compact ? Translation.tr("Compact") : Translation.tr("Comfortable"))
+                    + " · " + (ContextMenus.cascade ? Translation.tr("Submenus beside the menu") : Translation.tr("Submenus inside the menu"))
+                    + " · " + Translation.tr("Entries, icon bar and your own commands")
+                onClicked: backgroundRoot.openSubPage("ContextMenusConfig.qml")
+            }
+        }
+
         // ── Quality ───────────────────────────────────────────────────────
         ContentSection {
             title: Translation.tr("Wallpaper Quality & Performance")
