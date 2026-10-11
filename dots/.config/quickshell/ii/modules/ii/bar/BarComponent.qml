@@ -1257,6 +1257,8 @@ Item {
         id: powerComp
         PowerButton {
             vertical: rootItem.vertical
+            startRadius: rootItem.startRadius
+            endRadius: rootItem.endRadius
         }
     }
     Component {

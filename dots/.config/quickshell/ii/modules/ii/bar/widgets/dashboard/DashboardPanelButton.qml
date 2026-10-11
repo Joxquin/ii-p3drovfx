@@ -26,7 +26,9 @@ RippleButton { // Right sidebar button
     property real horizontalMargin: 12
 
     implicitWidth: Math.max(0, indicatorsRowLayout.implicitWidth - indicatorsRowLayout.realSpacing) + horizontalMargin * 2
-    implicitHeight: Math.max(indicatorsRowLayout.implicitHeight, Appearance.font.pixelSize.larger) + 10
+    // At least the group's plate (bar height less its 4px margins), so hover and
+    // active fill the pill instead of floating inside it.
+    implicitHeight: Math.max(Math.max(indicatorsRowLayout.implicitHeight, Appearance.font.pixelSize.larger) + 10, Appearance.sizes.baseBarHeight - 8)
 
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active

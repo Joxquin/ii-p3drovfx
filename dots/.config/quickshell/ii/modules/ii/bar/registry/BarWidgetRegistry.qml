@@ -57,6 +57,7 @@ QtObject {
         if (isExpressive && widgetId !== "workspaces") return true;
         if (widgetId === "dashboard_panel_button") return true;
         if (widgetId === "policies_panel_button") return true;
+        if (widgetId === "power") return true;
         if (widgetId === "privacy_pill") return true;
         return false;
     }
