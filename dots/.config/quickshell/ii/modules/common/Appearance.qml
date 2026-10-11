@@ -396,7 +396,11 @@ Singleton {
     // opacity: the body still blurs, the edge pixels keep the sharp backdrop.
     readonly property real barIgnoreAlpha: (Config.options?.bar?.barBackgroundStyle ?? 1) === 0
         ? Math.max(0, 1 - root.contentTransparency - 0.01)
-        : Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+        : root.islandIgnoreAlpha
+    // The island always paints colLayer0 (background transparency), whatever the
+    // bar style: tying it to the transparent bar's pill opacity put the threshold
+    // above the island's own alpha and dropped its blur.
+    readonly property real islandIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
     // Popups only need compositor blur when transparency is enabled; for opaque popups,
     // compositor blur behind a 100% opaque surface is completely invisible and causes
@@ -459,7 +463,8 @@ Singleton {
             script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
             script += "hl.layer_rule({ name = 'ii:appearance:popup', match = { namespace = 'quickshell:popup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
         }
-        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:bar' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
         // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
         // until the shell has pushed these.
