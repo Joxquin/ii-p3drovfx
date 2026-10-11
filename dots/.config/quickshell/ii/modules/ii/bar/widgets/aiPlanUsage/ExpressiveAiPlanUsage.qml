@@ -52,7 +52,7 @@ MouseArea {
         implicitHeight: root.vertical
             ? constellation.implicitHeight + 12
             : Appearance.sizes.baseBarHeight - 8
-        radius: Config.options.bar.barGroupStyle === 1
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1
             ? Appearance.rounding.windowRounding
             : Appearance.rounding.full
         color: root.containerColor

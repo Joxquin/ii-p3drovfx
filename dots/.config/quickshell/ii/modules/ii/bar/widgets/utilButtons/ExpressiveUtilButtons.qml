@@ -30,7 +30,7 @@ Item {
         id: pill
         anchors.centerIn: parent
         color: isMaterial ? widgetPalette.colBackground : "transparent"
-        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitWidth: isMaterial && !root.vertical ? flow.implicitWidth + 10 : root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 4
         implicitHeight: isMaterial && root.vertical ? flow.implicitHeight + 10 : isMaterial ? Appearance.sizes.baseBarHeight - 8 : root.vertical ? flow.implicitHeight + 4 : Appearance.sizes.baseBarHeight
 

@@ -974,6 +974,22 @@ Item {
         return null;
     }
 
+    // ── Settings preview ──────────────────────────────────────────────────
+    // Settings' live bar (BarPreviewStage) can try a group style on its own copy of the
+    // bar without touching the config; found by walking up, null on the real bar. Widgets
+    // read `rootItem.groupStyle` instead of the config for the same reason.
+    readonly property var previewOverrides: {
+        let p = rootItem.parent;
+        while (p) {
+            if (p.barPreviewOverrides !== undefined)
+                return p.barPreviewOverrides;
+            p = p.parent;
+        }
+        return null;
+    }
+    readonly property int groupStyle: (rootItem.previewOverrides?.groupStyle ?? -1) >= 0
+        ? rootItem.previewOverrides.groupStyle : Config.options.bar.barGroupStyle
+
     // ── Edit Mode drop preview ─────────────────────────────────────────────
     readonly property bool isBeingDragged: rootItem.editController !== null
         && rootItem.editController.dragActive
@@ -1043,6 +1059,7 @@ Item {
         activated: itemLoader.item?.activated ?? false
         activeTheme: rootItem.activeTheme
         widgetId: modelData.id
+        barGroupStyle: rootItem.groupStyle
         hasActiveLeftNeighbor: rootItem.hasActiveLeftNeighbor
         hasActiveRightNeighbor: rootItem.hasActiveRightNeighbor
         isDefault: rootItem.isDefault

@@ -19,7 +19,9 @@ Item {
     // Islands background style overrides centered — widgets must follow the
 
     // island layout, not their own centering.
-    readonly property int centerIdx: Config.options.bar.barBackgroundStyle === 3 ? -1 : fullModel.findIndex(item => item.centered)
+    /// The config's value unless Settings' preview tries another on.
+    property int backgroundStyle: Config.options.bar.barBackgroundStyle
+    readonly property int centerIdx: root.backgroundStyle === 3 ? -1 : fullModel.findIndex(item => item.centered)
 
     readonly property var leftList: centerIdx === -1 ? root._emptyLayout : fullModel.slice(0, centerIdx)
     // The centre is only surrendered when the island will actually be there. Reading the

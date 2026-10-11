@@ -219,7 +219,7 @@ Item {
         sourceComponent: Rectangle {
             id: cardVert
             color: palette.colBackground
-            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: 120 // Increased to fit all elements properly
 
@@ -374,7 +374,7 @@ Item {
         sourceComponent: Rectangle {
             id: card
             color: palette.colBackground
-            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitHeight: Appearance.sizes.baseBarHeight - 8
             height: implicitHeight
             implicitWidth: innerRow.implicitWidth + 8

@@ -165,7 +165,7 @@ Item {
             ? content.implicitHeight + 12
             : readout.thickness
 
-        buttonRadius: Config.options.bar.barGroupStyle === 1
+        buttonRadius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1
             ? Appearance.rounding.windowRounding
             : Appearance.rounding.full
         colBackground: theme.colContainer

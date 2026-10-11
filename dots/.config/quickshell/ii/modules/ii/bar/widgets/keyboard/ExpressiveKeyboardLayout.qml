@@ -47,7 +47,7 @@ MouseArea {
 
     Rectangle {
         anchors.fill: parent
-        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         color: "transparent"
         border.width: 1
         border.color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground

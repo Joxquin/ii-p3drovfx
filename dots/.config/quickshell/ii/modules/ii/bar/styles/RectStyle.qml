@@ -21,6 +21,9 @@ Item {
     property var  leftList
     property var  centerList
     property var  rightList
+    // The config's values unless Settings' preview tries others on.
+    property int backgroundStyle: Config.options.bar.barBackgroundStyle
+    property int screenRounding: Config.options.appearance.fakeScreenRounding
 
     property color actualColor: root.showBarBackground
         ? (Config.options.bar.amoledBackground ? "#000000"
@@ -39,7 +42,7 @@ Item {
     // of the concave corners and of an open Connect sidebar.
     // When welded, WrappedFrameVisuals already renders the bar plate underneath,
     // so this background stays transparent to prevent duplicate blending.
-    readonly property bool weldedToFrame: Config.options.appearance.fakeScreenRounding === 3 && Config.options.bar.barBackgroundStyle !== 3
+    readonly property bool weldedToFrame: root.screenRounding === 3 && root.backgroundStyle !== 3
 
     Rectangle {
         id: barBackground

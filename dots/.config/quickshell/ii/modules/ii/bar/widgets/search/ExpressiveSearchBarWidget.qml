@@ -62,7 +62,7 @@ Item {
         height: root.vertical ? root.animatedLength : root.thickness
         buttonRadius: root.compact
             ? Appearance.rounding.full
-            : (Config.options.bar.barGroupStyle === 1
+            : ((typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1
                 ? Appearance.rounding.windowRounding
                 : Appearance.rounding.full)
         colBackground: root.containerColor

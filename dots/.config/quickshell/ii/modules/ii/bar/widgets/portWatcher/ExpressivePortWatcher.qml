@@ -64,7 +64,7 @@ MouseArea {
 
         visible: !root.vertical
         anchors.centerIn: parent
-        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitHeight: Appearance.sizes.baseBarHeight - 8
         height: implicitHeight
         implicitWidth: countText.implicitWidth + indicator.width + 22
@@ -137,7 +137,7 @@ MouseArea {
 
         visible: root.vertical
         anchors.centerIn: parent
-        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitWidth: Appearance.sizes.verticalBarWidth - 8
         width: implicitWidth
         implicitHeight: countTextVertical.implicitHeight + indicatorVertical.height + 16

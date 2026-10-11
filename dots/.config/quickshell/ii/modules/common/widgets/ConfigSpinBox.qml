@@ -45,7 +45,11 @@ Rectangle {
 
     readonly property bool nextIsPressed: groupPosition.nextPressed
 
+    /// Set by a group that flips between a row and a column; left undefined, the parent decides.
+    property var groupHorizontal: undefined
     readonly property bool isHorizontalLayout: {
+        if (root.groupHorizontal !== undefined)
+            return root.groupHorizontal === true;
         var p = parent;
         if (!p) return false;
         var pStr = p.toString();

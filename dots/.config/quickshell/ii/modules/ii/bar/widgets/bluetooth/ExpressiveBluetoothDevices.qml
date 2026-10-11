@@ -72,7 +72,7 @@ MouseArea {
 
         Rectangle {
             color: palette.colContainer
-            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitWidth: content.implicitWidth + 24
             implicitHeight: Appearance.sizes.baseBarHeight - 8
             

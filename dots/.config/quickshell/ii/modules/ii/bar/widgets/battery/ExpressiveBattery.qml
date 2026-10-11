@@ -48,7 +48,7 @@ MouseArea {
         anchors.centerIn: vertical ? undefined : parent
         anchors.fill: vertical ? parent : undefined
         color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
-        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : batteryIcon.implicitWidth
         implicitHeight: vertical ? parent.height : Appearance.sizes.baseBarHeight - 8
 
