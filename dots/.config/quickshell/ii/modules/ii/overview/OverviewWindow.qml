@@ -105,8 +105,18 @@ Item { // Window
         }
     }
     onInteractionsSuppressedChanged: if (root.interactionsSuppressed) root.menuOpen = false
-    onEngagedChanged: {
-        if (root.engaged)
+    // Right-click opens the menu where the pointer is; the chip opens it under itself.
+    property bool menuAtPointer: false
+    property point menuPointer: Qt.point(0, 0)
+    function openMenuAt(position: point): void {
+        root.menuPointer = position;
+        root.menuAtPointer = true;
+        root.menuOpen = true;
+    }
+    // Any design: the menu closes a moment after the pointer leaves the card and menu.
+    readonly property bool menuEngaged: (cardHover.hovered || root.menuHovered) && !root.interactionsSuppressed
+    onMenuEngagedChanged: {
+        if (root.menuEngaged)
             menuCloseTimer.stop();
         else if (root.menuOpen)
             menuCloseTimer.restart();
@@ -268,6 +278,15 @@ Item { // Window
     // ── Card ────────────────────────────────────────────────────────────
     HoverHandler {
         id: cardHover
+    }
+    // The grid's MouseArea on this card takes only left and middle, so right presses land here.
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        enabled: !root.interactionsSuppressed
+        onTapped: eventPoint => {
+            if (!root.menuHovered)
+                root.openMenuAt(eventPoint.position);
+        }
     }
 
     StyledRectangularShadow {
@@ -458,29 +477,38 @@ Item { // Window
         menuOpen: root.menuOpen
         animationsEnabled: root.animate
 
-        onClicked: root.menuOpen = !root.menuOpen
+        onClicked: {
+            root.menuAtPointer = false;
+            root.menuOpen = !root.menuOpen;
+        }
     }
 
     Loader {
         id: menuLoader
         z: 3
-        active: root.recents && (root.menuOpen || root.menuProgress > 0)
+        active: root.menuOpen || root.menuProgress > 0
         readonly property real menuHeight: item?.implicitHeight ?? 0
-        readonly property real menuWidth: OverviewStyle.menuWidth
-        readonly property real roomBelow: root.gridHeight - (root.y + chip.y + chip.height + OverviewStyle.menuGap)
-        readonly property real roomAbove: root.y + chip.y - OverviewStyle.menuGap
-        // Below the chip, else above it, else beside it when the grid is too short for either.
+        readonly property real menuWidth: item?.implicitWidth ?? OverviewStyle.menuWidth
+        // What the menu opens from: the pointer, or the chip with a gap around it.
+        readonly property real anchorTop: root.menuAtPointer ? root.menuPointer.y : chip.y - OverviewStyle.menuGap
+        readonly property real anchorBottom: root.menuAtPointer ? root.menuPointer.y : chip.y + chip.height + OverviewStyle.menuGap
+        readonly property real roomBelow: root.gridHeight - (root.y + menuLoader.anchorBottom)
+        readonly property real roomAbove: root.y + menuLoader.anchorTop
+        // Below the anchor, else above it, else beside it when the grid is too short for either.
         readonly property string placement: menuLoader.roomBelow >= menuLoader.menuHeight ? "below"
             : menuLoader.roomAbove >= menuLoader.menuHeight ? "above" : "beside"
         readonly property bool upwards: menuLoader.placement === "above"
         readonly property real besideX: {
+            if (root.menuAtPointer)
+                return root.menuPointer.x;
             const right = chip.x + chip.width + OverviewStyle.menuGap;
             return root.x + right + menuLoader.menuWidth <= root.gridWidth ? right : chip.x - OverviewStyle.menuGap - menuLoader.menuWidth;
         }
-        x: Math.max(-root.x, Math.min(menuLoader.placement === "beside" ? menuLoader.besideX : chip.x, root.gridWidth - root.x - menuLoader.menuWidth))
-        y: menuLoader.placement === "below" ? chip.y + chip.height + OverviewStyle.menuGap
-            : menuLoader.placement === "above" ? chip.y - OverviewStyle.menuGap - menuLoader.menuHeight
-            : Math.max(-root.y, Math.min(chip.y, root.gridHeight - root.y - menuLoader.menuHeight))
+        readonly property real anchorX: root.menuAtPointer ? root.menuPointer.x : chip.x
+        x: Math.max(-root.x, Math.min(menuLoader.placement === "beside" ? menuLoader.besideX : menuLoader.anchorX, root.gridWidth - root.x - menuLoader.menuWidth))
+        y: menuLoader.placement === "below" ? menuLoader.anchorBottom
+            : menuLoader.placement === "above" ? menuLoader.anchorTop - menuLoader.menuHeight
+            : Math.max(-root.y, Math.min(root.menuAtPointer ? root.menuPointer.y : chip.y, root.gridHeight - root.y - menuLoader.menuHeight))
 
         sourceComponent: OverviewWindowMenu {
             readonly property alias hovered: menuHover.hovered
@@ -491,6 +519,7 @@ Item { // Window
             upwards: menuLoader.upwards
             progress: root.menuProgress
             animationsEnabled: root.animate
+            customTarget: root.address
             onActionTriggered: id => root.runAction(id)
 
             HoverHandler {

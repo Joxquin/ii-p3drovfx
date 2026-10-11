@@ -1,8 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.contextMenu
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Widgets
@@ -49,19 +51,104 @@ Loader {
     property real motionMargin: 0
     property color surfaceColor: Appearance.m3colors.m3surfaceContainer
     readonly property real cardRadius: Appearance.rounding.windowRounding
-    readonly property real cardPadding: 8
+    readonly property real cardPadding: root.dense ? ContextMenus.compactPadding : 8
     readonly property real plateHeight: 88
     readonly property real surfaceGap: 6
-    // Two scalars, as the desktop menu card (DesktopMenuCard) settled on:
-    // `grow` carries the shape (scale + slide out of the dock edge) on the
-    // expressive enter clock, `reveal` the opacity on the fast clock, so the
-    // surface is readable at once instead of fading in across the whole grow.
-    // Both are driven by explicit animations: the exit has to say when it is
-    // DONE, and a re-open mid-exit turns around from wherever it is.
-    property real grow: 0
-    property real reveal: 0
-    readonly property bool _motion: !Appearance.reducedMotion
+    // Compact has no plate: what the menu is about is the card's own first
+    // row (headerBlock: the row, then a hairline), so the menu is one object.
+    readonly property bool plateShown: root.showHeader && !root.dense
+    readonly property real plateBlock: root.plateShown ? root.plateHeight + root.surfaceGap : 0
+    readonly property real headerRowHeight: 40
+    readonly property real headerBlock: root.showHeader && root.dense ? root.headerRowHeight + 9 : 0
+    FontMetrics {
+        id: headerMetrics
+        font.family: Appearance.font.family.main
+        font.pixelSize: Appearance.font.pixelSize.smallie + 1
+        font.weight: Font.Medium
+    }
+    // 8 + icon 28 + 10 + title + 8, as the header row lays out.
+    readonly property real headerNaturalWidth: root.headerBlock > 0
+        ? 8 + 28 + 10 + headerMetrics.advanceWidth(root.headerText) + 8 : 0
+    // Compact: as wide as the rows and the bar need, within ContextMenus'
+    // bounds. Arithmetic like the height, so the surface maps at its size.
+    readonly property real barHeight: root.barEntries.length > 0
+        ? ContextMenus.barLayout(root.barEntries.length, root.effectiveMenuWidth - root.cardPadding * 2).height + 4 : 0
+    readonly property real barNaturalWidth: ContextMenus.barNaturalWidth(root.barEntries.length)
+    readonly property real effectiveMenuWidth: !root.dense ? root.menuWidth
+        : Math.max(ContextMenus.compactMinWidth, Math.min(ContextMenus.compactMaxWidth,
+            Math.ceil(Math.max(root._groupsNaturalWidth, root.barNaturalWidth, root.headerNaturalWidth) + root.cardPadding * 2)))
+    property real _groupsNaturalWidth: 0
+    // The desktop menu's motion (ContextMenuMotion): `grow` carries the shape
+    // (scale + slide out of the dock edge), `reveal` the opacity on a faster
+    // clock, so the surface is readable at once instead of fading in across
+    // the whole grow. The exit says when it is DONE, and a re-open mid-exit
+    // turns around from wherever it is. Compact runs the shorter version.
+    ContextMenuMotion {
+        id: motion
+        // Only the context menus follow the style; app groups and stacks
+        // keep their motion.
+        compact: root.dense
+        closing: root.isClosing
+        onExitFinished: {
+            root.active = false;
+            root.isClosing = false;
+        }
+    }
+    readonly property real grow: motion.grow
+    readonly property real reveal: motion.reveal
     readonly property real popupProgress: root.grow
+
+    // ── Arranged entries ─────────────────────────────────────────────────────
+    // A data-driven menu that names itself (`menuId`) goes through
+    // ContextMenus.arrange: the user's order, hidden entries, the compact
+    // icon bar and their own commands, which run with `customTarget` as
+    // $II_CONTEXT_TARGET. Actions sharing a `block` id (an app's own desktop
+    // actions) move and hide as one entry. Groups come back from the
+    // arrangement's separators.
+    property string menuId: ""
+    property string customTarget: ""
+    readonly property bool arrangeable: root.menuId !== "" && root.menuGroups !== null && root.contentComponent === null
+    readonly property bool dense: root.arrangeable && ContextMenus.compact
+    // The user's menu size; app groups and stacks keep theirs.
+    readonly property real zoom: root.arrangeable ? ContextMenus.scale : 1
+    function _flatten(groups) {
+        const out = [];
+        for (const group of groups ?? []) {
+            for (const action of group ?? []) {
+                if (!action || action.visible === false)
+                    continue;
+                if (action.block) {
+                    const last = out[out.length - 1];
+                    if (last && last.id === action.block && last.items)
+                        last.items.push(action);
+                    else
+                        out.push({ "id": action.block, "items": [action] });
+                } else {
+                    out.push(action);
+                }
+            }
+        }
+        return out;
+    }
+    readonly property var arranged: root.arrangeable && root.menuOpen
+        ? ContextMenus.arrange(root.menuId, root._flatten(root.menuGroups)) : null
+    readonly property var shownGroups: root.arranged
+        ? ContextMenus.groupsOf(root.arranged.rows).map(group => group.map(e => e.custom
+            ? { "id": e.id, "text": e.title, "icon": e.symbol } : e))
+        : root.menuGroups
+    readonly property var barEntries: root.arranged
+        ? root.arranged.bar.map(e => e.custom ? e : {
+            "id": e.id, "symbol": e.icon ?? "", "title": e.text ?? "", "destructive": e.destructive === true })
+        : []
+    function _trigger(actionId: string): void {
+        if (actionId.startsWith("custom-")) {
+            const entry = ContextMenus.customEntriesFor(root.menuId).find(e => e.id === actionId);
+            ContextMenus.runCustom(entry, root.customTarget);
+            root.close();
+            return;
+        }
+        root.actionTriggered(actionId);
+    }
     readonly property real motionX: dockPos === "left" ? -1 : (dockPos === "right" ? 1 : 0)
     readonly property real motionY: dockPos === "top" ? -1 : (dockPos === "bottom" ? 1 : 0)
 
@@ -71,71 +158,8 @@ Loader {
         return Math.max(0, Math.min(1, (root.grow - delay) / (1 - delay)));
     }
 
-    ParallelAnimation {
-        id: enterMotion
-        NumberAnimation {
-            target: root
-            property: "grow"
-            to: 1
-            duration: root._motion ? Appearance.animation.elementMoveEnter.duration : 0
-            easing.type: Appearance.animation.elementMoveEnter.type
-            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
-        }
-        NumberAnimation {
-            target: root
-            property: "reveal"
-            to: 1
-            duration: root._motion ? Appearance.animation.elementMoveFast.duration : 0
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
-    // The exit leaves as ONE piece, short and accelerating: shape and opacity
-    // on the same exit clock, so nothing inside outlives the card.
-    ParallelAnimation {
-        id: exitMotion
-        NumberAnimation {
-            target: root
-            property: "grow"
-            to: 0.5
-            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
-            easing.type: Appearance.animation.elementMoveExit.type
-            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
-        }
-        NumberAnimation {
-            target: root
-            property: "reveal"
-            to: 0
-            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
-            easing.type: Appearance.animation.elementMoveExit.type
-            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
-        }
-        // One more frame before the unmap, so the surface's last committed
-        // buffer is the transparent one. Unmapping on the frame the fade
-        // reached zero left a half-faded buffer, and the compositor's own
-        // unmap fade then showed it as a ghost: the card gone, its content
-        // still floating.
-        onFinished: unmapDelay.restart()
-    }
-    Timer {
-        id: unmapDelay
-        interval: 32
-        onTriggered: {
-            if (!root.isClosing)
-                return;
-            root.active = false;
-            root.isClosing = false;
-        }
-    }
-
     function _playEnter(fromStart) {
-        exitMotion.stop();
-        unmapDelay.stop();
-        if (fromStart) {
-            root.grow = 0;
-            root.reveal = 0;
-        }
-        enterMotion.restart();
+        motion.playEnter(fromStart);
     }
 
     signal closed()
@@ -155,18 +179,18 @@ Loader {
     function close() {
         if (!active || isClosing) return
         isClosing = true
-        enterMotion.stop()
-        exitMotion.restart()
+    }
+    // A workspace change closes every menu and its focus grab
+    // (ContextMenus.dismissAll); app groups and stacks go with them.
+    Connections {
+        target: ContextMenus
+        function onDismissAllRequested() { root.close(); }
     }
 
     onActiveChanged: {
         if (!root.active) {
             root.menuOpen = false
-            enterMotion.stop()
-            exitMotion.stop()
-            unmapDelay.stop()
-            root.grow = 0
-            root.reveal = 0
+            motion.stop()
             root.pointerInsidePopup = false
             root.closed()
         }
@@ -270,8 +294,8 @@ Loader {
         onTargetContentHeightChanged: reservedContentHeight = Math.max(reservedContentHeight, targetContentHeight)
         Component.onCompleted: reservedContentHeight = targetContentHeight
 
-        implicitWidth: menuContent.implicitWidth + popupWindow.shadowMargin * 2
-        implicitHeight: Math.max(popupWindow.reservedContentHeight, menuContent.implicitHeight) + popupWindow.shadowMargin * 2
+        implicitWidth: menuContent.implicitWidth * root.zoom + popupWindow.shadowMargin * 2
+        implicitHeight: Math.max(popupWindow.reservedContentHeight, menuContent.implicitHeight) * root.zoom + popupWindow.shadowMargin * 2
 
         onImplicitWidthChanged: requestAnchorUpdate()
         onImplicitHeightChanged: requestAnchorUpdate()
@@ -301,7 +325,11 @@ Loader {
             id: menuContent
             // Pinned to the edge that faces the dock, so a card that changes
             // height grows and shrinks away from the dock inside the reserve.
-            x: (parent.width - width) / 2
+            // Zoomed about the dock-facing edge: a side dock pins that edge,
+            // so the card grows away from the dock instead of past the surface.
+            x: root.dockPos === "left" ? popupWindow.shadowMargin
+                : root.dockPos === "right" ? parent.width - popupWindow.shadowMargin - width
+                : (parent.width - width) / 2
             y: root.dockPos === "bottom" ? parent.height - popupWindow.shadowMargin - height
                 : root.dockPos === "top" ? popupWindow.shadowMargin
                 : (parent.height - height) / 2
@@ -311,22 +339,22 @@ Loader {
 
             readonly property bool dataDriven: root.menuGroups !== null && root.contentComponent === null
             readonly property real cardContentWidth: dataDriven || root.showHeader
-                ? root.menuWidth - root.cardPadding * 2
+                ? root.effectiveMenuWidth - root.cardPadding * 2
                 : contentLoader.implicitWidth
             readonly property real cardContentHeight: dataDriven
-                ? menuGroupsView.implicitHeight
+                ? root.headerBlock + root.barHeight + menuGroupsView.implicitHeight
                 : contentLoader.implicitHeight
 
             implicitWidth: cardContentWidth + root.cardPadding * 2
-            implicitHeight: (root.showHeader ? root.plateHeight + root.surfaceGap : 0) + card.implicitHeight
+            implicitHeight: root.plateBlock + card.implicitHeight
             // Where the card is heading, not where its animation is.
-            readonly property real targetHeight: (root.showHeader ? root.plateHeight + root.surfaceGap : 0)
+            readonly property real targetHeight: root.plateBlock
                 + menuContent.cardContentHeight + root.cardPadding * 2
 
             // One clock for the pair: the grow runs the whole transition, the
             // fade is over in its first half so the rows are readable at once.
             opacity: root.reveal
-            scale: 0.85 + 0.15 * root.grow
+            scale: motion.scale * root.zoom
             transformOrigin: root.dockPos === "top" ? Item.Top
                 : root.dockPos === "left" ? Item.Left
                 : root.dockPos === "right" ? Item.Right
@@ -357,7 +385,7 @@ Loader {
             }
             Rectangle {
                 id: plate
-                visible: root.showHeader
+                visible: root.plateShown
                 width: parent.width
                 height: root.plateHeight
                 radius: root.cardRadius
@@ -365,19 +393,19 @@ Loader {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 12
+                    anchors.margins: root.dense ? 8 : 12
+                    spacing: root.dense ? 10 : 12
 
                     Rectangle {
-                        implicitWidth: 64
-                        implicitHeight: 64
-                        radius: Math.max(Appearance.rounding.verysmall, root.cardRadius - 12)
+                        implicitWidth: root.dense ? 36 : 64
+                        implicitHeight: implicitWidth
+                        radius: Math.max(Appearance.rounding.verysmall, root.cardRadius - (root.dense ? 8 : 12))
                         color: Appearance.colors.colSurfaceContainerHigh
 
                         Loader {
                             anchors.centerIn: parent
-                            width: 48
-                            height: 48
+                            width: root.dense ? 28 : 48
+                            height: width
                             active: root.showHeader && !!root.headerIcon
                             sourceComponent: root.headerIcon
                         }
@@ -386,19 +414,19 @@ Loader {
                             anchors.centerIn: parent
                             visible: root.showHeader && !root.headerIcon && root.headerSymbol !== ""
                             text: root.headerSymbol
-                            iconSize: 32
+                            iconSize: root.dense ? 20 : 32
                             color: Appearance.colors.colOnSurface
                         }
                     }
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 4
+                        spacing: root.dense ? 1 : 4
 
                         StyledText {
                             Layout.fillWidth: true
                             text: root.headerText
-                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.pixelSize: root.dense ? Appearance.font.pixelSize.smallie + 1 : Appearance.font.pixelSize.normal
                             font.weight: Font.Medium
                             color: Appearance.colors.colOnSurface
                             elide: Text.ElideRight
@@ -407,7 +435,7 @@ Loader {
                             Layout.fillWidth: true
                             visible: text.length > 0
                             text: root.headerSubtitle
-                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.pixelSize: root.dense ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
                             color: Appearance.colors.colSubtext
                             elide: Text.ElideMiddle
                         }
@@ -425,7 +453,7 @@ Loader {
             }
             Rectangle {
                 id: card
-                y: root.showHeader ? root.plateHeight + root.surfaceGap : 0
+                y: root.plateBlock
                 width: parent.width
                 height: implicitHeight
                 implicitHeight: menuContent.cardContentHeight + root.cardPadding * 2
@@ -446,16 +474,95 @@ Loader {
                     }
                 }
 
+                // Compact: the plate's job as the card's first row - the
+                // icon at row size, the name over its one-line state - with
+                // a hairline under it like the separators between groups.
+                Item {
+                    visible: root.headerBlock > 0
+                    x: root.cardPadding
+                    y: root.cardPadding
+                    width: menuContent.cardContentWidth
+                    height: root.headerBlock
+
+                    RowLayout {
+                        x: 8
+                        width: parent.width - 16
+                        height: root.headerRowHeight
+                        spacing: 10
+
+                        Item {
+                            implicitWidth: 28
+                            implicitHeight: 28
+                            Loader {
+                                anchors.centerIn: parent
+                                width: 24
+                                height: 24
+                                active: root.headerBlock > 0 && !!root.headerIcon
+                                sourceComponent: root.headerIcon
+                            }
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                visible: !root.headerIcon && root.headerSymbol !== ""
+                                text: root.headerSymbol
+                                iconSize: 20
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.headerText
+                                font.pixelSize: Appearance.font.pixelSize.smallie + 1
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnSurface
+                                elide: Text.ElideRight
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: text.length > 0
+                                text: root.headerSubtitle
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                                elide: Text.ElideMiddle
+                            }
+                        }
+                    }
+                    Rectangle {
+                        x: 8
+                        y: root.headerRowHeight + 4
+                        width: parent.width - 16
+                        height: 1
+                        color: Appearance.colors.colOutlineVariant
+                        opacity: 0.6
+                    }
+                }
+
+                ContextMenuIconBar {
+                    visible: menuContent.dataDriven && root.barEntries.length > 0
+                    x: root.cardPadding
+                    y: root.cardPadding + root.headerBlock
+                    width: menuContent.cardContentWidth
+                    height: implicitHeight
+                    entries: menuContent.dataDriven ? root.barEntries : []
+                    hostPadding: root.cardPadding
+                    onActivated: (entry, button) => root._trigger(String(entry.id ?? ""))
+                }
+
                 DockMenuGroups {
                     id: menuGroupsView
                     visible: menuContent.dataDriven
                     x: root.cardPadding
-                    y: root.cardPadding
+                    y: root.cardPadding + root.headerBlock + root.barHeight
                     width: menuContent.cardContentWidth
-                    groups: menuContent.dataDriven ? root.menuGroups : []
+                    groups: menuContent.dataDriven ? root.shownGroups : []
+                    dense: root.dense
                     hostRadius: root.cardRadius
                     hostPadding: root.cardPadding
-                    onTriggered: actionId => root.actionTriggered(actionId)
+                    onTriggered: actionId => root._trigger(actionId)
+                    onNaturalWidthChanged: root._groupsNaturalWidth = naturalWidth
+                    Component.onCompleted: root._groupsNaturalWidth = naturalWidth
                 }
 
                 Loader {

@@ -46,8 +46,9 @@ ColumnLayout {
 
     component MenuRow: EditPanelRow {
         Layout.fillWidth: true
+        dense: ContextMenus.compact
         hostRadius: Appearance.rounding.windowRounding
-        hostPadding: 8
+        hostPadding: ContextMenus.compact ? ContextMenus.compactPadding : ContextMenus.comfortablePadding
         trailingKind: "none"
     }
     component SectionLabel: StyledText {
@@ -61,6 +62,8 @@ ColumnLayout {
 
     // ── Header ───────────────────────────────────────────────────────────────
     EditMenuPageHeader {
+        dense: ContextMenus.compact
+        showBack: !ContextMenus.cascade
         title: Translation.tr("Desktop icons")
         actionSymbol: DesktopShortcuts.canUndo ? "undo" : ""
         actionTooltip: Translation.tr("Undo (Ctrl+Z)")

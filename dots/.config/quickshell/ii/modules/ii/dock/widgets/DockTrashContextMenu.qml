@@ -11,6 +11,7 @@ DockContextMenuBase {
 
     property int trashCount: 0
 
+    menuId: "dockTrash"
     headerText: Translation.tr("Trash")
     headerSubtitle: root.trashCount === 1 ? Translation.tr("1 item")
         : root.trashCount > 0 ? Translation.tr("%1 items").arg(root.trashCount)

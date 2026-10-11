@@ -16,6 +16,8 @@ DockContextMenuBase {
     readonly property int windowCount: root.appToplevel?.toplevels?.length ?? 0
     readonly property bool pinned: !!root.appToplevel && TaskbarApps.isPinned(root.appToplevel.appId)
 
+    menuId: "dockApp"
+    customTarget: root.appToplevel?.appId ?? ""
     headerText: root.desktopEntry?.name ?? (root.appToplevel ? root.appToplevel.appId : "")
     headerSubtitle: root.windowCount > 1 ? Translation.tr("%1 windows").arg(root.windowCount)
         : root.windowCount === 1 ? Translation.tr("1 window")
@@ -32,6 +34,8 @@ DockContextMenuBase {
     menuGroups: root.menuOpen ? [
         (root.desktopEntry?.actions ?? []).map((action, index) => ({
             id: "desktopAction:" + index,
+            // The app's own actions move and hide as one entry.
+            block: "appActions",
             text: action.name ?? "",
             icon: "arrow_outward",
             iconSource: action.icon ? Quickshell.iconPath(action.icon, true) : ""

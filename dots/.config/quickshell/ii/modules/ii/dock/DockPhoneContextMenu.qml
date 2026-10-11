@@ -12,6 +12,8 @@ DockContextMenuBase {
     readonly property bool hasDevice: root.anchorItem?.hasDevice ?? false
     readonly property bool isRunning: root.anchorItem?.isRunning ?? false
 
+    menuId: "dockPhone"
+    customTarget: root.deviceId
     headerText: root.anchorItem?.deviceName ?? ""
     headerSubtitle: {
         const charge = root.anchorItem?.deviceCharge ?? -1;

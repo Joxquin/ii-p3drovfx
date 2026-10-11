@@ -78,10 +78,13 @@ Item {
         }
     }
 
+    // The compact menu's strip: a thumbnail row rather than a gallery.
+    property bool dense: false
     readonly property real spacing: 4
-    readonly property real tileRadius: Appearance.rounding.windowRounding - 8
-    readonly property real peekWidth: 28
-    implicitHeight: 112
+    readonly property real tileRadius: root.dense ? Appearance.rounding.windowRounding - 6
+        : Appearance.rounding.windowRounding - 8
+    readonly property real peekWidth: root.dense ? 18 : 28
+    implicitHeight: root.dense ? 48 : 112
 
     // The window of three: starts at the expanded tile until the end of the
     // list, where it stops and the expanded tile walks to its far side.
@@ -200,12 +203,12 @@ Item {
             Rectangle {
                 anchors.left: parent.left
                 anchors.bottom: parent.bottom
-                anchors.margins: 8
-                width: 30
-                height: 30
+                anchors.margins: root.dense ? 5 : 8
+                width: root.dense ? 18 : 30
+                height: width
                 radius: width / 2
                 color: Appearance.colors.colSecondaryContainer
-                opacity: tile.isCurrent && tile.width >= 56 ? 0.92 : 0
+                opacity: tile.isCurrent && tile.width >= (root.dense ? 40 : 56) ? 0.92 : 0
                 Behavior on opacity {
                     enabled: !Appearance.reducedMotion
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(tile)
@@ -214,7 +217,7 @@ Item {
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: "check"
-                    iconSize: Appearance.font.pixelSize.large
+                    iconSize: root.dense ? 13 : Appearance.font.pixelSize.large
                     color: Appearance.colors.colOnSecondaryContainer
                 }
             }

@@ -40,6 +40,8 @@ ItemContextDialog {
         ? TaskbarApps.isPinnedFile(entry.path)
         : entry.type === "app" ? TaskbarApps.isPinned(pinKey) : false
 
+    menuId: "desktopItem"
+    customTarget: entry.path ?? ""
     title: entry.name || entry.id || ""
     subtitle: root.selectionCount > 1 ? Translation.tr("%1 items selected").arg(String(root.selectionCount))
         : entry.path || (entry.type === "group" ? Translation.tr("App group") : Translation.tr("Application"))
@@ -169,8 +171,12 @@ ItemContextDialog {
 
     // Every page opens with the menu's own header: the way back and the
     // page's title.
+    // Cascaded, a first page sits beside the actions and has nothing to go
+    // back to; a page off a page still does.
     component PageHeader: EditMenuPageHeader {
-        Layout.bottomMargin: 4
+        Layout.bottomMargin: ContextMenus.compact ? 2 : 4
+        dense: ContextMenus.compact
+        showBack: !ContextMenus.cascade || root.pageDepth > 1
         onBackRequested: root.back()
     }
     // A text field in the card's idiom: the pill a row would be, holding
@@ -197,8 +203,8 @@ ItemContextDialog {
                 fieldInput.selectAll();
         }
         Layout.fillWidth: true
-        implicitHeight: 52
-        radius: Math.max(Appearance.rounding.verysmall, Appearance.rounding.windowRounding - 8)
+        implicitHeight: ContextMenus.compact ? 36 : 52
+        radius: Math.max(Appearance.rounding.verysmall, Appearance.rounding.windowRounding - (ContextMenus.compact ? 6 : 8))
         color: Appearance.colors.colSurfaceContainerHigh
         border.width: fieldInput.activeFocus ? 2 : 0
         border.color: Appearance.m3colors.m3primary
@@ -225,8 +231,9 @@ ItemContextDialog {
     }
     component MenuRow: EditPanelRow {
         Layout.fillWidth: true
+        dense: ContextMenus.compact
         hostRadius: Appearance.rounding.windowRounding
-        hostPadding: 8
+        hostPadding: ContextMenus.compact ? ContextMenus.compactPadding : ContextMenus.comfortablePadding
         trailingKind: "none"
     }
 
@@ -447,8 +454,9 @@ ItemContextDialog {
                     required property var modelData
                     required property int index
                     width: ListView.view.width
+                    dense: ContextMenus.compact
                     hostRadius: Appearance.rounding.windowRounding
-                    hostPadding: 8
+                    hostPadding: ContextMenus.compact ? ContextMenus.compactPadding : ContextMenus.comfortablePadding
                     first: index === 0
                     last: index === appList.count - 1
                     title: modelData.name

@@ -33,13 +33,16 @@ ColumnLayout {
 
     component MenuRow: EditPanelRow {
         Layout.fillWidth: true
+        dense: ContextMenus.compact
         hostRadius: Appearance.rounding.windowRounding
-        hostPadding: 8
+        hostPadding: ContextMenus.compact ? ContextMenus.compactPadding : ContextMenus.comfortablePadding
         trailingKind: "none"
     }
 
     // ── Header ───────────────────────────────────────────────────────────────
     EditMenuPageHeader {
+        dense: ContextMenus.compact
+        showBack: !ContextMenus.cascade
         title: Translation.tr("New")
         opacity: root.slice(0)
         transform: Translate { x: (1 - root.slice(0)) * 16 }

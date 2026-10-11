@@ -109,6 +109,8 @@ ColumnLayout {
 
     // ── Header ───────────────────────────────────────────────────────────────
     EditMenuPageHeader {
+        dense: ContextMenus.compact
+        showBack: !ContextMenus.cascade
         title: Translation.tr("Presets")
         actionSymbol: "arrow_outward"
         actionTooltip: Translation.tr("Open in Settings")

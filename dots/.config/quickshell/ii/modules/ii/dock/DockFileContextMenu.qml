@@ -22,6 +22,8 @@ DockContextMenuBase {
         return parts[parts.length - 1] ?? filePath
     }
     headerSubtitle: root.filePath
+    menuId: "dockFile"
+    customTarget: root.filePath
     headerSymbol: root.anchorItem?.mimeIcon ?? "insert_drive_file"
     headerIcon: root.xdgIcon !== "" ? xdgIconComponent : null
 

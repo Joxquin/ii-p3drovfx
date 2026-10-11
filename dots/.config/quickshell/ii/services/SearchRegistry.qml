@@ -68,10 +68,12 @@ Item {
             // are not sub-pages. Index them with an empty subPage so a search
             // result navigates to the parent page and waits for the section's
             // own lazy loader instead of trying to open the source as a page.
+            // A source that stands in for a sub-page's options opens that
+            // sub-page instead (`searchSubPages`).
             for (let source of (p.searchSources ?? [])) {
                 files.push(basePath + source);
                 ids.push(p.id);
-                subPages.push("");
+                subPages.push(p.searchSubPages?.[source] ?? "");
             }
         }
 

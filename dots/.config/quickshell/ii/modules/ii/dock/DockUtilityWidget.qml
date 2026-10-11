@@ -266,8 +266,10 @@ Item {
         headerText: root.title
         headerSubtitle: root.wide ? Translation.tr("Wide widget") : Translation.tr("Square widget")
         headerSymbol: root.symbol
+        menuId: "dockWidget"
         menuGroups: widgetMenu.menuOpen ? [
-            (root.tile?.menuActions ?? []).concat(root.hasPanel ? [
+            // The widget's own actions move and hide as one entry.
+            (root.tile?.menuActions ?? []).map(action => Object.assign({ "block": "widgetActions" }, action)).concat(root.hasPanel ? [
                 { id: "__panel", icon: "open_in_full", text: Translation.tr("Open") }
             ] : []),
             root.isVertical ? [] : [

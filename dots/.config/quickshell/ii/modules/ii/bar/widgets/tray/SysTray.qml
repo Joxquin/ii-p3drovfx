@@ -97,7 +97,9 @@ Item {
         // eagerly would start a grab with no windows in it — Hyprland clears those
         // immediately and the popup would snap shut before it finished opening.
         active: wanted && !overflowPopup._ipcActive && (sysTrayRoot.overflowWindow !== null || sysTrayRoot.activeMenu !== null)
-        windows: [sysTrayRoot.overflowWindow, sysTrayRoot.activeMenu]
+        // A menu's cascaded submenus are popups of their own; a click in one
+        // must not read as a click away from the menu.
+        windows: [sysTrayRoot.overflowWindow, sysTrayRoot.activeMenu].concat(sysTrayRoot.activeMenu?.cascadeWindows ?? [])
         onCleared: {
             if (overflowPopup._ipcActive)
                 return;

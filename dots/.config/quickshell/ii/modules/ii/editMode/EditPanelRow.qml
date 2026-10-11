@@ -50,6 +50,15 @@ EditDragArea {
     // this from the view's own `populate` transition instead; this is for the
     // Repeater-built pages, which have no equivalent.
     property int staggerIndex: -1
+    // The context menus' compact style (ContextMenus.compact): a 34 px row
+    // with no pill until hovered, a bare glyph instead of the circle, no
+    // second line unless it has to be read, and a natural width so the card
+    // can fit its content. Edit Mode's panels never set it.
+    property bool dense: false
+    // Drawn as hovered without the pointer: the row whose submenu is open
+    // beside the menu.
+    property bool highlighted: false
+    readonly property bool _lit: root.containsMouse || root.activeFocus || root.highlighted
 
     // A row only takes the keyboard when a host hands it focus (the icon
     // menu's arrow navigation); it then reads as hovered and Enter/Space
@@ -60,7 +69,9 @@ EditDragArea {
     signal stepUp()
     signal stepDown()
 
-    implicitHeight: Math.max(58, rowLayout.implicitHeight + 16)
+    implicitHeight: root.dense ? Math.max(34, rowLayout.implicitHeight + 8)
+        : Math.max(58, rowLayout.implicitHeight + 16)
+    implicitWidth: root.dense ? rowLayout.implicitWidth + rowLayout.anchors.leftMargin + rowLayout.anchors.rightMargin : 0
     enabled: root.rowEnabled
     opacity: (root.rowEnabled ? 1 : 0.45) * revealProxy.opacity
     scale: revealProxy.scale
@@ -86,12 +97,12 @@ EditDragArea {
     // A switch that is on fills the row in the primary container family; its
     // icon leaves the circle for a rounded square on primary.
     readonly property bool switchOn: root.trailingKind === "switch" && root.switchChecked && !root.selected
-    readonly property real iconBoxSize: 38
+    readonly property real iconBoxSize: root.dense ? 20 : 38
     readonly property real iconBoxActiveRadius: Math.round(root.iconBoxSize * 0.3)
 
     readonly property color colOn: root.selected
-        ? Appearance.colors.colOnPrimary
-        : root.switchOn ? Appearance.colors.colOnPrimaryContainer
+        ? (root.dense ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimary)
+        : root.switchOn && !root.dense ? Appearance.colors.colOnPrimaryContainer
         : root.destructive ? Appearance.m3colors.m3error : Appearance.colors.colOnSurface
 
     // The corner of the surface this row sits on, and how far in from it the
@@ -112,26 +123,37 @@ EditDragArea {
     // corner and the run stops reading as a run.
     readonly property real rSeam: Math.max(Appearance.rounding.unsharpen, Math.round(root.rEnd * 0.34))
     readonly property real rPressed: Math.min(root.height / 2, Appearance.rounding.large * 2)
+    // Dense rows are not a run: each one is its own hover highlight,
+    // concentric with the card, and a press only tightens it a little.
+    readonly property real rDense: root.pressed ? Math.max(Appearance.rounding.verysmall, root.rEnd - 4) : root.rEnd
 
     Rectangle {
         id: pill
         anchors.fill: parent
-        topLeftRadius: root.pressed ? root.rPressed : (root.first ? root.rEnd : root.rSeam)
-        topRightRadius: root.pressed ? root.rPressed : (root.first ? root.rEnd : root.rSeam)
-        bottomLeftRadius: root.pressed ? root.rPressed : (root.last ? root.rEnd : root.rSeam)
-        bottomRightRadius: root.pressed ? root.rPressed : (root.last ? root.rEnd : root.rSeam)
+        topLeftRadius: root.dense ? root.rDense : root.pressed ? root.rPressed : (root.first ? root.rEnd : root.rSeam)
+        topRightRadius: root.dense ? root.rDense : root.pressed ? root.rPressed : (root.first ? root.rEnd : root.rSeam)
+        bottomLeftRadius: root.dense ? root.rDense : root.pressed ? root.rPressed : (root.last ? root.rEnd : root.rSeam)
+        bottomRightRadius: root.dense ? root.rDense : root.pressed ? root.rPressed : (root.last ? root.rEnd : root.rSeam)
         antialiasing: true
 
-        color: root.selected
+        color: root.dense && !root.selected
+            ? (root.pressed ? Appearance.colors.colSurfaceContainerHighestActive
+                : root._lit ? Appearance.colors.colSurfaceContainerHighest
+                : Qt.alpha(Appearance.colors.colSurfaceContainerHighest, 0))
+            : root.dense
+            ? (root.pressed ? Appearance.colors.colSecondaryContainerActive
+                : root._lit ? Appearance.colors.colSecondaryContainerHover
+                : Appearance.colors.colSecondaryContainer)
+            : root.selected
             ? (root.pressed ? Appearance.colors.colPrimaryActive
                 : root.containsMouse ? Appearance.colors.colPrimaryHover
                 : Appearance.colors.colPrimary)
             : root.switchOn
             ? (root.pressed ? Appearance.colors.colPrimaryContainerActive
-                : root.containsMouse || root.activeFocus ? Appearance.colors.colPrimaryContainerHover
+                : root._lit ? Appearance.colors.colPrimaryContainerHover
                 : Appearance.colors.colPrimaryContainer)
             : (root.pressed ? Appearance.colors.colSurfaceContainerHighestActive
-                : root.containsMouse || root.activeFocus ? Appearance.colors.colSurfaceContainerHighest
+                : root._lit ? Appearance.colors.colSurfaceContainerHighest
                 : Appearance.colors.colSurfaceContainerHigh)
 
         Behavior on color {
@@ -159,9 +181,9 @@ EditDragArea {
     RowLayout {
         id: rowLayout
         anchors.fill: parent
-        anchors.leftMargin: root.rowPadding
-        anchors.rightMargin: root.trailingKind === "stepper" ? 6 : root.rowPadding
-        spacing: 12
+        anchors.leftMargin: root.dense ? 10 : root.rowPadding
+        anchors.rightMargin: root.trailingKind === "stepper" ? (root.dense ? 2 : 6) : root.dense ? 8 : root.rowPadding
+        spacing: root.dense ? 10 : 12
 
         // The circle. It is what makes a run of rows read as a list of things
         // rather than as a stack of labels.
@@ -171,7 +193,8 @@ EditDragArea {
             implicitWidth: root.iconBoxSize
             implicitHeight: root.iconBoxSize
             radius: root.switchOn ? root.iconBoxActiveRadius : width / 2
-            color: root.selected
+            color: root.dense ? "transparent"
+                : root.selected
                 ? Qt.alpha(Appearance.colors.colOnPrimary, 0.2)
                 : root.switchOn
                     ? Appearance.colors.colPrimary
@@ -191,9 +214,11 @@ EditDragArea {
                 anchors.centerIn: parent
                 visible: root.iconSource === ""
                 text: root.symbol
-                iconSize: 21
+                iconSize: root.dense ? 18 : 21
                 fill: (root.trailingKind === "switch" && root.switchChecked) ? 1 : 0
-                color: root.switchOn ? Appearance.colors.colOnPrimary : root.colOn
+                color: root.switchOn ? (root.dense ? Appearance.colors.colPrimary : Appearance.colors.colOnPrimary)
+                    : root.dense && !root.selected && !root.destructive ? Appearance.colors.colOnSurfaceVariant
+                    : root.colOn
 
                 // A glyph that changes under a settled row (a copy turning
                 // into a check, pin into unpin) pops back in from small, so
@@ -218,7 +243,7 @@ EditDragArea {
             IconImage {
                 anchors.centerIn: parent
                 visible: root.iconSource !== ""
-                implicitSize: 24
+                implicitSize: root.dense ? 18 : 24
                 source: root.iconSource
             }
         }
@@ -230,15 +255,15 @@ EditDragArea {
             StyledText {
                 Layout.fillWidth: true
                 text: root.title
-                font.pixelSize: Appearance.font.pixelSize.small
-                font.weight: Font.Medium
+                font.pixelSize: root.dense ? Appearance.font.pixelSize.smallie + 1 : Appearance.font.pixelSize.small
+                font.weight: root.dense ? Font.Normal : Font.Medium
                 color: root.colOn
                 elide: Text.ElideRight
             }
 
             StyledText {
                 Layout.fillWidth: true
-                visible: root.subtitle !== ""
+                visible: root.subtitle !== "" && (!root.dense || root.subtitleWrap)
                 text: root.subtitle
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: root.colOn
@@ -264,7 +289,7 @@ EditDragArea {
                 || root.trailingKind === "add"
             text: root.trailingKind === "check" ? "check_circle"
                 : root.trailingKind === "add" ? "add_circle" : "chevron_right"
-            iconSize: root.trailingKind === "chevron" ? 22 : 20
+            iconSize: root.dense ? 18 : root.trailingKind === "chevron" ? 22 : 20
             fill: root.trailingKind === "check" ? 1 : 0
             color: (root.trailingKind === "check" && !root.selected)
                 ? Appearance.colors.colPrimary : root.colOn
@@ -275,6 +300,7 @@ EditDragArea {
             Layout.alignment: Qt.AlignVCenter
             visible: root.trailingKind === "switch"
             checked: root.switchChecked
+            sizeScale: root.dense ? 0.6 : (PanelFamily.touchFirst ? 1.0 : 0.75)
             // The row owns the gesture: a 30px target inside a 58px row is a
             // target people miss, and the switch reads as a state either way.
             enabled: false
@@ -293,7 +319,7 @@ EditDragArea {
             }
             StyledText {
                 anchors.verticalCenter: parent.verticalCenter
-                width: 46
+                width: root.dense ? 34 : 46
                 horizontalAlignment: Text.AlignHCenter
                 text: root.valueText
                 font.pixelSize: Appearance.font.pixelSize.small
@@ -313,8 +339,8 @@ EditDragArea {
         property string symbol: ""
         signal triggered()
 
-        width: 34
-        height: 34
+        width: root.dense ? 26 : 34
+        height: width
         radius: width / 2
         color: stepMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
             : stepMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighest
