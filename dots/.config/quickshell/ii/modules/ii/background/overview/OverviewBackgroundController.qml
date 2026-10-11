@@ -221,17 +221,15 @@ Item {
     /** On-screen corner radius of the workspace plane. */
     readonly property real realGnomeRadius: Appearance.rounding.large
 
-    // GNOME eases without overshoot. Opening uses the compositor's own window
-    // curve and speed (Settings -> Windows), closing is shorter and lands
-    // softly on the real windows.
-    readonly property real realGnomeWindowSpeed: Math.max(1, Math.min(10, Number(Config.options.appearance.appLaunchAnimation.speed) || 4))
-    // Longer than the compositor's window motion: the zoom moves the whole screen.
-    readonly property int realGnomeOpenDuration: Math.round(realGnomeWindowSpeed * 120 * Appearance.animMultiplier)
-    readonly property int realGnomeCloseDuration: Math.round(realGnomeWindowSpeed * 75 * Appearance.animMultiplier)
-    // Eases in as well as out: a curve that starts steep spends most of the zoom in the
-    // first few frames, exactly where the open is busiest, and reads as a jump.
-    readonly property var realGnomeOpenCurve: [0.25, 0, 0.1, 1, 1, 1]
-    readonly property var realGnomeCloseCurve: [0.25, 0.46, 0.45, 0.94, 1, 1]
+    // Opening is Edit Mode's own shrink (elementMove): it leaves at speed and is
+    // ~97% there at 150 ms. The ease-in curve it replaced spent its first frames
+    // almost still and read as heavy, while frame pacing was the same (measured).
+    readonly property int realGnomeOpenDuration: Appearance.animation.elementMove.duration
+    readonly property var realGnomeOpenCurve: Appearance.animation.elementMove.bezierCurve
+    // Closing decelerates as fast but without the overshoot: the plane lands on the
+    // real windows, and a zoom past full screen would show right at the handoff.
+    readonly property int realGnomeCloseDuration: Appearance.animation.elementMoveSmall.duration
+    readonly property var realGnomeCloseCurve: [0.3, 0.95, 0.2, 1, 1, 1]
     /** GNOME's radial shade over the blurred backing. */
     readonly property real vignetteAmount: isRealGnome ? progress : 0.0
     readonly property bool isMaterialShape: effectiveStyle === "material-shape"
@@ -313,16 +311,18 @@ Item {
     property bool openHold: false
     property real progress: root.held ? root.heldProgress : (active && !root.openHold ? 1.0 : 0.0)
     Behavior on progress {
+        id: progressBehavior
         enabled: !root.isOverviewAlwaysActive && !root.held
-        // Bound to `active`: the Behavior reads them after the target flips,
-        // so each direction runs on its own curve.
+        // Picked by the target the Behavior is heading to, which it sets before
+        // starting. Bound to `active`, the progress flipped first and the close ran
+        // on the open's duration and curve (measured: 400 ms instead of 280).
         NumberAnimation {
             duration: root.isRealGnome
-                ? (root.active ? root.realGnomeOpenDuration : root.realGnomeCloseDuration)
+                ? (progressBehavior.targetValue > 0.5 ? root.realGnomeOpenDuration : root.realGnomeCloseDuration)
                 : Appearance.animation.elementMove.duration
             easing.type: Easing.BezierSpline
             easing.bezierCurve: root.isRealGnome
-                ? (root.active ? root.realGnomeOpenCurve : root.realGnomeCloseCurve)
+                ? (progressBehavior.targetValue > 0.5 ? root.realGnomeOpenCurve : root.realGnomeCloseCurve)
                 : Appearance.animation.elementMove.bezierCurve
         }
     }

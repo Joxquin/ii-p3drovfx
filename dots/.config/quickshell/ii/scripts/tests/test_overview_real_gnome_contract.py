@@ -63,11 +63,12 @@ class RealGnomeStyleTests(unittest.TestCase):
         # Plain Gnome Like still runs on elementMove; only Real Gnome swaps curves.
         self.assertIn(": Appearance.animation.elementMove.duration", CONTROLLER)
         self.assertIn(": Appearance.animation.elementMove.bezierCurve", CONTROLLER)
-        self.assertIn("realGnomeOpenCurve: [0.25, 0, 0.1, 1, 1, 1]", CONTROLLER)
-        # No overshoot in either Real Gnome curve.
-        for name in ("realGnomeOpenCurve", "realGnomeCloseCurve"):
-            values = [float(v) for v in re.search(name + r": \[([^\]]+)\]", CONTROLLER).group(1).split(",")]
-            self.assertTrue(all(0.0 <= v <= 1.0 for v in values), name)
+        # Real Gnome opens on Edit Mode's own shrink.
+        self.assertIn("realGnomeOpenDuration: Appearance.animation.elementMove.duration", CONTROLLER)
+        self.assertIn("realGnomeOpenCurve: Appearance.animation.elementMove.bezierCurve", CONTROLLER)
+        # The close lands on the real windows: no overshoot past full screen.
+        values = [float(v) for v in re.search(r"realGnomeCloseCurve: \[([^\]]+)\]", CONTROLLER).group(1).split(",")]
+        self.assertTrue(all(0.0 <= v <= 1.0 for v in values))
 
     def test_plane_aims_under_the_thumbnails(self):
         self.assertIn("GlobalStates.realGnomeAreaFor(name)", BG_ROOT)
@@ -130,7 +131,9 @@ class RealGnomeStyleTests(unittest.TestCase):
         self.assertIn("RealGnomeWindowPicker {", host)
         self.assertIn("RealGnomeWorkspaceIndicator {", host)
         # One hide/restore rule waits for every monitor.
-        self.assertIn("active.every(layer => layer.incomingCapturesReady)", TRANSITION)
+        # The windows hide only once every layer has drawn its captures, not just received them.
+        self.assertIn("active.every(layer => layer.incomingCapturesPresented)", TRANSITION)
+        self.assertIn("tRoot.incomingCapturesReady && tRoot.swapsSinceCapturesReady >= 2", TRANSITION)
         self.assertIn("pending.every(layer => !layer.overviewController || layer.overviewController.progress === 0)", TRANSITION)
 
     def test_monitor_hop_does_not_close_the_overview(self):
@@ -216,8 +219,15 @@ class RealGnomeStyleTests(unittest.TestCase):
     def test_dock_steps_aside_in_the_overview(self):
         self.assertIn("!dockRoot.realGnomeOverviewOpen && (dock.pinned", (ROOT / "modules/ii/dock/Dock.qml").read_text())
 
-    def test_desktop_widgets_leave_the_plane(self):
-        self.assertIn("bgWidgetsWindow.overviewController.isRealGnome && bgWidgetsWindow.overviewController.active", WIDGETS_WINDOW)
+    def test_desktop_widgets_ride_the_plane(self):
+        # They shrink with the plane and step out only while a slide hides it.
+        self.assertIn('readonly property bool followWidgetsScale: ["gnome",', CONTROLLER)
+        self.assertRegex(WIDGETS_WINDOW, r"isRealGnome && bgWidgetsWindow\.overviewController\.active\s*\n\s*&& Boolean\(GlobalStates\.realGnomePlaneHiddenScreens\[")
+
+    def test_window_handoff_uses_the_hyprland_socket(self):
+        self.assertIn('"/hypr/" + signature + "/.socket.sock"', TRANSITION)
+        self.assertIn('handoffSocket.write("eval " + handoffSocket.script)', TRANSITION)
+        self.assertIn("transitionScope.runWindowHandoffProcess(handoffSocket.script)", TRANSITION)
 
     def test_qml_handlers_are_unique(self):
         for name, text in (("transition", TRANSITION), ("overview", OVERVIEW), ("picker", PICKER)):

@@ -633,11 +633,14 @@ PanelWindow {
 
         // The scrolling overview's rows show the bare wallpaper, so the widgets
         // leave while it zooms onto the active row instead of landing in it.
-        // Real Gnome's plane is a workspace in a sliding strip: per-workspace
-        // widgets would swap in place while the windows slide, so they step out too.
+        // Real Gnome keeps them on its plane (followWidgetsScale shrinks them with it,
+        // as Edit Mode does) and steps them out only while a workspace slide hands the
+        // plane to the strip's cards, which carry the wallpaper and windows alone:
+        // per-workspace widgets would otherwise swap in place under the slide.
         opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
                 || (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.scrollingAimed && bgWidgetsWindow.overviewController.active)
-                || (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isRealGnome && bgWidgetsWindow.overviewController.active)
+                || (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isRealGnome && bgWidgetsWindow.overviewController.active
+                    && Boolean(GlobalStates.realGnomePlaneHiddenScreens[bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : ""]))
             ? 0.0
             : (bgWidgetsWindow.isGnomeLikeOverview
                 ? 1.0
@@ -645,8 +648,8 @@ PanelWindow {
         visible: opacity > 0
         Behavior on opacity {
             NumberAnimation {
-                // Real Gnome hides the widgets while the zoom starts; letting them fade
-                // for 350 ms kept the whole canvas rendering under the busiest frames.
+                // Real Gnome's slide hands the plane over in 40 ms: a short fade keeps
+                // the widgets from lingering over the cards.
                 duration: Math.round((bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isRealGnome ? 140 : 350) * Appearance.animMultiplier)
                 easing.type: Easing.OutCubic
             }

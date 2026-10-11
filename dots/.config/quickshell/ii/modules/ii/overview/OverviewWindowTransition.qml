@@ -90,9 +90,101 @@ Scope {
             restoreRuleOffTimer.restart();
     }
 
+    // The open waits on this round trip before the zoom starts, so it goes
+    // straight to Hyprland's request socket: spawning hyprctl took 5-10 ms
+    // (more with the open busy on the main thread), the socket ~0.1 ms.
+    // hyprctl stays as the fallback when the socket cannot be reached.
+    readonly property string hyprSocketPath: {
+        const runtime = Quickshell.env("XDG_RUNTIME_DIR") ?? "";
+        const signature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") ?? "";
+        return runtime !== "" && signature !== "" ? runtime + "/hypr/" + signature + "/.socket.sock" : "";
+    }
+    property bool windowHandoffInFlight: false
+    property var windowHandoffSocket: null
+
     function runWindowHandoffCommand() {
-        windowHandoffProcess.command = ["hyprctl", "eval", transitionScope.windowHandoffScript(transitionScope.windowHandoffDesiredActive)];
+        const script = transitionScope.windowHandoffScript(transitionScope.windowHandoffDesiredActive);
+        transitionScope.windowHandoffInFlight = true;
+        if (transitionScope.hyprSocketPath !== "") {
+            // Connected only once built: passed to createObject, `connected` came
+            // before `script` and the socket sent an empty eval, which Hyprland
+            // answers "ok" without hiding anything.
+            const socket = windowHandoffSocketComponent.createObject(transitionScope, {
+                path: transitionScope.hyprSocketPath,
+                script: script
+            });
+            if (socket) {
+                transitionScope.windowHandoffSocket = socket;
+                socket.connected = true;
+                return;
+            }
+        }
+        transitionScope.runWindowHandoffProcess(script);
+    }
+    function runWindowHandoffProcess(script) {
+        windowHandoffProcess.command = ["hyprctl", "eval", script];
         windowHandoffProcess.running = true;
+    }
+    function windowHandoffCommandFinished() {
+        transitionScope.windowHandoffInFlight = false;
+        if (!transitionScope.windowHandoffCommandQueued) {
+            transitionScope.windowHandoffApplied = true;
+            return;
+        }
+        transitionScope.windowHandoffCommandQueued = false;
+        transitionScope.runWindowHandoffCommand();
+    }
+    function cancelWindowHandoffCommand() {
+        const socket = transitionScope.windowHandoffSocket;
+        transitionScope.windowHandoffSocket = null;
+        if (socket) {
+            socket.cancelled = true;
+            socket.destroy();
+        }
+        if (windowHandoffProcess.running)
+            windowHandoffProcess.running = false;
+        transitionScope.windowHandoffInFlight = false;
+    }
+
+    Component {
+        id: windowHandoffSocketComponent
+
+        // One request per connection: Hyprland answers and closes.
+        Socket {
+            id: handoffSocket
+            property string script: ""
+            property bool sent: false
+            property bool done: false
+            property bool cancelled: false
+
+            function finish() {
+                if (handoffSocket.done || handoffSocket.cancelled)
+                    return;
+                handoffSocket.done = true;
+                if (transitionScope.windowHandoffSocket === handoffSocket)
+                    transitionScope.windowHandoffSocket = null;
+                Qt.callLater(() => handoffSocket.destroy());
+                if (handoffSocket.sent)
+                    transitionScope.windowHandoffCommandFinished();
+                else
+                    transitionScope.runWindowHandoffProcess(handoffSocket.script);
+            }
+
+            parser: SplitParser {
+                splitMarker: ""
+                onRead: data => handoffSocket.finish()
+            }
+            onConnectedChanged: {
+                if (!handoffSocket.connected || handoffSocket.script === "") {
+                    handoffSocket.finish();
+                    return;
+                }
+                handoffSocket.write("eval " + handoffSocket.script);
+                handoffSocket.flush();
+                handoffSocket.sent = true;
+            }
+            onError: handoffSocket.finish()
+        }
     }
 
     // True once Hyprland has taken the last requested state: the open waits on
@@ -111,7 +203,7 @@ Scope {
         if (transitionScope.handoffRequestedForOpen || !GlobalStates.classicOverviewOpen || !transitionScope.featureEnabled)
             return;
         const active = transitionScope.layers().filter(layer => layer.isGnomeLike && layer.isOverviewActive);
-        if (active.length === 0 || !active.every(layer => layer.incomingCapturesReady))
+        if (active.length === 0 || !active.every(layer => layer.incomingCapturesPresented))
             return;
         transitionScope.handoffRequestedForOpen = true;
         transitionScope.setWindowHandoffActive(true);
@@ -137,11 +229,11 @@ Scope {
         // requested (or applied) another hyprctl round trip only re-fires the
         // restore settle and the no_anim rule dance.
         if (transitionScope.windowHandoffDesiredActive === active
-                && (transitionScope.windowHandoffApplied || windowHandoffProcess.running || transitionScope.windowHandoffCommandQueued))
+                && (transitionScope.windowHandoffApplied || transitionScope.windowHandoffInFlight || transitionScope.windowHandoffCommandQueued))
             return;
         transitionScope.windowHandoffDesiredActive = active;
         transitionScope.windowHandoffApplied = false;
-        if (windowHandoffProcess.running) {
+        if (transitionScope.windowHandoffInFlight) {
             transitionScope.windowHandoffCommandQueued = true;
             return;
         }
@@ -152,21 +244,13 @@ Scope {
         transitionScope.windowHandoffDesiredActive = false;
         transitionScope.windowHandoffCommandQueued = false;
         // Do not let an in-flight enable finish after the teardown cleanup.
-        if (windowHandoffProcess.running)
-            windowHandoffProcess.running = false;
+        transitionScope.cancelWindowHandoffCommand();
         Quickshell.execDetached(["hyprctl", "eval", transitionScope.windowHandoffScript(false) + "; " + transitionScope.restoreRuleOffScript]);
     }
 
     Process {
         id: windowHandoffProcess
-        onExited: {
-            if (!transitionScope.windowHandoffCommandQueued) {
-                transitionScope.windowHandoffApplied = true;
-                return;
-            }
-            transitionScope.windowHandoffCommandQueued = false;
-            transitionScope.runWindowHandoffCommand();
-        }
+        onExited: transitionScope.windowHandoffCommandFinished()
     }
 
     Component.onCompleted: {
@@ -850,6 +934,10 @@ Scope {
                 transitionScope.handoffRequestedForOpen = false;
                 if (tRoot.monitorFocused && !transitionScope.animationsDisabled)
                     GlobalStates.overviewZoomHeld = true;
+                // Captures kept from the last open still count their swaps from here.
+                tRoot.swapsSinceCapturesReady = 0;
+                if (presentWatcher.Window.window)
+                    presentWatcher.Window.window.update();
                 openDelayTimer.restart();
                 Qt.callLater(tRoot.requestOpenHandoff);
             }
@@ -885,9 +973,36 @@ Scope {
                 tRoot.frozenToplevels = [];
                 tRoot.outgoingToplevels = [];
             }
+            // Ready is not on screen: a capture with content still has to be drawn
+            // and committed by this layer. With the hide sent over the socket (~1 ms)
+            // Hyprland hid the windows before that frame about half the time, and
+            // the open flashed one frame with neither the windows nor the captures.
+            // The hide waits for the second swap after readiness - the first can be
+            // a frame synced before the content arrived.
+            property int swapsSinceCapturesReady: 0
+            readonly property bool incomingCapturesPresented: tRoot.incomingCapturesReady && tRoot.swapsSinceCapturesReady >= 2
             onIncomingCapturesReadyChanged: {
-                if (tRoot.incomingCapturesReady)
+                tRoot.swapsSinceCapturesReady = 0;
+                if (tRoot.incomingCapturesReady && presentWatcher.Window.window)
+                    presentWatcher.Window.window.update();
+            }
+            onIncomingCapturesPresentedChanged: {
+                if (tRoot.incomingCapturesPresented)
                     tRoot.requestOpenHandoff();
+            }
+            Item {
+                id: presentWatcher
+                visible: false
+                Connections {
+                    target: presentWatcher.Window.window
+                    enabled: tRoot.incomingCapturesReady && tRoot.swapsSinceCapturesReady < 2
+                    function onFrameSwapped() {
+                        tRoot.swapsSinceCapturesReady++;
+                        // A held zoom draws nothing new: ask for the frame being waited on.
+                        if (tRoot.swapsSinceCapturesReady < 2 && presentWatcher.Window.window)
+                            presentWatcher.Window.window.update();
+                    }
+                }
             }
             Connections {
                 target: transitionScope
