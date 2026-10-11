@@ -136,9 +136,10 @@ EditDragArea {
         bottomRightRadius: root.dense ? root.rDense : root.pressed ? root.rPressed : (root.last ? root.rEnd : root.rSeam)
         antialiasing: true
 
+        // A plain row shows hover with `hoverLayer` below, not by stepping to
+        // the next surface tone.
         color: root.dense && !root.selected
             ? (root.pressed ? Appearance.colors.colSurfaceContainerHighestActive
-                : root._lit ? Appearance.colors.colSurfaceContainerHighest
                 : Qt.alpha(Appearance.colors.colSurfaceContainerHighest, 0))
             : root.dense
             ? (root.pressed ? Appearance.colors.colSecondaryContainerActive
@@ -153,12 +154,36 @@ EditDragArea {
                 : root._lit ? Appearance.colors.colPrimaryContainerHover
                 : Appearance.colors.colPrimaryContainer)
             : (root.pressed ? Appearance.colors.colSurfaceContainerHighestActive
-                : root._lit ? Appearance.colors.colSurfaceContainerHighest
                 : Appearance.colors.colSurfaceContainerHigh)
 
         Behavior on color {
             enabled: !Appearance.reducedMotion
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(pill)
+        }
+
+        // Hover on a plain row: the content colour at 8 % over the fill (M3's
+        // state layer). With transparency on, the surface tones are solved as
+        // overlays, each against a different base, so on an opaque menu card
+        // High and Highest land a few levels apart and a tone-step hover
+        // vanished. A layer reads the same over any fill.
+        Rectangle {
+            id: hoverLayer
+            anchors.fill: parent
+            topLeftRadius: pill.topLeftRadius
+            topRightRadius: pill.topRightRadius
+            bottomLeftRadius: pill.bottomLeftRadius
+            bottomRightRadius: pill.bottomRightRadius
+            antialiasing: true
+            // The filled rows (selected; a comfortable switch that is on)
+            // keep their own opaque hover tones.
+            visible: !root.selected && (root.dense || !root.switchOn)
+            color: root.colOn
+            opacity: root._lit && !root.pressed ? 0.08 : 0
+
+            Behavior on opacity {
+                enabled: !Appearance.reducedMotion
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(hoverLayer)
+            }
         }
         Behavior on topLeftRadius {
             enabled: !Appearance.reducedMotion

@@ -37,12 +37,25 @@ RowLayout {
         implicitHeight: root.circleSize
         radius: width / 2
         color: backMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
-            : backMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighest
             : Appearance.colors.colSurfaceContainerHigh
 
         Behavior on color {
             enabled: !Appearance.reducedMotion
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        }
+
+        // Hover as a state layer (EditPanelRow's hoverLayer says why).
+        Rectangle {
+            id: backHoverLayer
+            anchors.fill: parent
+            radius: width / 2
+            color: Appearance.colors.colOnSurface
+            opacity: backMouse.containsMouse && !backMouse.containsPress ? 0.08 : 0
+
+            Behavior on opacity {
+                enabled: !Appearance.reducedMotion
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(backHoverLayer)
+            }
         }
 
         MaterialSymbol {

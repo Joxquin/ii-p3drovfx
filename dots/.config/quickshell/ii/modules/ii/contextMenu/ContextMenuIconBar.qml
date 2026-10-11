@@ -54,7 +54,6 @@ Item {
             opacity: button.enabled ? 1 : 0.45
             radius: mouse.pressed ? Math.max(Appearance.rounding.verysmall, root.radius - 4) : root.radius
             color: mouse.pressed ? Appearance.colors.colSurfaceContainerHighestActive
-                : mouse.containsMouse ? Appearance.colors.colSurfaceContainerHighest
                 : Appearance.colors.colSurfaceContainerHigh
 
             Behavior on color {
@@ -64,6 +63,22 @@ Item {
             Behavior on radius {
                 enabled: !Appearance.reducedMotion
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            // Hover as a state layer, not a step to the next surface tone:
+            // with transparency on, those tones land a few levels apart on
+            // an opaque card (EditPanelRow's hoverLayer says why).
+            Rectangle {
+                id: hoverLayer
+                anchors.fill: parent
+                radius: button.radius
+                color: Appearance.colors.colOnSurface
+                opacity: mouse.containsMouse && !mouse.pressed ? 0.08 : 0
+
+                Behavior on opacity {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(hoverLayer)
+                }
             }
 
             MaterialSymbol {
