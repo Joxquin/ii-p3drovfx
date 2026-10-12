@@ -25,11 +25,26 @@ layout(std140, binding = 0) uniform buf {
     // Where the overlay's blur stops being full strength (the bar's own
     // depth), as a fraction of the axis.
     float barBandSolid;
+    // Canvas UI the subject leaves uncovered: two rectangles in uv
+    // (x0, y0, x1, y1; all zero when unused) and, when holeMaskOn is 1,
+    // every pixel of holeSource (an open dialog).
+    vec4 hole0;
+    vec4 hole1;
+    float holeMaskOn;
+    // The wallpaper blur's dim while windows are open: 0..1, and its colour
+    // (premultiplied, its alpha the dim's strength).
+    float dim;
+    vec4 dimColor;
 };
 
 // The cutout (premultiplied) and the widget canvas, both in window space.
 layout(binding = 1) uniform sampler2D source;
 layout(binding = 2) uniform sampler2D maskSource;
+layout(binding = 3) uniform sampler2D holeSource;
+
+float inRect(vec2 uv, vec4 r) {
+    return step(r.x, uv.x) * step(r.y, uv.y) * (1.0 - step(r.z, uv.x)) * (1.0 - step(r.w, uv.y));
+}
 
 // "Source atop", near enough: the subject is painted only where the canvas
 // has pixels. Over bare wallpaper the surface stays transparent, so the screen
@@ -81,6 +96,12 @@ void main() {
     vec4 mask = texture(maskSource, qt_TexCoord0);
     float coverage = step(maskThreshold, mask.a);
     vec4 color = texture(source, qt_TexCoord0);
+    float hole = max(inRect(qt_TexCoord0, hole0), inRect(qt_TexCoord0, hole1));
+    hole = max(hole, holeMaskOn * step(maskThreshold, texture(holeSource, qt_TexCoord0).a));
+    coverage *= 1.0 - hole;
+    float dimStrength = dim * dimColor.a;
+    color.rgb = color.rgb * (1.0 - dimStrength)
+        + dimColor.rgb / max(dimColor.a, 0.0001) * dimStrength * color.a;
 
     float t = barBandAlongY > 0.5 ? qt_TexCoord0.y : qt_TexCoord0.x;
     if (barBandFromEnd > 0.5)

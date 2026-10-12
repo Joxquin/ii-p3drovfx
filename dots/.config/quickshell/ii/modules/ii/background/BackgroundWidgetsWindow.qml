@@ -736,8 +736,21 @@ PanelWindow {
             }
         }
 
+        // The desktop as the window blur sees it: the canvas and the subject
+        // over it, one item. The blur below captures this (the subject stays
+        // in front of the blurred widgets) and the sharp half of its
+        // cross-fade is this item's opacity. The two are parented here by
+        // `parent:`, in window coordinates as before. Input is not gated by
+        // opacity, so the desktop keeps every click while blurred.
+        Item {
+            id: desktopStack
+            anchors.fill: parent
+            opacity: 1 - bgWidgetsWindow.windowBlurProgress
+        }
+
         Loader {
             id: depthCutoutLoader
+            parent: desktopStack
             anchors.fill: parent
             z: 1
             active: DepthEffect.active && bgWidgetsWindow.isTargetMonitor
@@ -751,21 +764,36 @@ PanelWindow {
                 editProgress: bgWidgetsWindow.editProgress
                 windowBlurProgress: bgWidgetsWindow.windowBlurProgress
                 dragging: widgetCanvas.draggingActive
-                suppressed: alignBar.active || widgetCanvas.marqueeActive || (desktopIcons.item?.dialogOpen ?? false)
+                // The marquee's band (a plain click is a zero-size band:
+                // nothing), the align bar, an icon's dialog: each uncovers
+                // only itself.
+                holeRects: [
+                    widgetCanvas.marqueeActive
+                        ? Qt.rect(Math.min(widgetCanvas.marqueeAnchorX, widgetCanvas.mouseX) + widgetCanvas.x - 2,
+                            Math.min(widgetCanvas.marqueeAnchorY, widgetCanvas.mouseY) + widgetCanvas.y - 2,
+                            Math.abs(widgetCanvas.mouseX - widgetCanvas.marqueeAnchorX) + 4,
+                            Math.abs(widgetCanvas.mouseY - widgetCanvas.marqueeAnchorY) + 4)
+                        : Qt.rect(0, 0, 0, 0),
+                    alignBar.active
+                        ? Qt.rect(alignBar.x + alignBar.width * (1 - alignBar.scale) / 2 + widgetCanvas.x,
+                            alignBar.y + (alignBar.below ? 0 : alignBar.height * (1 - alignBar.scale)) + widgetCanvas.y,
+                            alignBar.width * alignBar.scale, alignBar.height * alignBar.scale)
+                        : Qt.rect(0, 0, 0, 0)
+                ]
+                holeItem: desktopIcons.item?.modalItem ?? null
             }
         }
 
         WidgetCanvas {
             id: widgetCanvas
+            parent: desktopStack
             // A screen that shows no widgets only maps this surface for the
             // wallpaper framing below; the canvas stays off it.
             visible: bgWidgetsWindow.isTargetMonitor
             // The widgets step back while the wallpaper is being framed: still
             // there to frame the picture around, not in the way of it.
-            // The sharp half of the window blur's cross-fade: it gives way to the blurred copy
-            // above it (widgetBlurLoader), which still captures it at opacity 0. Input is not
-            // gated by opacity, so the desktop keeps every click while blurred.
-            opacity: (1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress) * (1 - bgWidgetsWindow.windowBlurProgress)
+            // The window blur's sharp half is desktopStack's opacity.
+            opacity: 1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress
             // The canvas STAYS visible under the lock preview. The preview's
             // LockSurface only draws the islands over a transparent surface -
             // the lock wallpaper lives in the background window, and the
@@ -964,20 +992,18 @@ PanelWindow {
         // rest), and gone the instant the blur ends. The radius never moves, so the kernel is
         // built once. Half resolution, the trade WindowBlur makes, so the same radius reads the
         // same here as on the wallpaper beneath. Nothing in it takes the pointer: clicks fall
-        // through to the canvas.
+        // through to the canvas. It captures desktopStack - the canvas with the
+        // depth subject over it - so the blurred widgets stay behind the subject.
         Loader {
             id: widgetBlurLoader
-            x: widgetCanvas.x
-            y: widgetCanvas.y
-            width: widgetCanvas.width
-            height: widgetCanvas.height
+            anchors.fill: parent
             active: widgetCanvas.visible && bgWidgetsWindow.windowBlurProgress > 0
-            opacity: bgWidgetsWindow.windowBlurProgress * (1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress)
+            opacity: bgWidgetsWindow.windowBlurProgress
             sourceComponent: Item {
                 ShaderEffectSource {
                     id: widgetBlurSource
                     anchors.fill: parent
-                    sourceItem: widgetCanvas
+                    sourceItem: desktopStack
                     textureSize: Qt.size(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
                     live: true
                     smooth: true

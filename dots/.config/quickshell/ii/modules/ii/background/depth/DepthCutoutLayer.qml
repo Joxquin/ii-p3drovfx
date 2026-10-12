@@ -38,13 +38,21 @@ Item {
     required property real containerScale
     property real aodProgress: 0
     property real editProgress: 0
-    // The canvas's own blur while windows are open (the widgets blur
-    // themselves then; a copy of the wallpaper would not be blurred).
+    // The canvas's own blur while windows are open. The widgets window blurs
+    // the canvas and this layer together (one capture, so the subject stays
+    // in front of the blurred widgets); the subject takes the wallpaper
+    // blur's dim with it (WindowBlur.qml), so its blurred pieces match the
+    // blurred picture around them.
     property real windowBlurProgress: 0
     property bool dragging: false
-    // Canvas UI the subject must not cover (the align bar, an icon's dialog,
-    // the marquee): the canvas draws them, so the mask would include them.
-    property bool suppressed: false
+    // Canvas UI the subject must not cover - the canvas draws it, so the
+    // mask would include it. Only its own pixels are cut out of the mask,
+    // never the whole subject: `holeRects` (container coordinates, up to
+    // two: the marquee, the align bar) and `holeItem` (an item in the
+    // canvas's coordinates - an icon's dialog - by its own alpha).
+    property var holeRects: []
+    property Item holeItem: null
+    readonly property color dimColor: Qt.alpha(Appearance.colors.colLayer0, 0.6)
 
     readonly property var plane: DepthEffect.planes[root.screenName] ?? null
     readonly property Item contentItem: cutoutChain.contentItem
@@ -118,7 +126,7 @@ Item {
             }
         }
     }
-    property real dragFade: root.dragging || root.suppressed ? 1 : 0
+    property real dragFade: root.dragging ? 1 : 0
     Behavior on dragFade {
         NumberAnimation {
             duration: Math.round(200 * Appearance.animMultiplier)
@@ -199,7 +207,7 @@ Item {
         * (1 - root.overviewProgress)
         * (1 - root.motionFade)
         * (1 - 0.55 * root.editProgress)
-        * (1 - (root.suppressed ? 1 : 0.65) * root.dragFade)
+        * (1 - 0.65 * root.dragFade)
         * root.canvas.opacity
     visible: opacity > 0.001 && root.shownCutout !== null && root.plane !== null
 
@@ -278,11 +286,36 @@ Item {
         visible: false
         smooth: true
     }
+    // The dialog's own pixels, at half resolution: a hole, not a picture.
+    ShaderEffectSource {
+        id: holeTexture
+        anchors.fill: parent
+        sourceItem: root.holeItem
+        sourceRect: Qt.rect(-root.canvas.x, -root.canvas.y, root.width, root.height)
+        textureSize: Qt.size(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
+        hideSource: false
+        live: root.holeItem !== null
+        visible: false
+        smooth: true
+    }
     ShaderEffect {
         anchors.fill: parent
         property var source: cutoutTexture
         property var maskSource: maskTexture
         property real maskThreshold: 0.02
+        // Without a dialog the hole sampler is bound to the mask and ignored.
+        property var holeSource: root.holeItem ? holeTexture : maskTexture
+        property real holeMaskOn: root.holeItem ? 1 : 0
+        function holeUv(r) {
+            return r && r.width > 0 && r.height > 0
+                ? Qt.vector4d(r.x / Math.max(1, width), r.y / Math.max(1, height),
+                    (r.x + r.width) / Math.max(1, width), (r.y + r.height) / Math.max(1, height))
+                : Qt.vector4d(0, 0, 0, 0);
+        }
+        property vector4d hole0: holeUv(root.holeRects[0] ?? null)
+        property vector4d hole1: holeUv(root.holeRects[1] ?? null)
+        property real dim: root.windowBlurProgress
+        property color dimColor: root.dimColor
         // Mirrors BarGradientOverlay's own gate, span and 300 ms fade.
         readonly property bool barBandShown: Config.options.bar.barBackgroundStyle === 0
             && Config.options.bar.transparentGlow
