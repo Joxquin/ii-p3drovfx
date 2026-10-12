@@ -76,6 +76,7 @@ FocusScope {
         const live = root.actions.map(a => ({
             "id": a.id,
             "symbol": a.icon ?? "",
+            "iconSource": a.iconSource ?? "",
             "title": a.text ?? "",
             "destructive": a.destructive === true,
             "enabled": a.enabled !== false,

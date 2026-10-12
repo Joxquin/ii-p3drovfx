@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Widgets
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -83,10 +84,29 @@ Item {
 
             MaterialSymbol {
                 anchors.centerIn: parent
+                visible: !picture.visible
                 text: button.modelData.symbol ?? ""
                 iconSize: 19
                 fill: mouse.containsMouse ? 1 : 0
                 color: button.modelData.destructive ? Appearance.m3colors.m3error : Appearance.colors.colOnSurface
+            }
+
+            // An entry with a picture of its own (an app's launcher) shows
+            // it instead of the symbol; the symbol stays the fallback for a
+            // theme that has no such icon. Lifted a little on hover, the
+            // way the symbol fills.
+            IconImage {
+                id: picture
+                anchors.centerIn: parent
+                visible: (button.modelData.iconSource ?? "") !== ""
+                implicitSize: 20
+                source: button.modelData.iconSource ?? ""
+                scale: mouse.containsMouse ? 1.1 : 1
+
+                Behavior on scale {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(picture)
+                }
             }
 
             MouseArea {

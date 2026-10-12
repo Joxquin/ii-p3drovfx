@@ -703,10 +703,12 @@ Singleton {
 
                 if (diskMatch) {
                     matchedDiskPaths.add(diskMatch.path);
+                    // A picture the person chose (setIcon) outlives the
+                    // scan; only an item on its kind's icon follows the disk.
                     const updated = Object.assign({}, item, {
                         id: diskMatch.id,
                         name: diskMatch.name,
-                        icon: diskMatch.icon,
+                        icon: item.customIcon ? item.icon : diskMatch.icon,
                         type: diskMatch.type,
                         path: diskMatch.path,
                         fileName: diskMatch.fileName
@@ -1270,10 +1272,15 @@ Singleton {
             if (item.id !== itemId)
                 return item;
             const next = Object.assign({}, item);
-            if (value === "")
+            if (value === "") {
                 delete next.icon;
-            else
+                delete next.customIcon;
+            } else {
                 next.icon = value;
+                // The flag the rescan merge keeps the icon by: without it
+                // the next scan put the kind's icon back.
+                next.customIcon = true;
+            }
             return next;
         }));
     }

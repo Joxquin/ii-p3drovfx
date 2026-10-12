@@ -1182,8 +1182,10 @@ Item {
                         // A folder shows what is in it, as Dolphin does: up
                         // to four pictures on the folder's front, one alone
                         // drawn large. The face is the part of a folder icon
-                        // below the tab, kept clear of its rim.
-                        readonly property var previews: tile.entry.type === "directory"
+                        // below the tab, kept clear of its rim. A folder with
+                        // a picture of its own keeps its face: the previews
+                        // would sit on what the person chose.
+                        readonly property var previews: tile.entry.type === "directory" && !tile.entry.customIcon
                             ? (DesktopShortcuts.folderPreviews[tile.entry.path] ?? []) : []
                         Grid {
                             visible: glyphIcon.previews.length > 0

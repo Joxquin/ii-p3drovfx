@@ -68,17 +68,42 @@ ItemContextDialog {
     // A link opens where it points: the target itself when that is a folder,
     // else the folder holding it. A broken link falls back to the folder
     // the link sits in. The path rides as an argument, never in the script.
-    function openTerminalHere() {
+    // `program`, when given, runs inside that terminal instead of its shell
+    // (Claude Code, for one): the terminal takes it as its command.
+    function openTerminalHere(program) {
         const target = root.entry.path;
         if (!target)
             return;
         const terminal = (Config.options.apps && Config.options.apps.terminal) || "kitty -1";
+        const run = program ? ` ${program}` : "";
         Quickshell.execDetached(["bash", "-c",
             `p=$(readlink -f -- "$1") || p="$1"; [ -d "$p" ] || p=$(dirname -- "$p"); `
-            + `cd -- "$p" 2>/dev/null || cd -- "$(dirname -- "$1")" || exit 1; exec ${terminal}`,
+            + `cd -- "$p" 2>/dev/null || cd -- "$(dirname -- "$1")" || exit 1; exec ${terminal}${run}`,
             "_", target]);
         root.dismiss();
     }
+
+    // Zed takes a folder as a project and a file in a window of its own; a
+    // link opens where it points. The Arch package calls the binary zeditor.
+    function openInZed() {
+        const target = root.entry.path;
+        if (!target)
+            return;
+        Quickshell.execDetached(["bash", "-c",
+            `p=$(readlink -f -- "$1") || p="$1"; z=$(command -v zeditor || command -v zed) || exit 1; exec "$z" -- "$p"`,
+            "_", target]);
+        root.dismiss();
+    }
+
+    // The launchers wear their app's own icon in the menu's bar; a theme
+    // without one leaves the entry on its symbol.
+    readonly property string terminalIcon: {
+        const command = String((Config.options.apps && Config.options.apps.terminal) || "kitty").trim();
+        const name = (command.split(/\s+/)[0] || "kitty").split("/").pop();
+        return Quickshell.iconPath(name, true);
+    }
+    readonly property string claudeIcon: Quickshell.iconPath("claude", true)
+    readonly property string zedIcon: Quickshell.iconPath("zed", true)
     // A copy answers in place before the menu goes: the row fills, its icon
     // turns into a check and its label says so, long enough to be read.
     function confirmCopy(id) {
@@ -109,7 +134,12 @@ ItemContextDialog {
             visible: entry.type === "directory", enabled: root.writable },
         { id: "details", text: Translation.tr("Details"), icon: "info", submenu: true },
         { id: "reveal", text: Translation.tr("Show in folder"), icon: "folder_open", visible: entry.path !== "" },
-        { id: "terminal", text: Translation.tr("Open terminal here"), icon: "terminal", visible: entry.path !== "" },
+        { id: "terminal", text: Translation.tr("Open terminal here"), icon: "terminal",
+            iconSource: root.terminalIcon, visible: entry.path !== "" },
+        { id: "claude", text: Translation.tr("Claude Code here"), icon: "smart_toy",
+            iconSource: root.claudeIcon, visible: entry.path !== "" },
+        { id: "zed", text: Translation.tr("Open in Zed"), icon: "code",
+            iconSource: root.zedIcon, visible: entry.path !== "" },
         { id: "copy", text: Translation.tr("Copy"), icon: "content_copy", submenu: true,
             visible: entry.name !== "" || entry.path !== "" },
         { id: "arrange", text: Translation.tr("Arrange selection"), icon: "align_horizontal_left",
@@ -154,6 +184,10 @@ ItemContextDialog {
             root.revealInFolder();
         } else if (actionId === "terminal") {
             root.openTerminalHere();
+        } else if (actionId === "claude") {
+            root.openTerminalHere("claude");
+        } else if (actionId === "zed") {
+            root.openInZed();
         } else {
             root.page = actionId;
         }
