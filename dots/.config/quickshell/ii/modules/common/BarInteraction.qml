@@ -20,6 +20,14 @@ Singleton {
         || (Config.options?.bar?.tooltips?.clickToShow ?? false)
         || GlobalStates.anyBarPopupOpen
 
+    // In click-to-show the left click belongs to the popup, so widgets that cycle through
+    // their items on click (keyboard layout, Bluetooth devices, sports) cycle on the right
+    // button instead. Reads the stored preference alone: `clickToShow` above also turns on
+    // while any popup is open, which would move the cycle button mid-hover. Touch-first has
+    // no right button, so it keeps the left click for both.
+    readonly property bool cycleOnRightClick: !PanelFamily.touchFirst
+        && (Config.options?.bar?.tooltips?.clickToShow ?? false)
+
     // The bar's buttons reach their panels through these popups. Turning them off on a
     // touch-first family would leave inert buttons and no other way in, so the preference
     // only applies where a pointer can also right-click, hover or use a keybind.

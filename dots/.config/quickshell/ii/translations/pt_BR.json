@@ -3811,6 +3811,7 @@
     "Advanced Settings": "Configurações Avançadas",
     "Bottom → Top": "Inferior → Superior",
     "Click to show bar popups": "Clique para mostrar os pop-ups da barra",
+    "Popups open on left click. Widgets that cycle through items on click (keyboard layout, Bluetooth devices, sports) cycle with right click instead.": "Os pop-ups abrem com o clique esquerdo. Widgets que ciclam entre itens ao clicar (layout do teclado, dispositivos Bluetooth, esportes) ciclam com o clique direito.",
     "Override the theme sound for any event with your own audio file.": "Substitua o som do tema para qualquer evento com seu próprio arquivo de áudio.",
     "AI Chat Widget Options": "Opções do Widget de Chat IA",
     "Widget Inner Shadows": "Sombras Internas do Widget",
