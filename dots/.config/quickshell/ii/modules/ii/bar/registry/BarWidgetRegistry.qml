@@ -35,6 +35,7 @@ QtObject {
             case "active_window":          return s.activeWindow ?? "default";
             case "port_watcher":           return s.portWatcher  ?? "default";
             case "ai_plan_usage":          return s.aiPlanUsage  ?? "default";
+            case "network_speed":          return s.networkSpeed ?? "default";
             case "search":                 return s.search       ?? "default";
             case "date":                   return s.date         ?? "default";
             case "timer":                  return s.timer        ?? "expressive";

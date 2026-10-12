@@ -30,6 +30,7 @@ import qs.modules.ii.bar.widgets.timer
 import qs.modules.ii.bar.widgets.indicators
 import qs.modules.ii.bar.widgets.dockToPanel
 import qs.modules.ii.bar.widgets.portWatcher
+import qs.modules.ii.bar.widgets.networkSpeed
 import qs.modules.ii.bar.widgets.privacy
 import qs.modules.ii.bar.widgets.aiPlanUsage
 import "widgets/search"
@@ -647,6 +648,8 @@ Item {
             return true;
         if (modelData.id === "ai_plan_usage" && Config.options.bar.styles.aiPlanUsage === "expressive")
             return true;
+        if (modelData.id === "network_speed" && Config.options.bar.styles.networkSpeed === "expressive")
+            return true;
         if (modelData.id === "search" && (Config.options.bar.styles.search === "expressive" || Config.options.bar.styles.search === "neural"))
             return true;
         if (modelData.id === "date" && (Config.options.bar.styles.date === "expressive" || Config.options.bar.styles.date === "neural"))
@@ -884,6 +887,10 @@ Item {
             if (isExp)
                 return powerCompExpressive;
             return powerComp;
+        case "network_speed":
+            if (isExp)
+                return networkSpeedCompExpressive;
+            return networkSpeedComp;
         case "date":
             if (isExp)
                 return dateCompExpressive;
@@ -1293,6 +1300,18 @@ Item {
     Component {
         id: portWatcherCompExpressive
         ExpressivePortWatcher {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: networkSpeedComp
+        NetworkSpeedWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: networkSpeedCompExpressive
+        ExpressiveNetworkSpeed {
             vertical: rootItem.vertical
         }
     }

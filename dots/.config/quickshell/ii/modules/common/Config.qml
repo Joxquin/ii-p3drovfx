@@ -4994,6 +4994,7 @@ Singleton {
                     property string keyboard: "expressive"
                     property string sports: "expressive"
                     property string portWatcher: "expressive"
+                    property string networkSpeed: "default" // default | expressive
                     property string aiPlanUsage: "expressive"
                     property string search: "default"
                     property string date: "default"
@@ -5218,6 +5219,16 @@ Singleton {
                     property bool showWindowLabel: false
                     property bool hideWhenUnavailable: false
                     property int lowRemainingThreshold: 20
+                }
+
+                property JsonObject networkSpeed: JsonObject {
+                    property string mode: "both" // both | download | upload
+                    property string unit: "bytes" // bytes | bits
+                    property string expressiveVariant: "capsule" // capsule | split | graph | rows
+                    property string colorMode: "primary"
+                    property bool showUnit: true
+                    property bool compact: false
+                    property bool hideWhenOffline: false
                 }
 
                 property JsonObject portWatcher: JsonObject {

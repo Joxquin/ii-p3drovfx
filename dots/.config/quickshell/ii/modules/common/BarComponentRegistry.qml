@@ -175,6 +175,14 @@ Singleton {
             configPage: "PortWatcherConfig.qml"
         },
         {
+            id: "network_speed",
+            icon: "speed",
+            title: "Network speed",
+            styleConfigKey: "networkSpeed",
+            styleOptions: defaultStyleOptions,
+            configPage: "NetworkSpeedConfig.qml"
+        },
+        {
             id: "clock",
             icon: "nest_clock_farsight_analog",
             title: "Clock",
