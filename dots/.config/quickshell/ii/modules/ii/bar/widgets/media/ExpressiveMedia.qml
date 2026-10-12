@@ -210,6 +210,13 @@ Item {
         colorMode: Config.options.bar.mediaPlayer.colorMode
     }
 
+    // A neutral step between the card and its text colour, for the secondary
+    // buttons. A palette "container" token cannot do this job: in the container
+    // modes it equals the card's own colour and the button vanishes.
+    readonly property color colSubtle: ColorUtils.mix(palette.colBackground, palette.colOnBackground, 0.86)
+    readonly property color colSubtleHover: ColorUtils.mix(palette.colBackground, palette.colOnBackground, 0.8)
+    readonly property color colSubtleActive: ColorUtils.mix(palette.colBackground, palette.colOnBackground, 0.72)
+
     // Vertical Material
     Loader {
         id: materialCol
@@ -303,9 +310,9 @@ Item {
                     implicitWidth: innerCol.width - 4
                     implicitHeight: innerCol.width - 4
                     buttonRadius: height / 2
-                    colBackground: palette.colContainer
-                    colBackgroundHover: palette.colContainerHover
-                    colRipple: palette.colContainerActive
+                    colBackground: root.colSubtle
+                    colBackgroundHover: root.colSubtleHover
+                    colRipple: root.colSubtleActive
                     downAction: () => root.activePlayer?.next()
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
@@ -314,7 +321,7 @@ Item {
                         fill: 1
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        color: palette.colOnContainer
+                        color: palette.colOnBackground
                     }
                 }
             }
@@ -622,9 +629,9 @@ Item {
                     implicitHeight: card.height - 6
                     Layout.leftMargin: -2
                     buttonRadius: height / 2
-                    colBackground: palette.colContainer
-                    colBackgroundHover: palette.colContainerHover
-                    colRipple: palette.colContainerActive
+                    colBackground: root.colSubtle
+                    colBackgroundHover: root.colSubtleHover
+                    colRipple: root.colSubtleActive
                     downAction: () => root.activePlayer?.next()
 
                     visible: root.hasTrack
@@ -653,7 +660,7 @@ Item {
                         text: "skip_next"
                         iconSize: Appearance.font.pixelSize.large
                         fill: 1
-                        color: palette.colOnContainer
+                        color: palette.colOnBackground
                     }
                 }
             }

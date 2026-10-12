@@ -104,8 +104,8 @@ Item {
             weekdayText: root.weekdayText
             colDay: theme.colBare
             colMonth: theme.colBareAccent
-            colChip: theme.colAccent
-            colOnChip: theme.colOnAccent
+            colChip: theme.colBackgroundVariant
+            colOnChip: theme.colOnBackgroundVariant
         }
     }
 
@@ -140,7 +140,7 @@ Item {
                 // A rounded rectangle against an organic badge. Matching the
                 // badge's curvature turns the pair into one blob at bar scale.
                 radius: Appearance.rounding.small
-                color: theme.colContainer
+                color: theme.colBackground
 
                 anchors.right: root.vertical ? undefined : parent.right
                 anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
@@ -167,7 +167,7 @@ Item {
                             "wght": 750
                         })
                         font.letterSpacing: 1.0
-                        color: theme.colOnContainer
+                        color: theme.colOnBackground
                     }
 
                     StyledText {
@@ -179,7 +179,7 @@ Item {
                             "wght": 500
                         })
                         font.letterSpacing: 1.0
-                        color: theme.colOnContainer
+                        color: theme.colOnBackground
                         opacity: 0.7
                     }
                 }
@@ -189,7 +189,7 @@ Item {
                 id: dayBadge
                 implicitSize: badgeRoot.badgeSize
                 shape: MaterialShape.Shape.Cookie9Sided
-                color: theme.colAccent
+                color: theme.colBackgroundVariant
 
                 anchors.left: root.vertical ? undefined : parent.left
                 anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
@@ -208,7 +208,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.6
-                    color: theme.colOnAccent
+                    color: theme.colOnBackgroundVariant
                 }
             }
         }
@@ -245,7 +245,7 @@ Item {
                     ? todayRow.implicitHeight + Math.round(root.thickness * 0.3)
                     : root.thickness
                 radius: Appearance.rounding.full
-                color: theme.colAccent
+                color: theme.colBackgroundVariant
 
                 GridLayout {
                     id: todayRow
@@ -263,7 +263,7 @@ Item {
                             "wght": 700
                         })
                         font.letterSpacing: 1.0
-                        color: theme.colOnAccent
+                        color: theme.colOnBackgroundVariant
                     }
 
                     StyledText {
@@ -278,7 +278,7 @@ Item {
                             "tnum": 1
                         })
                         font.letterSpacing: -0.6
-                        color: theme.colOnAccent
+                        color: theme.colOnBackgroundVariant
                     }
                 }
             }

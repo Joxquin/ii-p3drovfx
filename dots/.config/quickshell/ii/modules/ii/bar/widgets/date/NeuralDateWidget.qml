@@ -188,7 +188,7 @@ Item {
                 Layout.alignment: Qt.AlignCenter
                 implicitSize: Math.round(root.thickness * (root.vertical ? 0.78 : 0.86))
                 shape: MaterialShape.Shape.SoftBurst
-                color: theme.colAccent
+                color: theme.colBackgroundVariant
 
                 StyledText {
                     anchors.centerIn: parent
@@ -202,7 +202,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.6
-                    color: theme.colOnAccent
+                    color: theme.colOnBackgroundVariant
                 }
             }
 
@@ -231,8 +231,8 @@ Item {
             thickness: root.thickness
             dayText: root.dayText
             monthText: root.showYear ? `${root.monthText} ${DateTime.yearShort}` : root.monthText
-            colPlate: theme.colAccent
-            colOnPlate: theme.colOnAccent
+            colPlate: theme.colBackgroundVariant
+            colOnPlate: theme.colOnBackgroundVariant
         }
     }
 

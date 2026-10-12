@@ -21,6 +21,16 @@ import qs.modules.common
  * - neutralContainer
  * As well as legacy/specialized modes: "tonal", "vibrant", "alert".
  *
+ * > [!WARNING]
+ * > **Paint surfaces with `colBackground` / `colBackgroundVariant`, not `colContainer` / `colAccent`.**
+ * > The background pair is the only one that inverts between a family and its
+ * > container sibling (`primary` = vivid surface + soft variant, `primaryContainer` =
+ * > soft surface + vivid variant). `colContainer` and `colAccent` resolve to the *same*
+ * > colour in both, so a widget built on them looks identical in `primary` and
+ * > `primaryContainer` — and one that pairs `colContainer` with `colBackground` loses
+ * > a layer entirely in the container modes. `colContainer`/`colAccent` stay for
+ * > legacy callers; `colBare*` is for type drawn straight on the bar.
+ *
  * > [!CAUTION]
  * > **Nothing here may be named `on<Something>`.** These used to be `onContainer`
  * > and `onAccent`, and both silently rendered **black**: QML reserves the `on`

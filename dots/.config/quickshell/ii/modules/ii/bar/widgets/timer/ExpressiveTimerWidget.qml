@@ -168,8 +168,8 @@ Item {
         buttonRadius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1
             ? Appearance.rounding.windowRounding
             : Appearance.rounding.full
-        colBackground: theme.colContainer
-        colBackgroundHover: theme.colContainerHover
+        colBackground: theme.colBackground
+        colBackgroundHover: theme.colBackgroundHover
         colBackgroundActive: theme.colBackgroundActive
         colRipple: theme.colBackgroundActive
         onPressed: readout.triggered()
@@ -189,8 +189,8 @@ Item {
                 iconSize: Appearance.font.pixelSize.normal
                 padding: 3
                 text: readout.iconName
-                color: theme.colAccent
-                colSymbol: theme.colOnAccent
+                color: theme.colBackgroundVariant
+                colSymbol: theme.colOnBackgroundVariant
             }
 
             Item {
@@ -208,7 +208,7 @@ Item {
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.DemiBold
                     font.features: ({ "tnum": 1 })
-                    color: ColorUtils.categoryOnColor(theme.colContainer)
+                    color: ColorUtils.categoryOnColor(theme.colBackground)
                 }
             }
 
@@ -218,14 +218,14 @@ Item {
                 implicitWidth: 18
                 implicitHeight: 18
                 radius: Appearance.rounding.full
-                color: theme.colAccent
+                color: theme.colBackgroundVariant
 
                 StyledText {
                     anchors.centerIn: parent
                     text: String(readout.badgeCount)
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     font.weight: Font.Bold
-                    color: theme.colOnAccent
+                    color: theme.colOnBackgroundVariant
                 }
             }
         }

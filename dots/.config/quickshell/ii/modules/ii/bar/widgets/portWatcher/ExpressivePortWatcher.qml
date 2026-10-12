@@ -30,10 +30,10 @@ MouseArea {
         colorMode: Config.options.bar.portWatcher.colorMode
     }
 
-    readonly property color colContainer: root.containsMouse ? palette.colContainerHover : palette.colContainer
-    readonly property color colOnContainer: palette.colOnContainer
-    readonly property color colIndicator: palette.colBackground
-    readonly property color colOnIndicator: palette.colOnBackground
+    readonly property color colContainer: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
+    readonly property color colOnContainer: palette.colOnBackground
+    readonly property color colIndicator: palette.colBackgroundVariant
+    readonly property color colOnIndicator: palette.colOnBackgroundVariant
 
     // Hover is a shape change, nothing else. The spin sells the swap as a
     // morph instead of a hard cut between two silhouettes.

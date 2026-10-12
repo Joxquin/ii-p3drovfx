@@ -78,7 +78,7 @@ MouseArea {
                 visible: !root.minimal
                 implicitSize: root.weatherPlateSize
                 shape: root.weatherPlateShape
-                color: root.inverted ? palette.colAccent : palette.colContainer
+                color: root.inverted ? palette.colBackgroundVariant : palette.colBackground
             }
 
             Image {

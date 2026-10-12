@@ -43,7 +43,7 @@ Item {
 
         property color pillColor: GlobalStates.sidebarRightOpen 
             ? (mouseArea.containsMouse ? Appearance.colors.colLayer4Hover : "transparent")
-            : (mouseArea.containsMouse ? widgetPalette.colContainerHover : widgetPalette.colContainer)
+            : (mouseArea.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground)
 
         property color borderColor: GlobalStates.sidebarRightOpen 
             ? widgetPalette.colBackground
