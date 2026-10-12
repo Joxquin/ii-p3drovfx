@@ -137,6 +137,16 @@ Singleton {
         root.helperBuild.build();
     }
 
+    // Keyboard bounds in 0..1 screen coordinates, published by OnScreenKeyboard.qml.
+    // Normalized so it can be compared against helper coordinates without knowing
+    // which output the touchscreen is mapped to.
+    property rect keyboardBounds: Qt.rect(0, 0, 1, 1)
+    property bool keyboardPinned: false
+
+    // Whether the keyboard currently on screen is one *we* raised. A manually opened
+    // or pinned keyboard is never closed behind the user's back.
+    property bool autoShown: false
+
     // ── What the helper can see ─────────────────────────────────────────────
     /**
      * The daemon's own inventory of pointing devices, reported once at startup.
