@@ -154,6 +154,7 @@ Singleton {
                 { "id": "icon", "symbol": "image", "title": "Change icon", "submenu": true },
                 { "id": "details", "symbol": "info", "title": "Details", "submenu": true, "bar": true },
                 { "id": "reveal", "symbol": "folder_open", "title": "Show in folder" },
+                { "id": "terminal", "symbol": "terminal", "title": "Open terminal here" },
                 { "id": "copy", "symbol": "content_copy", "title": "Copy", "submenu": true, "bar": true },
                 { "id": "separator-2", "separator": true },
                 { "id": "arrange", "symbol": "align_horizontal_left", "title": "Arrange selection", "submenu": true },

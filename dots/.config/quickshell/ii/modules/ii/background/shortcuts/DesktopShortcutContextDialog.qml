@@ -65,6 +65,20 @@ ItemContextDialog {
             Quickshell.execDetached(["xdg-open", target.substring(0, target.lastIndexOf("/") + 1) || "/"]);
         root.dismiss();
     }
+    // A link opens where it points: the target itself when that is a folder,
+    // else the folder holding it. A broken link falls back to the folder
+    // the link sits in. The path rides as an argument, never in the script.
+    function openTerminalHere() {
+        const target = root.entry.path;
+        if (!target)
+            return;
+        const terminal = (Config.options.apps && Config.options.apps.terminal) || "kitty -1";
+        Quickshell.execDetached(["bash", "-c",
+            `p=$(readlink -f -- "$1") || p="$1"; [ -d "$p" ] || p=$(dirname -- "$p"); `
+            + `cd -- "$p" 2>/dev/null || cd -- "$(dirname -- "$1")" || exit 1; exec ${terminal}`,
+            "_", target]);
+        root.dismiss();
+    }
     // A copy answers in place before the menu goes: the row fills, its icon
     // turns into a check and its label says so, long enough to be read.
     function confirmCopy(id) {
@@ -95,6 +109,7 @@ ItemContextDialog {
             visible: entry.type === "directory", enabled: root.writable },
         { id: "details", text: Translation.tr("Details"), icon: "info", submenu: true },
         { id: "reveal", text: Translation.tr("Show in folder"), icon: "folder_open", visible: entry.path !== "" },
+        { id: "terminal", text: Translation.tr("Open terminal here"), icon: "terminal", visible: entry.path !== "" },
         { id: "copy", text: Translation.tr("Copy"), icon: "content_copy", submenu: true,
             visible: entry.name !== "" || entry.path !== "" },
         { id: "arrange", text: Translation.tr("Arrange selection"), icon: "align_horizontal_left",
@@ -137,6 +152,8 @@ ItemContextDialog {
             root.dismiss();
         } else if (actionId === "reveal") {
             root.revealInFolder();
+        } else if (actionId === "terminal") {
+            root.openTerminalHere();
         } else {
             root.page = actionId;
         }
