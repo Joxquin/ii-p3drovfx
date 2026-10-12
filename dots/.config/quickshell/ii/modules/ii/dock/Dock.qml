@@ -140,10 +140,19 @@ Scope {
             // computed from this - a binding loop on implicitWidth/sizing.
             property real _windowW: 0
             property real _windowH: 0
+            property real _naturalW: 0
+            property real _naturalH: 0
             // Deferred: before the configure the size follows implicitWidth
             // synchronously, inside the very evaluation that produced it.
-            onWidthChanged: Qt.callLater(() => dockRoot._windowW = dockRoot.width)
-            onHeightChanged: Qt.callLater(() => dockRoot._windowH = dockRoot.height)
+            onWidthChanged: Qt.callLater(() => {
+                dockRoot._windowW = dockRoot.width;
+                // What the compositor gave before our own negative margin widened it.
+                dockRoot._naturalW = dockRoot.width - Math.round(dockRoot.islandReclaim);
+            })
+            onHeightChanged: Qt.callLater(() => {
+                dockRoot._windowH = dockRoot.height;
+                dockRoot._naturalH = dockRoot.height - Math.round(dockRoot.islandReclaim);
+            })
             readonly property bool mainAxisFromWindow: dock.isVertical ? dockRoot._windowH > 1 : dockRoot._windowW > 1
             readonly property real availableW: (!dock.isVertical && dockRoot._windowW > 1) ? dockRoot._windowW : (screen?.width ?? 1920)
             readonly property real availableH: (dock.isVertical && dockRoot._windowH > 1) ? dockRoot._windowH : (screen?.height ?? 1080)
@@ -283,6 +292,51 @@ Scope {
                 }
             }
 
+            // ── Under a Dynamic Island bar ───────────────────────────────────────
+            // That bar style reserves a whole strip but draws only a pill centred in
+            // it, and the compositor shortens a full-width dock to what the strip
+            // leaves - an empty column of wallpaper beside the dock, below the pill.
+            // Where the pill (fillets included) ends clear of the dock's band, the
+            // dock takes the strip back and runs on to the wrapped frame's ring, or
+            // to the screen edge without one. Where they would meet it stays
+            // beside the bar, as before.
+            readonly property var barIsland: GlobalStates.barIslands[dockRoot.screen?.name ?? ""] ?? null
+            readonly property real frameRing: Config.options?.appearance?.fakeScreenRounding === 3 ? (Config.options?.appearance?.wrappedFrameThickness ?? 0) : 0
+            readonly property real islandReclaim: {
+                const island = dockRoot.barIsland;
+                if (!dockRoot.isFullWidth || !island || !(island.reserve > 0))
+                    return 0;
+                // Only a bar lying across the dock's axis leaves it a stretch to take.
+                const barIsHorizontal = island.edge === "top" || island.edge === "bottom";
+                if (barIsHorizontal !== dock.isVertical)
+                    return 0;
+                // The pill is centred across the dock's own cross axis.
+                const crossLen = dock.isVertical ? (dockRoot.screen?.width ?? 1920) : (dockRoot.screen?.height ?? 1080);
+                const mainLen = dock.isVertical ? (dockRoot.screen?.height ?? 1080) : (dockRoot.screen?.width ?? 1920);
+                const atFar = dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "right";
+                // A pinned dock shortens the bar's window from its own side, which
+                // moves the pill's centre away from the dock by half the zone.
+                const pinZone = (dock.pinned && dockRoot.reveal) ? dockRoot.unmagnifiedThickness : 0;
+                const centre = crossLen / 2 + (atFar ? -pinZone : pinZone) / 2;
+                // The band the dock fills across the screen: its tray plus the room its
+                // concave corners keep, inside the frame's ring.
+                const band = dockRoot.frameRing + dockRoot.radiusFreeThickness + dockRoot.concaveCornerRadius + 8;
+                const clear = atFar
+                    ? (centre + island.extent / 2 <= crossLen - band)
+                    : (centre - island.extent / 2 >= band);
+                if (!clear)
+                    return 0;
+                // Take back only what the compositor really withheld: a pinned dock
+                // is arranged ahead of the bar's zone and can already span the screen,
+                // where a negative margin would push it past the edge. Until the first
+                // configure, assume the usual case - the strip is withheld.
+                const natural = dock.isVertical ? dockRoot._naturalH : dockRoot._naturalW;
+                if (!(natural > 1))
+                    return island.reserve;
+                const full = mainLen - dockRoot.frameRing * 2;
+                return Math.max(0, Math.min(island.reserve, Math.round(full - natural)));
+            }
+
             implicitWidth: Math.max(1, dockRoot.sizing.dockWidth)
             implicitHeight: Math.max(1, dockRoot.sizing.dockHeight)
 
@@ -291,6 +345,14 @@ Scope {
                 bottom: dock.dockEffectivePosition !== "top"
                 left: dock.dockEffectivePosition !== "right"
                 right: dock.dockEffectivePosition !== "left"
+            }
+
+            // A negative margin gives back the strip the compositor took for the bar.
+            margins {
+                left: dockRoot.barIsland?.edge === "left" ? -Math.round(dockRoot.islandReclaim) : 0
+                right: dockRoot.barIsland?.edge === "right" ? -Math.round(dockRoot.islandReclaim) : 0
+                top: dockRoot.barIsland?.edge === "top" ? -Math.round(dockRoot.islandReclaim) : 0
+                bottom: dockRoot.barIsland?.edge === "bottom" ? -Math.round(dockRoot.islandReclaim) : 0
             }
 
             // Expose the raw window geometry for global gesture tracking,

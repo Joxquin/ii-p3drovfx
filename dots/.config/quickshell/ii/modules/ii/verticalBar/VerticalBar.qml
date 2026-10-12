@@ -85,6 +85,28 @@ Scope {
 
                     property var brightnessMonitor: Brightness.getMonitorForScreen(barLoader.modelData)
 
+                    // The Dynamic Island style reserves the whole strip but draws only a pill
+                    // centred in it: the dock reads what is really occupied to take the rest.
+                    // An autohiding bar animates its zone, so it publishes nothing to reclaim.
+                    QtObject {
+                        id: islandPublisher
+                        readonly property string screenName: barLoader.modelData ? barLoader.modelData.name : ""
+                        readonly property string edge: Config.options.bar.bottom ? "right" : "left"
+                        readonly property real extent: barContent.islandExtent
+                        readonly property real reserve: Config.options.bar.autoHide.enable ? 0
+                            : Math.max(0, Appearance.sizes.baseVerticalBarWidth - barSpaceReserver.minZone)
+
+                        function publish() {
+                            GlobalStates.setBarIsland(islandPublisher.screenName, islandPublisher.edge, islandPublisher.extent, islandPublisher.reserve);
+                        }
+
+                        onEdgeChanged: publish()
+                        onExtentChanged: publish()
+                        onReserveChanged: publish()
+                        Component.onCompleted: publish()
+                        Component.onDestruction: GlobalStates.setBarIsland(islandPublisher.screenName, "", 0, 0)
+                    }
+
                     property int monitorIndex: barLoader.monitorIndex
                     property bool hasActiveWindows: false
                     property bool showBarBackground: barRoot.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3

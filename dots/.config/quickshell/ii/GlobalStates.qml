@@ -828,6 +828,36 @@ Singleton {
         root.dockInsets = next;
     }
 
+    // What the Dynamic Island bar style really occupies of its edge, published by the
+    // real bar window (screen name -> { edge, extent, reserve }). The style reserves a
+    // full strip for windows but draws only a pill centred in it, so a full-width dock
+    // reads this to take the strip back where the pill is not.
+    //   extent  the pill's length along the edge, concave fillets included
+    //   reserve the strip's thickness beyond the wrapped frame's own ring
+    property var barIslands: ({})
+    function setBarIsland(screenName, edge, extent, reserve) {
+        if (!screenName)
+            return;
+        const prev = root.barIslands[screenName];
+        if (!edge || !(extent > 0)) {
+            if (!prev)
+                return;
+            const gone = Object.assign({}, root.barIslands);
+            delete gone[screenName];
+            root.barIslands = gone;
+            return;
+        }
+        // Whole pixels: the pill's height follows widgets that animate, and every
+        // publish wakes each dock's sizing.
+        const e = Math.round(extent);
+        const r = Math.round(reserve);
+        if (prev && prev.edge === edge && prev.extent === e && prev.reserve === r)
+            return;
+        const next = Object.assign({}, root.barIslands);
+        next[screenName] = { "edge": edge, "extent": e, "reserve": r };
+        root.barIslands = next;
+    }
+
     // The live docks, newest last: the Settings dock preview reads the first one's
     // model (`modelItems`) and helpers instead of deriving the dock's contents again.
     property var dockContents: []

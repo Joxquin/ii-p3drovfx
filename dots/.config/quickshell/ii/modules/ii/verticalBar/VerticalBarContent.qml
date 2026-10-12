@@ -84,6 +84,11 @@ Item { // Bar content region
     readonly property string barEdge: Config.options.bar.bottom ? "right" : "left"
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
+    // What the Dynamic Island pill takes of the edge: its height and the concave fillet
+    // it flares into the screen edge above and below. Read by the bar window, which
+    // publishes it for the dock (GlobalStates.barIslands).
+    readonly property real islandExtent: root.isDynamicIsland ? barBackground.height + 2 * barBackground.islandRadius : 0
+
     property color islandFillColor: Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
 
     // Background

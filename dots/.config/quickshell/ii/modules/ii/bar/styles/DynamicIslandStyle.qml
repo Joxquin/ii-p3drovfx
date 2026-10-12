@@ -54,6 +54,10 @@ Item {
 
     // Expose pill width back to BarContent
     readonly property real pillWidth: barBackground.width
+    // What the pill takes of the edge: its width and the concave fillet it flares into
+    // the screen edge on each side. Read by the bar window, which publishes it for the
+    // dock (GlobalStates.barIslands).
+    readonly property real islandExtent: barBackground.width > 0 ? barBackground.width + 2 * barBackground.islandRadius : 0
 
     // ── Combined mode: the bar and the island share the centre ───────────────
     // With this bar style *and* the island drawn in the bar centre, the island is the
