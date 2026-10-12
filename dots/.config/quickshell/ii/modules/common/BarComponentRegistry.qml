@@ -154,7 +154,23 @@ Singleton {
             icon: "monitor_heart",
             title: "System monitor",
             styleConfigKey: "resources",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Sculpt"),
+                    icon: "shapes",
+                    value: "sculpt"
+                }
+            ],
             configPage: "SystemMonitorConfig.qml"
         },
         {
@@ -371,7 +387,23 @@ Singleton {
             icon: "timer",
             title: "Timer & Pomodoro",
             styleConfigKey: "timer",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Sculpt"),
+                    icon: "shapes",
+                    value: "sculpt"
+                }
+            ],
             configPage: "IndicatorsConfig.qml"
         },
         {
@@ -399,6 +431,11 @@ Singleton {
                     displayName: qsTr("Tessera"),
                     icon: "view_module",
                     value: "tessera"
+                },
+                {
+                    displayName: qsTr("Sculpt"),
+                    icon: "shapes",
+                    value: "sculpt"
                 }
             ],
             configPage: "WeatherBarWidgetConfig.qml"

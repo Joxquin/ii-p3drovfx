@@ -53,7 +53,8 @@ class BarTimerWidgetContractTest(unittest.TestCase):
         self.assertIn('property string timer: "expressive"', config)
         timer_entry = component_registry.split('id: "timer"', 1)[1].split('id: "weather"', 1)[0]
         self.assertIn('styleConfigKey: "timer"', timer_entry)
-        self.assertIn("styleOptions: defaultStyleOptions", timer_entry)
+        for style in ("default", "expressive", "sculpt"):
+            self.assertIn(f'value: "{style}"', timer_entry)
         self.assertIn('case "timer":', style_registry)
         self.assertIn("ExpressiveTimerWidget", router)
         self.assertIn("vertical: rootItem.vertical", router)

@@ -13,6 +13,9 @@ SCULPT = {
     "search": ("search", ("SculptSearchBarWidget",), "SearchBarWidgetConfig.qml"),
     "dashboard_panel_button": ("dashboard", ("SculptDashboardPanelButton",), "DashboardButtonConfig.qml"),
     "keyboard_layout": ("keyboard", ("SculptKeyboardLayout",), "KeyboardLayoutConfig.qml"),
+    "weather": ("weather", ("SculptWeatherWidget",), "WeatherBarWidgetConfig.qml"),
+    "timer": ("timer", ("SculptTimerWidget",), "IndicatorsConfig.qml"),
+    "system_monitor": ("resources", ("SculptResources",), "SystemMonitorConfig.qml"),
 }
 
 DISPATCHERS = (
@@ -21,6 +24,9 @@ DISPATCHERS = (
     WIDGETS / "search/SculptSearchBarWidget.qml",
     WIDGETS / "dashboard/SculptDashboardPanelButton.qml",
     WIDGETS / "keyboard/SculptKeyboardLayout.qml",
+    WIDGETS / "weather/SculptWeatherWidget.qml",
+    WIDGETS / "timer/SculptTimerWidget.qml",
+    WIDGETS / "resources/SculptResources.qml",
 )
 FILES = tuple(sorted(WIDGETS.glob("*/Sculpt*.qml")))
 
@@ -31,6 +37,9 @@ VARIANTS = {
     "searchWidget": (("field", "display", "split"), "search/SculptSearchBarWidget.qml"),
     "dashboardButton": (("tile", "chip", "cluster"), "dashboard/SculptDashboardPanelButton.qml"),
     "keyboardLayout": (("selector", "carousel", "dial"), "keyboard/SculptKeyboardLayout.qml"),
+    "weatherWidget": (("poster", "stamp", "daylight"), "weather/SculptWeatherWidget.qml"),
+    "timers": (("squeeze", "fill", "phases"), "timer/SculptTimerWidget.qml"),
+    "resources": (("pressure", "bars", "trace"), "resources/SculptResources.qml"),
 }
 
 
@@ -54,8 +63,9 @@ class BarSculptWidgetsContractTest(unittest.TestCase):
         # The group chip would sit behind a surface the widget already draws.
         router = self.read("modules/ii/bar/BarComponent.qml")
         is_expressive = router.split("readonly property bool isExpressive:", 1)[1].split("readonly property bool isDefault", 1)[0]
-        for key in ("bluetooth", "keyboard"):
+        for key in ("bluetooth", "keyboard", "resources", "timer"):
             self.assertRegex(is_expressive, rf'styles\.{key} === "sculpt"')
+        self.assertIn('Config.options.bar.styles.weather === "sculpt"', is_expressive)
         self.assertIn('["expressive", "neural", "sculpt"].includes(Config.options.bar.styles.search)', is_expressive)
 
     def test_no_borders_raw_colours_or_loops(self):
@@ -87,6 +97,8 @@ class BarSculptWidgetsContractTest(unittest.TestCase):
     def test_animated_type_axes_go_through_blend(self):
         # Every distinct axes value opens a font face: animated axes must be snapped.
         for name in ("search/SculptSearchDisplay.qml", "bluetooth/SculptBluetoothRing.qml",
+                     "weather/SculptWeatherPoster.qml", "timer/SculptTimerSqueeze.qml",
+                     "resources/SculptResourcesPressure.qml",
                      "keyboard/SculptKeyboardSelector.qml", "dashboard/SculptDashboardPanelButton.qml"):
             self.assertIn("Appearance.font.variableAxes.blend(", (WIDGETS / name).read_text(encoding="utf-8"), name)
 
@@ -112,3 +124,18 @@ class BarSculptWidgetsContractTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SculptLiveValuesContractTest(unittest.TestCase):
+    def test_fast_values_never_rebuild_the_readouts(self):
+        # The stopwatch ticks every 10 ms and ResourceUsage samples constantly:
+        # the Repeaters walk stable keys and read values through a function.
+        for name, function in (("timer/SculptTimerWidget.qml", "entryFor"), ("resources/SculptResources.qml", "metricFor")):
+            source = (WIDGETS / name).read_text(encoding="utf-8")
+            self.assertIn("property var keys:", source)
+            self.assertIn(f"property var {function}: function", source)
+
+    def test_optional_metrics_are_only_sampled_while_shown(self):
+        source = (WIDGETS / "resources/SculptResources.qml").read_text(encoding="utf-8")
+        for metric in ("temperature", "disk", "swap"):
+            self.assertIn(f'ResourceUsage.requestMetric("{metric}", false)', source)

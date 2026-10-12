@@ -607,11 +607,11 @@ Item {
             return true;
         if (modelData.id === "utility_buttons" && Config.options.bar.styles.utilButtons !== "default")
             return true;
-        if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive" || Config.options.bar.styles.weather === "horizon" || Config.options.bar.styles.weather === "tessera"))
+        if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive" || Config.options.bar.styles.weather === "horizon" || Config.options.bar.styles.weather === "tessera" || Config.options.bar.styles.weather === "sculpt"))
             return true;
         if (modelData.id === "dashboard_panel_button" && Config.options.bar.styles.dashboard !== "default")
             return true;
-        if (modelData.id === "system_monitor" && Config.options.bar.styles.resources === "expressive")
+        if (modelData.id === "system_monitor" && (Config.options.bar.styles.resources === "expressive" || Config.options.bar.styles.resources === "sculpt"))
             return true;
         if (modelData.id === "policies_panel_button" && Config.options.bar.styles.policies !== "default")
             return true;
@@ -654,7 +654,7 @@ Item {
             return true;
         if (modelData.id === "date" && (Config.options.bar.styles.date === "expressive" || Config.options.bar.styles.date === "neural"))
             return true;
-        if (modelData.id === "timer" && Config.options.bar.styles.timer === "expressive")
+        if (modelData.id === "timer" && (Config.options.bar.styles.timer === "expressive" || Config.options.bar.styles.timer === "sculpt"))
             return true;
         if (modelData.id === "clock" && (Config.options.bar.styles.clock === "neural" || Config.options.bar.styles.clock === "relief"))
             return true;
@@ -820,6 +820,8 @@ Item {
         case "system_monitor":
             if (isExp)
                 return systemMonitorCompExpressive;
+            if (style === "sculpt")
+                return systemMonitorCompSculpt;
             return isVert ? systemMonitorCompVert : systemMonitorComp;
         case "clock":
             if (isExp)
@@ -862,6 +864,8 @@ Item {
                 return weatherCompHorizon;
             if (style === "tessera")
                 return weatherCompTessera;
+            if (style === "sculpt")
+                return weatherCompSculpt;
             return weatherComp;
         case "policies_panel_button":
             if (style === "outline")
@@ -908,6 +912,8 @@ Item {
         case "timer":
             if (isExp)
                 return timerCompExpressive;
+            if (style === "sculpt")
+                return timerCompSculpt;
             return isVert ? timerCompVert : timerComp;
         case "record_indicator":
             return recordIndicatorComp;
@@ -1384,6 +1390,24 @@ Item {
     Component {
         id: weatherCompTessera
         TesseraWeatherWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: weatherCompSculpt
+        SculptWeatherWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: timerCompSculpt
+        SculptTimerWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: systemMonitorCompSculpt
+        SculptResources {
             vertical: rootItem.vertical
         }
     }

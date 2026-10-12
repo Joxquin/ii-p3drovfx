@@ -4983,9 +4983,9 @@ Singleton {
                     property string notification: "default"
                     property string utilButtons: "expressive" // default | expressive | segments | sculpt
                     property string workspaces: "default" // default | minimal | expressive | dock | index
-                    property string weather: "expressive"
+                    property string weather: "expressive" // default | expressive | horizon | tessera | sculpt
                     property string dashboard: "expressive" // default | expressive | orbs | sculpt
-                    property string resources: "expressive"
+                    property string resources: "expressive" // default | expressive | sculpt
                     property string policies: "expressive" // default | expressive | outline
                     property string power: "expressive" // default | expressive | solid | dot
                     property string battery: "expressive"
@@ -4998,7 +4998,7 @@ Singleton {
                     property string aiPlanUsage: "expressive"
                     property string search: "default" // default | expressive | neural | sculpt
                     property string date: "default"
-                    property string timer: "expressive"
+                    property string timer: "expressive" // default | expressive | sculpt
                     property string recordIndicator: "expressive" // default | expressive | neural
                 }
 
@@ -5013,6 +5013,8 @@ Singleton {
                 property JsonObject weatherWidget: JsonObject {
                     property string horizonVariant: "balanced" // balanced | inverted | minimal
                     property string tesseraVariant: "paired" // paired | contrast | bare
+                    property string sculptVariant: "poster" // Sculpt style: poster | stamp | daylight
+                    property bool sculptShowDetails: true // Sculpt poster/daylight: condition, city, next sunrise/sunset
                     property string colorMode: "tonal" // Material pairs: tonal | vibrant | neutral
                 }
 
@@ -5191,6 +5193,8 @@ Singleton {
                 }
 
                 property JsonObject resources: JsonObject {
+                    property string colorMode: "primary" // Sculpt style colour
+                    property string sculptVariant: "pressure" // Sculpt style: pressure | bars | trace
                     property bool showPercentageText: true
                     property bool alwaysShowRam: true
                     property bool alwaysShowCpu: true
@@ -5345,6 +5349,7 @@ Singleton {
 
                 property JsonObject timers: JsonObject {
                     property string colorMode: "primary"
+                    property string sculptVariant: "squeeze" // Sculpt style: squeeze | fill | phases
                     property bool showPomodoro: true
                     property bool showStopwatch: true
                     property bool showCountdowns: true

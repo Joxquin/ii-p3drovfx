@@ -8,7 +8,8 @@ import qs.modules.common.widgets
  * `carousel` variant of the Sculpt keyboard layout — an M3 Expressive carousel.
  *
  * The current layout is the large item; the one a click switches to waits
- * beside it as the small item, cropped by its far edge. Switching moves the
+ * beside it as the small item: shorter, softer and set smaller, with the same
+ * margins around its code as the large one has. Switching moves the
  * carousel: the old code slides out of the large item, the new one slides in
  * from the side the small item sits on, and the small item takes the layout
  * after that. With one layout there is no small item.
@@ -31,7 +32,10 @@ Item {
     readonly property real heroLength: root.vertical
         ? Math.round(root.thickness * 0.92)
         : Math.max(Math.round(root.thickness * 1.25), Math.ceil(codeMetrics.implicitWidth) + 16)
-    readonly property real peekLength: root.hasMore ? Math.round(root.thickness * (root.vertical ? 0.6 : 0.55)) : 0
+    // Sized from its code, so it never cuts it.
+    readonly property real peekLength: !root.hasMore ? 0 : root.vertical
+        ? Math.ceil(peekText.implicitHeight) + 8
+        : Math.ceil(peekText.implicitWidth) + 14
     readonly property real itemRadius: Appearance.rounding.scale === 0 ? 0 : Math.round(root.thickness * 0.3)
 
     implicitWidth: root.vertical ? root.thickness : root.heroLength + (root.hasMore ? root.gap + root.peekLength : 0)
@@ -120,23 +124,26 @@ Item {
     Rectangle {
         id: peek
         visible: root.hasMore
-        x: root.vertical ? 0 : hero.width + root.gap
-        y: root.vertical ? hero.height + root.gap : 0
-        width: root.vertical ? root.thickness : root.peekLength
-        height: root.vertical ? root.peekLength : root.thickness
+        x: root.vertical ? 4 : hero.width + root.gap
+        y: root.vertical ? hero.height + root.gap : 4
+        width: root.vertical ? root.thickness - 8 : root.peekLength
+        height: root.vertical ? root.peekLength : root.thickness - 8
         radius: Math.min(root.itemRadius, Math.min(width, height) / 2)
         color: root.tones.colBackgroundVariant
-        clip: true
 
-        // Set at the large item's size and pinned to the edge that faces it,
-        // so the code is cut by the far edge rather than shrunk to fit.
         StyledText {
-            x: root.vertical ? Math.round((peek.width - width) / 2) : Math.round(peek.width * 0.28)
-            y: root.vertical ? Math.round(peek.height * 0.12) : Math.round((peek.height - height) / 2)
+            id: peekText
+            anchors.centerIn: parent
             text: root.nextCode
-            font: codeMetrics.font
             color: root.tones.colOnBackgroundVariant
             opacity: 0.85
+            font.family: Appearance.font.family.main
+            font.pixelSize: Math.round(root.thickness * (root.vertical ? 0.36 : 0.4))
+            font.variableAxes: ({
+                "wght": 600,
+                "wdth": 60,
+                "ROND": 100
+            })
         }
     }
 }
