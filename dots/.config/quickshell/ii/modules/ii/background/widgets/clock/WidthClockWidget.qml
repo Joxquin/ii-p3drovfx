@@ -73,7 +73,8 @@ AbstractBackgroundWidget {
     }
 
     function axes(width, weight) {
-        return { "wght": weight, "wdth": Math.round(width), "ROND": 100, "opsz": 144 };
+        // Width is quantised to 5-unit steps: a width per minute would open a font face each.
+        return { "wght": weight, "wdth": Math.round(width / 5) * 5, "ROND": 100, "opsz": 144 };
     }
 
     Item {

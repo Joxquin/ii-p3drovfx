@@ -9,6 +9,9 @@ StyledText {
     // values during animation can drop internal paths in Qt's variable-font
     // renderer after a parent scale transform.
     readonly property real truncatedFill: root.fill >= 0.5 ? 1 : 0
+    // The optical size snaps to Material's four standard sizes: every distinct value opens a
+    // new face of the font (an mmap of the whole file), and icon sizes animate.
+    readonly property int opticalSize: root.iconSize < 22 ? 20 : root.iconSize < 32 ? 24 : root.iconSize < 44 ? 40 : 48
 
     // True while this symbol or any ancestor is scaled or rotated (popup scale
     // multiplier, rotating shapes). The binding reads every ancestor's
@@ -40,7 +43,7 @@ StyledText {
         variableAxes: ({
                 "FILL": parseFloat(root.truncatedFill),
                 "wght": 400,
-                "opsz": Math.max(20, Math.min(48, iconSize))
+                "opsz": root.opticalSize
             })
     }
 

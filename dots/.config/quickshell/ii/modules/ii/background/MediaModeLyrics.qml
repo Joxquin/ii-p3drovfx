@@ -495,7 +495,7 @@ Item {
                 * root.focusReveal
             // Fixed font weight ensures glyph advances never shift, locking word wrap permanently.
             readonly property int weightAxis: root.focusedFontWeight
-            readonly property int gradeAxis: Math.round(root.focusedFontGrade * focusFactor / 5) * 5
+            readonly property int gradeAxis: Appearance.font.variableAxes.blend(0, root.focusedFontGrade, focusFactor)
             readonly property real depthOpacity: Math.max(root.minimumRowOpacity,
                 1 - distanceInRows * root.rowOpacityFalloff)
             readonly property var lineData: LyricsService.syncedLines[lyricRow.index] ?? null

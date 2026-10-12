@@ -164,8 +164,8 @@ Rectangle {
                 font.family: Appearance.font.family.main
                 font.pixelSize: Math.round(root.digitsSize)
                 font.variableAxes: ({
-                    "wght": root.wghtOff + (root.wghtOn - root.wghtOff) * root.weight,
-                    "wdth": root.wdthOff + (root.wdthOn - root.wdthOff) * root.weight,
+                    "wght": Appearance.font.variableAxes.blend(root.wghtOff, root.wghtOn, root.weight),
+                    "wdth": Appearance.font.variableAxes.blend(root.wdthOff, root.wdthOn, root.weight),
                     "ROND": 100
                 })
                 color: root.checked ? Appearance.colors.colPrimary : root.colContent

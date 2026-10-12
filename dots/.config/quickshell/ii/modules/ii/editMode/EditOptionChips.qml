@@ -204,10 +204,10 @@ ColumnLayout {
 
                 property real boldness: tile.current ? 1 : 0
                 readonly property var axes: {
-                    const t = Math.max(0, Math.min(1, tile.boldness));
+                    const t = tile.boldness;
                     return {
-                        "wght": Math.round(root.axesIdle.wght + (root.axesChosen.wght - root.axesIdle.wght) * t),
-                        "wdth": Math.round(root.axesIdle.wdth + (root.axesChosen.wdth - root.axesIdle.wdth) * t),
+                        "wght": Appearance.font.variableAxes.blend(root.axesIdle.wght, root.axesChosen.wght, t),
+                        "wdth": Appearance.font.variableAxes.blend(root.axesIdle.wdth, root.axesChosen.wdth, t),
                         "ROND": 100
                     };
                 }

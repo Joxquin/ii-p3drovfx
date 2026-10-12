@@ -23,6 +23,6 @@ StyledText {
     font.pixelSize: Math.round(root.sampleSize)
     font.variableAxes: ({
         "wght": root.weight,
-        "ROND": Math.max(root.rondOff, Math.min(root.rondOn, root.rond))
+        "ROND": Appearance.font.variableAxes.blend(root.rondOff, root.rondOn, (root.rond - root.rondOff) / (root.rondOn - root.rondOff))
     })
 }

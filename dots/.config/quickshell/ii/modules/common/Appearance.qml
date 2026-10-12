@@ -670,6 +670,25 @@ Singleton {
                     "wght": 550,
                     "ROND": 100
                 })
+
+            // Every distinct axes value makes Qt open a new FreeType face of the font: a
+            // fresh 4 MB mmap of the whole file (~1.4 MB resident, never shared in RSS) that
+            // the font cache only trims ~5 engines per 10 s. An axis that follows an animated
+            // value therefore creates one face per frame, hundreds per session (that was the
+            // 1.5 -> 2.2 GB regression). Interpolated axes must go through blend()/snap(),
+            // which keep the number of distinct values to steps + 1 per pair of endpoints.
+            readonly property int steps: 3
+            function snap(t: real): real {
+                return Math.round(Math.max(0, Math.min(1, t)) * steps) / steps;
+            }
+            function blend(from: real, to: real, t: real): real {
+                return Math.round(from + (to - from) * snap(t));
+            }
+            // For an axis that carries meaning along its whole range (a clock whose width
+            // tracks the minute): n steps instead of the shell-wide default.
+            function blendIn(from: real, to: real, t: real, n: int): real {
+                return Math.round(from + (to - from) * Math.round(Math.max(0, Math.min(1, t)) * n) / n);
+            }
         }
         property QtObject pixelSize: QtObject {
             property int smallest: 10

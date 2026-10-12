@@ -179,8 +179,8 @@ Item {
         }
         readonly property string text: String(Math.round(root.volume * 100))
         readonly property var axes: ({
-            "wght": 560 + 200 * boldness,
-            "wdth": 30 + 10 * boldness,
+            "wght": Appearance.font.variableAxes.blend(560, 760, boldness),
+            "wdth": Appearance.font.variableAxes.blend(30, 40, boldness),
             "ROND": 100
         })
         // Calibrated on the real font: how wide one digit is per pixel of size.

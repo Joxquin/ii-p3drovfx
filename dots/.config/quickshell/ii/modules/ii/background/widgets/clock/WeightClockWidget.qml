@@ -88,7 +88,7 @@ AbstractBackgroundWidget {
                 color: WidgetColorScheme.textColorOnBg
                 font.family: Appearance.font.family.main
                 font.pixelSize: root.figureSize
-                font.variableAxes: ({ "wght": Math.round(root.minuteWeight), "wdth": root.figureWidth, "ROND": 100, "opsz": 144 })
+                font.variableAxes: ({ "wght": Math.round(root.minuteWeight / 20) * 20, "wdth": root.figureWidth, "ROND": 100, "opsz": 144 })
                 renderType: Text.QtRendering
             }
 

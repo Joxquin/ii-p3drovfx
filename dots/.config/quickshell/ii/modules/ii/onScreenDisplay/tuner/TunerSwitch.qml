@@ -58,9 +58,11 @@ Item {
         property real size: root.ruler ? (selected ? 18 : 14) : (selected ? 22 : 15)
         property real weightAxis: (root.ruler || selected) ? 700 : 500
         font.pixelSize: size
-        font.weight: Math.round(weightAxis)
+        // Snapped: each distinct weight would open its own face of the variable font.
+        readonly property real weightSnapped: Appearance.font.variableAxes.blend(500, 700, (weightAxis - 500) / 200)
+        font.weight: weightSnapped
         font.variableAxes: root.ruler ? Appearance.font.variableAxes.main
-            : Object.assign({}, Appearance.font.variableAxes.main, { "wght": weightAxis })
+            : Object.assign({}, Appearance.font.variableAxes.main, { "wght": weightSnapped })
         font.letterSpacing: size * 0.08
         color: selected ? Appearance.colors.colPrimary : Appearance.colors.colOutline
     }

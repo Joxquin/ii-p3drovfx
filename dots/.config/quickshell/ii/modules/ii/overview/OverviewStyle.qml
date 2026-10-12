@@ -163,8 +163,8 @@ Singleton {
     readonly property real numberWidthBold: 46
     function numberAxes(boldness) {
         return {
-            "wght": Math.round(root.numberWeightIdle + (root.numberWeightBold - root.numberWeightIdle) * boldness),
-            "wdth": Math.round(root.numberWidthIdle + (root.numberWidthBold - root.numberWidthIdle) * boldness),
+            "wght": Appearance.font.variableAxes.blend(root.numberWeightIdle, root.numberWeightBold, boldness),
+            "wdth": Appearance.font.variableAxes.blend(root.numberWidthIdle, root.numberWidthBold, boldness),
             "ROND": 100
         };
     }

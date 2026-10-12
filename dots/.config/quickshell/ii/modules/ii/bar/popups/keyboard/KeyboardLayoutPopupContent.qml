@@ -283,8 +283,8 @@ ColumnLayout {
                         text: tile.modelData.toUpperCase()
                         font.family: Appearance.font.family.main
                         font.variableAxes: ({
-                            "wght": Math.round(500 + 280 * tile.emphasis),
-                            "wdth": Math.round(28 + 22 * tile.emphasis),
+                            "wght": Appearance.font.variableAxes.blend(500, 780, tile.emphasis),
+                            "wdth": Appearance.font.variableAxes.blend(28, 50, tile.emphasis),
                             "ROND": 100
                         })
                         font.pixelSize: 40

@@ -718,8 +718,8 @@ Item {
                                     font.family: Appearance.font.family.main
                                     font.pixelSize: 26
                                     font.variableAxes: ({
-                                        "wght": Math.round(560 + 200 * readout.boldness),
-                                        "wdth": Math.round(30 + 10 * readout.boldness),
+                                        "wght": Appearance.font.variableAxes.blend(560, 760, readout.boldness),
+                                        "wdth": Appearance.font.variableAxes.blend(30, 40, readout.boldness),
                                         "ROND": 100
                                     })
                                     color: Appearance.colors.colOnSecondaryContainer

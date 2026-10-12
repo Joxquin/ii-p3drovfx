@@ -1078,8 +1078,8 @@ ClockSheet {
                         text: tile.digits
                         font.family: ClockStyle.fontMain
                         font.variableAxes: ({
-                                "wght": 560 + 200 * tile.boldness,
-                                "wdth": 30 + 10 * tile.boldness,
+                                "wght": Appearance.font.variableAxes.blend(560, 760, tile.boldness),
+                                "wdth": Appearance.font.variableAxes.blend(30, 40, tile.boldness),
                                 "ROND": 100
                             })
                         font.pixelSize: tile.digitSize

@@ -104,7 +104,7 @@ AbstractBackgroundWidget {
                     font.family: Appearance.font.family.main
                     font.pixelSize: Math.round(root.minNumeralSize + (root.maxNumeralSize - root.minNumeralSize) * numeral.near)
                     font.variableAxes: ({
-                        "wght": Math.round(root.lightWeight + (root.heavyWeight - root.lightWeight) * numeral.near),
+                        "wght": Appearance.font.variableAxes.blend(root.lightWeight, root.heavyWeight, numeral.near),
                         "wdth": root.romanNumerals ? 70 : 90,
                         "ROND": 100,
                         "opsz": 144

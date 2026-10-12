@@ -118,8 +118,8 @@ WorkspacesPane {
                                 font.family: Appearance.font.family.main
                                 font.pixelSize: root.sampleSize
                                 font.variableAxes: ({
-                                    "wght": root.axesIdle.wght + (root.axesChosen.wght - root.axesIdle.wght) * card.boldness,
-                                    "wdth": root.axesIdle.wdth + (root.axesChosen.wdth - root.axesIdle.wdth) * card.boldness,
+                                    "wght": Appearance.font.variableAxes.blend(root.axesIdle.wght, root.axesChosen.wght, card.boldness),
+                                    "wdth": Appearance.font.variableAxes.blend(root.axesIdle.wdth, root.axesChosen.wdth, card.boldness),
                                     "ROND": root.axesIdle.ROND
                                 })
                                 color: card.colContent

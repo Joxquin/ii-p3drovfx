@@ -105,7 +105,7 @@ Rectangle {
                 text: root.value
                 font.family: Appearance.font.family.main
                 font.pixelSize: Math.round(root.digitsSize)
-                font.variableAxes: ({ "wght": Math.round(620 + 160 * root.boldness), "wdth": Math.round(34 + 10 * root.boldness), "ROND": 100 })
+                font.variableAxes: ({ "wght": Appearance.font.variableAxes.blend(620, 780, root.boldness), "wdth": Appearance.font.variableAxes.blend(34, 44, root.boldness), "ROND": 100 })
                 color: Appearance.colors.colPrimary
             }
             StyledText {

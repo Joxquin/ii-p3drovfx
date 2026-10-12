@@ -67,7 +67,7 @@ ExpressiveCardWidget {
             color: WidgetColorScheme.textColorOnPillFill
             font.family: Appearance.font.family.main
             font.pixelSize: root.numberSize
-            font.variableAxes: ({ "wght": Math.round(300 + 600 * root.easedLoad), "wdth": 40, "ROND": 100, "opsz": 144 })
+            font.variableAxes: ({ "wght": Appearance.font.variableAxes.blend(300, 900, root.easedLoad), "wdth": 40, "ROND": 100, "opsz": 144 })
             renderType: Text.QtRendering
         }
 

@@ -54,8 +54,8 @@ Rectangle {
         }
     }
     readonly property var digitAxes: ({
-        "wght": ClockStyle.axesDigits.wght + (ClockStyle.axesDigitsBold.wght - ClockStyle.axesDigits.wght) * root.boldness,
-        "wdth": ClockStyle.axesDigits.wdth + (ClockStyle.axesDigitsBold.wdth - ClockStyle.axesDigits.wdth) * root.boldness,
+        "wght": Appearance.font.variableAxes.blend(ClockStyle.axesDigits.wght, ClockStyle.axesDigitsBold.wght, root.boldness),
+        "wdth": Appearance.font.variableAxes.blend(ClockStyle.axesDigits.wdth, ClockStyle.axesDigitsBold.wdth, root.boldness),
         "ROND": 100
     })
     property color colDigits: root.colContent

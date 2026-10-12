@@ -878,7 +878,7 @@ RippleButton {
                                 // Weight eases up with the arrival accent instead
                                 // of swapping to bold.
                                 font.variableAxes: root.expressive && !monospaced
-                                    ? ({ "wght": Math.round(480 + 220 * Math.min(1, root.selectionAccent)), "ROND": 100 })
+                                    ? ({ "wght": Appearance.font.variableAxes.blend(480, 700, root.selectionAccent), "ROND": 100 })
                                     : Appearance.font.variableAxes.main
                                 color: root.colForeground
                                 horizontalAlignment: Text.AlignLeft

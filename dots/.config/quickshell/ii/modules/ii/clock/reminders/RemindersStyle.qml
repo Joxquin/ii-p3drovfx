@@ -67,8 +67,8 @@ Singleton {
         const from = ClockStyle.axesDigits;
         const to = ClockStyle.axesDigitsBold;
         return {
-            "wght": from.wght + (to.wght - from.wght) * boldness,
-            "wdth": from.wdth + (to.wdth - from.wdth) * boldness,
+            "wght": Appearance.font.variableAxes.blend(from.wght, to.wght, boldness),
+            "wdth": Appearance.font.variableAxes.blend(from.wdth, to.wdth, boldness),
             "ROND": 100
         };
     }

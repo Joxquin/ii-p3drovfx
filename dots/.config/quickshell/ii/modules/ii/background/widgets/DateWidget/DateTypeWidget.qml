@@ -64,8 +64,8 @@ AbstractBackgroundWidget {
         const n = Math.max(1, root.letters.length - 1);
         const t = root.heavyFirst ? index / n : 1 - index / n;
         return {
-            "wght": Math.round(root.heavyWeight + (root.lightWeight - root.heavyWeight) * t),
-            "wdth": Math.round(root.wideWidth + (root.narrowWidth - root.wideWidth) * t),
+            "wght": Appearance.font.variableAxes.blend(root.heavyWeight, root.lightWeight, t),
+            "wdth": Appearance.font.variableAxes.blend(root.wideWidth, root.narrowWidth, t),
             "ROND": 100,
             "opsz": 144
         };

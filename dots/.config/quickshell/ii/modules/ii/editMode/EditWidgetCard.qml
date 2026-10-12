@@ -63,7 +63,7 @@ EditDragArea {
     }
     function axis(name) {
         const from = root.titleAxesIdle[name];
-        return Math.round(from + (root.titleAxesEngaged[name] - from) * Math.max(0, Math.min(1, root.boldness)));
+        return Appearance.font.variableAxes.blend(from, root.titleAxesEngaged[name], root.boldness);
     }
     readonly property var shapePair: {
         const id = root.widget?.widgetId ?? "";
