@@ -25,9 +25,15 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE && systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE && systemctl --user start hyprland-session.target")
 
 
-    -- Audio (wait for Quickshell's tray watcher so EasyEffects registers its tray icon successfully)
+    -- Audio (wait for Quickshell's tray watcher so EasyEffects registers its tray icon successfully).
+    -- Which build runs follows Settings > Overlays (easyEffects.preferFlatpak), as in
+    -- services/EasyEffects.qml: the Flatpak when asked for or when it is the only one.
     hl.exec_cmd(
-        "until busctl --user status org.kde.StatusNotifierWatcher >/dev/null 2>&1; do sleep 0.2; done; easyeffects --hide-window --service-mode")
+        "until busctl --user status org.kde.StatusNotifierWatcher >/dev/null 2>&1; do sleep 0.2; done; "
+        .. "pf=$(jq -r '.easyEffects.preferFlatpak // false' ~/.config/illogical-impulse/config.json 2>/dev/null); "
+        .. "if flatpak info com.github.wwmm.easyeffects >/dev/null 2>&1 && { [ \"$pf\" = true ] || ! command -v easyeffects >/dev/null 2>&1; }; "
+        .. "then flatpak run --env=TMPDIR=$XDG_RUNTIME_DIR/app/com.github.wwmm.easyeffects com.github.wwmm.easyeffects --hide-window --service-mode; "
+        .. "else easyeffects --hide-window --service-mode; fi")
 
     -- Clipboard: history
     -- Kill existing instances

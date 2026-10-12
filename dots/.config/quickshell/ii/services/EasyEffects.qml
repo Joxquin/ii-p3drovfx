@@ -30,9 +30,17 @@ Singleton {
     id: root
 
     // ── Install ─────────────────────────────────────────────────────────
-    property bool available: false
-    property bool isFlatpak: false
-    property int majorVersion: 8
+    // Both builds can be installed at once (the distro package and the Flatpak, often at
+    // different versions); the setting picks one, and falls back to whichever exists.
+    property int nativeMajor: 0
+    property int flatpakMajor: 0
+    readonly property bool nativeInstalled: root.nativeMajor > 0
+    readonly property bool flatpakInstalled: root.flatpakMajor > 0
+    readonly property bool bothInstalled: root.nativeInstalled && root.flatpakInstalled
+    readonly property bool preferFlatpak: root.options?.preferFlatpak ?? false
+    readonly property bool available: root.nativeInstalled || root.flatpakInstalled
+    readonly property bool isFlatpak: root.flatpakInstalled && (root.preferFlatpak || !root.nativeInstalled)
+    readonly property int majorVersion: (root.isFlatpak ? root.flatpakMajor : root.nativeMajor) || 8
     readonly property string flatpakId: "com.github.wwmm.easyeffects"
 
     readonly property string home: Quickshell.env("HOME") ?? ""
@@ -46,6 +54,11 @@ Singleton {
             return root.sandboxRoot + (root.majorVersion >= 8 ? "/data" : "/config") + "/easyeffects";
         return (root.majorVersion >= 8 ? root.dataHome : root.configHome) + "/easyeffects";
     }
+    /// The Flatpak's /tmp is private, and EasyEffects puts its socket there, out of the
+    /// shell's reach. Pointing TMPDIR at the one folder the sandbox shares with the host
+    /// (xdg-run/app/<id>) puts the socket where socketCandidates looks first. Every run
+    /// has to carry it, the command line too, which finds the instance through that socket.
+    readonly property var flatpakRun: ["flatpak", "run", "--env=TMPDIR=" + root.runtimeDir + "/app/" + root.flatpakId, root.flatpakId]
     readonly property var socketCandidates: root.isFlatpak
         ? [root.runtimeDir + "/app/" + root.flatpakId + "/EasyEffectsServer", root.runtimeDir + "/EasyEffectsServer"]
         : [root.runtimeDir + "/EasyEffectsServer"]
@@ -136,7 +149,20 @@ Singleton {
         root._launchedHere = true;
         startTimeout.restart();
         const args = root.majorVersion >= 8 ? ["--service-mode", "--hide-window"] : ["--gapplication-service"];
-        Quickshell.execDetached(root.isFlatpak ? ["flatpak", "run", root.flatpakId].concat(args) : ["easyeffects"].concat(args));
+        Quickshell.execDetached(root.isFlatpak ? root.flatpakRun.concat(args) : ["easyeffects"].concat(args));
+    }
+
+    /// Pick the build to use. A running EasyEffects is the other one then, so it is stopped
+    /// and the chosen build started once its sink is gone.
+    function setPreferFlatpak(on: bool): void {
+        if (!root.options || on === root.preferFlatpak)
+            return;
+        const wasRunning = root.running;
+        root.options.preferFlatpak = on;
+        if (!wasRunning || !root.bothInstalled)
+            return;
+        root._restartOnSwitch = true;
+        root._job(["pkill", "-x", "easyeffects"], null);
     }
 
     function quit(): void {
@@ -148,11 +174,11 @@ Singleton {
 
     function openNativeWindow(): void {
         if (!root.running) {
-            Quickshell.execDetached(root.isFlatpak ? ["flatpak", "run", root.flatpakId] : ["easyeffects"]);
+            Quickshell.execDetached(root.isFlatpak ? root.flatpakRun : ["easyeffects"]);
             return;
         }
         if (!root._send("show_window"))
-            Quickshell.execDetached(root.isFlatpak ? ["flatpak", "run", root.flatpakId] : ["easyeffects"]);
+            Quickshell.execDetached(root.isFlatpak ? root.flatpakRun : ["easyeffects"]);
     }
 
     function setBypass(on: bool): void {
@@ -300,6 +326,10 @@ Singleton {
             root._dropSocket();
             root._socketIndex = 0;
             root._socketFailed = false;
+            if (root._restartOnSwitch) {
+                root._restartOnSwitch = false;
+                root.start();
+            }
             return;
         }
         root.starting = false;
@@ -360,6 +390,7 @@ Singleton {
     }
 
     property bool _launchedHere: false
+    property bool _restartOnSwitch: false
     Component.onCompleted: detectProc.running = true
 
     // Switching the default device switches the preset: the one saved for the new device
@@ -420,19 +451,22 @@ Singleton {
 
     Process {
         id: detectProc
+        // One "<build> <major>" line for each build that is installed.
         command: ["bash", "-c", "if command -v easyeffects >/dev/null 2>&1; then "
-            + "v=$(easyeffects --version 2>/dev/null | grep -o '[0-9]\\+' | head -1); echo \"native ${v:-8}\"; "
-            + "elif command -v flatpak >/dev/null 2>&1 && flatpak info com.github.wwmm.easyeffects >/dev/null 2>&1; then "
+            + "v=$(easyeffects --version 2>/dev/null | grep -o '[0-9]\\+' | head -1); echo \"native ${v:-8}\"; fi; "
+            + "if command -v flatpak >/dev/null 2>&1 && flatpak info com.github.wwmm.easyeffects >/dev/null 2>&1; then "
             + "v=$(flatpak info com.github.wwmm.easyeffects 2>/dev/null | awk '/Version:/{print $2}' | cut -d. -f1); "
-            + "echo \"flatpak ${v:-8}\"; else echo none; fi"]
+            + "echo \"flatpak ${v:-8}\"; fi"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const parts = String(this.text).trim().split(/\s+/);
-                if (parts[0] !== "native" && parts[0] !== "flatpak")
-                    return;
-                root.isFlatpak = parts[0] === "flatpak";
-                root.majorVersion = parseInt(parts[1], 10) || 8;
-                root.available = true;
+                for (const line of String(this.text).trim().split("\n")) {
+                    const parts = line.trim().split(/\s+/);
+                    const major = parseInt(parts[1], 10) || 8;
+                    if (parts[0] === "native")
+                        root.nativeMajor = major;
+                    else if (parts[0] === "flatpak")
+                        root.flatpakMajor = major;
+                }
             }
         }
     }
@@ -756,7 +790,7 @@ Singleton {
     }
 
     function _cli(args: var): void {
-        const base = root.isFlatpak ? ["flatpak", "run", root.flatpakId] : ["easyeffects"];
+        const base = root.isFlatpak ? root.flatpakRun : ["easyeffects"];
         Quickshell.execDetached(base.concat(args));
     }
 

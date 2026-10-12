@@ -1,20 +1,56 @@
-# [ Quickshell/II ]
+<div align="center">
 
-Premium Material 3 / Material You dotfiles for Hyprland, powered by Quickshell.
+<img src="assets/readme/logo-banner.png" alt="ii-p3drovfx" />
 
-## System Preview
+<br><br>
 
-<img width="1924" height="1095" alt="SCreenshots_ii-p3drovfx" src="https://github.com/user-attachments/assets/dd08c71b-0965-4f9c-9c58-01271fd24e67" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/subtitle-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="assets/readme/subtitle-light.png" />
+  <img src="assets/readme/subtitle-dark.png" width="692" alt="A material 3 expressive shell for Hyprland" />
+</picture>
 
+<br><br>
 
-## Overview
+<!-- PLACEHOLDER — hero video (20 s, presets switching in Edit Mode).
+     Edit this file on github.com, drag the .mp4 onto the line below and keep the
+     https://github.com/user-attachments/assets/… URL GitHub writes there, alone on its line. -->
 
-This repository is a heavily customized fork of **[ii-vynx](https://github.com/vaguesyntax/ii-vynx)**, which itself is based on **[illogical-impulse](https://github.com/end-4/dots-hyprland)**. **This is my personal customization. It's not focused on performance or stability — if you use it, expect a lot of bugs.** If you find one, please open an issue or report it in the ii-p3drovfx thread inside **[end-4 discord](https://discord.gg/GtdRBXgMwq)**. I also accept PRs.
+HERO_VIDEO_URL
 
-It aims to provide a state-of-the-art Linux desktop experience by strictly adhering to **Material 3 (Material You)** design principles, featuring dynamic theming via Matugen and a highly modular architecture built on **Quickshell**.
+</div>
 
-> [!NOTE]
-> This repository is a work in progress. Some modules, like the Gmail client, require manual setup of API keys.
+<br>
+
+A heavily customized fork of **[ii-vynx](https://github.com/vaguesyntax/ii-vynx)**, itself built on **[illogical-impulse](https://github.com/end-4/dots-hyprland)**. Every surface follows **Material 3 Expressive**: shapes that morph with state, variable type that carries the hierarchy, and a palette generated from your wallpaper by Matugen. It runs on **[Quickshell](https://quickshell.org/)** and **[Hyprland](https://hypr.land/)**.
+
+> [!WARNING]
+> This is my personal setup. It isn't focused on performance or stability, so expect bugs. Report them in an issue or in the ii-p3drovfx thread on the **[end-4 Discord](https://discord.gg/GtdRBXgMwq)**. PRs are welcome.
+
+## Built-in apps
+
+<!-- PLACEHOLDER — bento grid 1 (Figma): Clock, EasyEffects, Modes & Routines, App usage,
+     Cheatsheet: Timetable, Keybinds, Typing test, Dev tools.
+     Export at 1840 px wide, one dark and one light version:
+     assets/readme/bento-apps-dark.png / assets/readme/bento-apps-light.png -->
+<picture>
+  <img src="assets/readme/bento-grid1.png" width="100%" alt="Clock, EasyEffects, Modes & Routines, App usage, and the Cheatsheet's Timetable, Keybinds, Typing test and Dev tools" />
+</picture>
+
+**Clock** has alarms, world clock, timers, pomodoro and bedtime. **EasyEffects** has presets and effects for every output. **Modes & Routines** runs your automations, and **App usage** tracks screen time and daily limits. The **Cheatsheet** holds a calendar that syncs with Google, Outlook and ICS, an editable keybind library, a typing test and offline developer tools.
+
+## Lock screen & theming
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/readme/lockscreen-aod.gif" width="100%" alt="Locking the session, switching to Always On Display and unlocking" /></td>
+    <td width="50%"><img src="assets/readme/wallpaper-theming.gif" width="100%" alt="Changing wallpapers recolours the whole shell" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Lock screen & Always On Display</b><br><sub>Desktop widgets follow you onto the lock screen. The AOD keeps them on a black screen.</sub></td>
+    <td align="center"><b>A palette for every wallpaper</b><br><sub>Matugen schemes or built-in themes, applied across the bar, island, widgets and apps.</sub></td>
+  </tr>
+</table>
 
 ## Requirements
 
@@ -26,7 +62,7 @@ It aims to provide a state-of-the-art Linux desktop experience by strictly adher
 
 ### Default installation
 
-Use this if you don't have illogical-impulse already installed. It sets up the base
+Use this if you don't have illogical-impulse installed yet. It sets up the base
 dotfiles and everything they need, then puts my config on top.
 
 ```bash
@@ -35,10 +71,10 @@ cd ii-p3drovfx
 ./setup-ii-p3drovfx.sh install
 ```
 
-### Minimal installation (only quickshell config)
+### Minimal installation (Quickshell config only)
 
-Use this if illogical-impulse is already working and you only want my Quickshell config.
-Nothing else is touched, and your current config is moved to a backup rather than deleted.
+Use this if illogical-impulse already works and you only want my Quickshell config.
+Nothing else is touched, and your current config is moved to a backup instead of deleted.
 
 ```bash
 git clone --recurse-submodules https://github.com/P3DROVFX/ii-p3drovfx.git
@@ -46,9 +82,12 @@ cd ii-p3drovfx
 ./setup-ii-p3drovfx.sh
 ```
 
+> [!NOTE]
+> Some modules, like the Gmail client, need API keys set up by hand.
+
 ## Documentation
 
-Please refer to the **[ii-p3drovfx wiki](https://github.com/P3DROVFX/ii-p3drovfx/wiki)** for detailed component descriptions.
+The **[ii-p3drovfx wiki](https://github.com/P3DROVFX/ii-p3drovfx/wiki)** describes every component in detail.
 
 <details> <summary><strong>🛠 Common Issues</strong></summary>
 
@@ -138,6 +177,38 @@ You can check that it is running with `pgrep -x sni_watcher`. Apps whose icon is
 
 </details>
 
+## Sidebars
+
+<!-- PLACEHOLDER — bento grid 2 (Figma): AI chat, Translator, Phone, sidebar dashboard.
+     Export at 1840 px wide, dark and light:
+     assets/readme/bento-sidebars-dark.png / assets/readme/bento-sidebars-light.png -->
+<picture>
+  <img src="assets/readme/sidebars.png" width="100%" alt="Sidebars: AI chat, Translator, Phone and the dashboard" />
+</picture>
+
+The left sidebar holds an **AI chat** for cloud and local models, a **Translator** with alternatives and audio, and your **phone**: notifications, files, clipboard and a live screen mirror you can touch. The right sidebar is the **dashboard**, with quick toggles, audio, network and notifications.
+
+## Everyday tools
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/readme/island.gif" width="100%" alt="Hovering the Dynamic Island reveals its dashboard" /></td>
+    <td width="50%"><img src="assets/readme/search.gif" width="100%" alt="Search evaluating math and conversions" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Dynamic Island</b><br><sub>Media, activities and OSDs live in the notch. Hover it to open the dashboard.</sub></td>
+    <td align="center"><b>Search</b><br><sub>Apps, math, unit and currency conversion, commands and AI, with no prefixes.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/readme/settings.gif" width="100%" alt="Navigating the redesigned Settings pages" /></td>
+    <td width="50%"><img src="assets/readme/livedraw.gif" width="100%" alt="Drawing on top of the screen with Live Draw" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Settings</b><br><sub>Every page previews the real component as you change it.</sub></td>
+    <td align="center"><b>Live Draw</b><br><sub>Annotate anything on screen, spotlight and zoom, then save or copy it.</sub></td>
+  </tr>
+</table>
+
 ## Credits
 
 - **[end-4](https://github.com/end-4):** Creator of illogical-impulse.
@@ -145,14 +216,14 @@ You can check that it is running with `pgrep -x sni_watcher`. Apps whose icon is
 - **[pc-trade](https://github.com/pctrade):** Some design and features inspo.
 - **[so-do-i-look-like-him](https://github.com/so-do-i-look-like-him):** Installation bug fixes.
 - **[asteriau](https://github.com/asteriau):** Cheatsheet keybinds animations.
-- **[hnpf](https://github.com/hnpf):** Nothing widgets design
+- **[hnpf](https://github.com/hnpf):** Nothing widgets design.
 - **[gowall](https://github.com/Achno/gowall):** Dynamic icons theme system.
 - **[hyprmon](https://github.com/erans/hyprmon):** Monitor management in settings.
 - **[Quickshell](https://quickshell.org/):** Widget system.
 - **[Hyprland](https://hypr.land/):** Compositor.
 
----
+<br>
 
 <div align="center">
-    <p><b>If you like this project, consider giving it a star! ⭐</b></p>
+  <b>If you like this project, consider giving it a star! ⭐</b>
 </div>

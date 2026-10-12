@@ -6356,6 +6356,9 @@ Singleton {
              */
             property JsonObject easyEffects: JsonObject {
                 property bool appEnable: true
+                // Which build to run when both are installed: the distro package (false) or
+                // the Flatpak. Also read by the Hyprland autostart (hyprland/execs.lua).
+                property bool preferFlatpak: false
                 property string startTab: "last" // "last" | "presets" | "effects" | "devices"
                 // What the quick switchers cycle: "device" keeps to the family of the output
                 // device's default preset ("A50 · Music" -> every "A50 · …"), "all" is every preset.

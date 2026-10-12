@@ -119,6 +119,23 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                visible: EasyEffects.bothInstalled
+                buttonIcon: "deployed_code"
+                text: Translation.tr("Use the Flatpak build")
+                description: EasyEffects.preferFlatpak
+                    ? Translation.tr("Running the Flatpak (%1). Off uses the distro package (%2).").arg(EasyEffects.flatpakMajor).arg(EasyEffects.nativeMajor)
+                    : Translation.tr("Running the distro package (%1). On uses the Flatpak (%2).").arg(EasyEffects.nativeMajor).arg(EasyEffects.flatpakMajor)
+                checked: EasyEffects.preferFlatpak
+                onCheckedChanged: {
+                    if (Config.ready)
+                        EasyEffects.setPreferFlatpak(checked);
+                }
+                StyledToolTip {
+                    text: Translation.tr("Both builds are installed. Switching restarts EasyEffects if it is running.")
+                }
+            }
+
             KeyboardShortcutBox {
                 Layout.fillWidth: true
                 text: Translation.tr("Toggle EasyEffects app")

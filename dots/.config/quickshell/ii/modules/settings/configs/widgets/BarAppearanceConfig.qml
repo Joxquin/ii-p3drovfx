@@ -82,11 +82,47 @@ Item {
         }
     }
 
+    // ── Back button and title (only when opened as a sub-page) ────────────
+    RowLayout {
+        id: header
+        anchors {
+            top: parent.top
+            left: parent.left
+            right: parent.right
+        }
+        height: root.showBackButton ? implicitHeight : 0
+        visible: root.showBackButton
+        spacing: Appearance.sizes.elevationMargin
+        z: 5
+        RippleButton {
+            implicitWidth: Appearance.sizes.elevationMargin * 4
+            implicitHeight: implicitWidth
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: root.goBack()
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "arrow_back"
+                iconSize: Appearance.font.pixelSize.large
+                color: Appearance.colors.colOnSecondaryContainer
+            }
+        }
+        StyledText {
+            text: Translation.tr("Bar appearance")
+            font.pixelSize: Appearance.font.pixelSize.large
+            font.family: Appearance.font.family.title
+            color: Appearance.colors.colOnLayer0
+        }
+    }
+
     // ── The bar, live and pinned ──────────────────────────────────────────
     Item {
         id: hero
         anchors {
-            top: parent.top
+            top: header.bottom
+            topMargin: root.showBackButton ? root.gap : 0
             left: parent.left
             right: parent.right
         }
