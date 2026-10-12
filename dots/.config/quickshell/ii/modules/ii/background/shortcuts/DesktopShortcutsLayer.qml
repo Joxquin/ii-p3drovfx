@@ -52,6 +52,54 @@ Item {
     readonly property real iconSize: DesktopShortcuts.iconSize
     readonly property var options: Config.options.background.desktopIcons
     readonly property bool autoArrange: root.options.autoArrange ?? false
+    readonly property var groups: root.options.groups ?? []
+    readonly property bool shelf: root.options.shelf ?? false
+    readonly property bool iconShadow: root.options.iconShadow ?? false
+
+    // ── Launch pad: groups, captions, the shelf ────────────────────────────
+    // A group names its members (entry name or path) in the config; its box
+    // is the union of their cells, from the stored positions, so a dragged
+    // member takes its caption along when it lands. The shelf is one glass
+    // panel - the widgets' card surface - around every group, with a band on
+    // top for the captions. Icons in no group draw bare.
+    readonly property real captionSize: Math.round(root.labelSize * 0.85)
+    readonly property real captionBand: root.captionSize + 16
+    readonly property real shelfPad: 12
+    readonly property var groupBoxes: {
+        const out = [];
+        for (const g of root.groups) {
+            const names = Array.isArray(g?.items) ? g.items : [];
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+            for (const entry of root.items) {
+                if (!names.includes(entry.name) && !names.includes(entry.path) && !names.includes(entry.fileName))
+                    continue;
+                const p = root.positionAt(entry.x, entry.y);
+                x0 = Math.min(x0, p.x);
+                y0 = Math.min(y0, p.y);
+                x1 = Math.max(x1, p.x + root.cellWidth);
+                y1 = Math.max(y1, p.y + root.cellHeight);
+            }
+            if (x0 !== Infinity)
+                out.push({ "title": String(g?.title ?? ""), "x": x0, "y": y0, "width": x1 - x0, "height": y1 - y0 });
+        }
+        return out;
+    }
+    readonly property bool captioned: root.groupBoxes.some(b => b.title !== "")
+    readonly property rect shelfRect: {
+        const boxes = root.groupBoxes;
+        if (!root.shelf || boxes.length === 0)
+            return Qt.rect(0, 0, 0, 0);
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const b of boxes) {
+            x0 = Math.min(x0, b.x);
+            y0 = Math.min(y0, b.y);
+            x1 = Math.max(x1, b.x + b.width);
+            y1 = Math.max(y1, b.y + b.height);
+        }
+        const band = root.captioned ? root.captionBand : 0;
+        return Qt.rect(x0 - root.shelfPad, y0 - root.shelfPad - band,
+            x1 - x0 + root.shelfPad * 2, y1 - y0 + root.shelfPad * 2 + band);
+    }
     // A clean desktop: the icons fade out and stop taking input; the store
     // is untouched. Coming back replays the entrance wave.
     readonly property bool iconsHidden: DesktopShortcuts.hidden
@@ -684,6 +732,88 @@ Item {
         }
     }
 
+    // The shelf: the widgets' card surface, so the launch pad and the cards
+    // read as one family; the compositor blurs behind it as behind them.
+    StyledRectangularShadow {
+        target: shelfPlate
+        visible: shelfPlate.visible && (Config.options.background.widgets.enableShadows ?? true)
+    }
+    Rectangle {
+        id: shelfPlate
+        visible: root.shelf && root.shelfRect.width > 0
+        x: root.shelfRect.x
+        y: root.shelfRect.y
+        width: root.shelfRect.width
+        height: root.shelfRect.height
+        radius: Appearance.rounding.windowRounding
+        color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
+
+        Behavior on x {
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        }
+        Behavior on y {
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        }
+        Behavior on width {
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        }
+        Behavior on height {
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        }
+    }
+    // Captions: each group's title in small caps on the primary, a hairline
+    // running on to the group's far edge.
+    Repeater {
+        model: root.groupBoxes
+        delegate: Item {
+            id: caption
+            required property var modelData
+            visible: caption.modelData.title !== ""
+            x: caption.modelData.x + 10
+            y: caption.modelData.y - root.captionBand + 6
+            width: Math.max(0, caption.modelData.width - 20)
+            height: root.captionSize + 4
+
+            Behavior on x {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            }
+            Behavior on y {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            }
+
+            StyledText {
+                id: captionText
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: caption.modelData.title
+                font.family: Appearance.font.family.title
+                font.pixelSize: root.captionSize
+                font.weight: Font.DemiBold
+                font.capitalization: Font.AllUppercase
+                font.letterSpacing: root.captionSize * 0.14
+                color: Appearance.colors.colPrimary
+                // Off the shelf, the same halo the labels read by.
+                layer.enabled: !root.shelf
+                layer.effect: GE.DropShadow {
+                    radius: Math.max(4, Math.round(root.captionSize * 0.45))
+                    samples: radius * 2 + 1
+                    spread: 0.3
+                    verticalOffset: 1
+                    color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.35)
+                    transparentBorder: true
+                }
+            }
+            Rectangle {
+                anchors.left: captionText.right
+                anchors.leftMargin: 10
+                anchors.right: parent.right
+                anchors.verticalCenter: captionText.verticalCenter
+                height: 1
+                color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.6)
+            }
+        }
+    }
+
     Repeater {
         id: iconRepeater
         model: iconModel
@@ -706,6 +836,11 @@ Item {
             readonly property bool groupMember: groupDrag.active && !tile.dragging
                 && entry.id !== groupDrag.leaderId && groupDrag.ids.indexOf(entry.id) !== -1
             readonly property bool hovered: tileHover.hovered
+            // The hover's lift, with the shadow on: 4 px up, back on leave.
+            property real lift: root.iconShadow && tile.hovered && !tile.dragging ? 4 : 0
+            Behavior on lift {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(tile)
+            }
 
             // ── Motion ─────────────────────────────────────────────────────
             // The tile is drawn at its stored cell plus an offset that glides
@@ -999,9 +1134,9 @@ Item {
                         x: root.systemDragging ? 0 : tile.dragging ? tile.pending.x - tile.x : (tile.groupMember ? groupDrag.dx : 0)
                         y: root.systemDragging ? 0 : tile.dragging ? tile.pending.y - tile.y : (tile.groupMember ? groupDrag.dy : 0)
                     },
-                    // The entrance's rise.
+                    // The entrance's rise, and the hover's lift.
                     Translate {
-                        y: (1 - tile.intro) * 14
+                        y: (1 - tile.intro) * 14 - tile.lift
                     }
                 ]
                 // Selection: a filled tonal plate, no outline.
@@ -1178,6 +1313,33 @@ Item {
                         // desktop). Mipmapping keeps their edges clean.
                         mipmap: true
                         source: DesktopShortcuts.iconSource(tile.entry.icon, tile.entry.type === "file" ? "text-x-generic" : "folder")
+
+                        // A soft shadow under the picture; hovering warms it
+                        // into a glow of the primary while the tile lifts.
+                        readonly property bool lit: root.iconShadow && tile.hovered && !tile.dragging
+                        layer.enabled: root.iconShadow
+                        layer.effect: GE.DropShadow {
+                            radius: glyphIcon.lit ? 20 : 12
+                            samples: 41
+                            spread: glyphIcon.lit ? 0.3 : 0.12
+                            verticalOffset: glyphIcon.lit ? 0 : 3
+                            color: glyphIcon.lit ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.3)
+                                : ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.5)
+                            transparentBorder: true
+
+                            Behavior on radius {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                            Behavior on spread {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                            Behavior on verticalOffset {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                            Behavior on color {
+                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                            }
+                        }
 
                         // A folder shows what is in it, as Dolphin does: up
                         // to four pictures on the folder's front, one alone
