@@ -68,7 +68,9 @@ Item {
     readonly property var groupBoxes: {
         const out = [];
         for (const g of root.groups) {
-            const names = Array.isArray(g?.items) ? g.items : [];
+            // A list out of the config arrives as a QML sequence, not an
+            // Array: Array.from gives it includes().
+            const names = Array.from(g?.items ?? []);
             let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
             for (const entry of root.items) {
                 if (!names.includes(entry.name) && !names.includes(entry.path) && !names.includes(entry.fileName))
