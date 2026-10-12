@@ -56,24 +56,49 @@ Item {
     readonly property bool shelf: root.options.shelf ?? false
     readonly property bool iconShadow: root.options.iconShadow ?? false
 
-    // ── Launch pad: groups, captions, the shelf ────────────────────────────
-    // A group names its members (entry name or path) in the config; its box
-    // is the union of their cells, from the stored positions, so a dragged
-    // member takes its caption along when it lands. The shelf is one glass
-    // panel - the widgets' card surface - around every group, with a band on
-    // top for the captions. Icons in no group draw bare.
+    // ── Launch pad: sections, captions, cards ──────────────────────────────
+    // A section (config `groups`: {title, items}) names its members by entry
+    // name or path. Each is laid out as one rectangle - rows of
+    // `groupColumns` cells - and the sections stack down from the stack's
+    // top-left, each on its own glass card (the widgets' card surface) with
+    // its caption in a band on top. Icons in no section draw bare.
+    //
+    // Membership follows the hand: a tile dropped on a card joins that
+    // section, one dropped off every card leaves its own (its whole section
+    // dragged along keeps it). Every change - a drop, the menu's Section
+    // page, an edit of the config - reflows the stack, so the cards stay
+    // rectangles and never overlap.
     readonly property real captionSize: Math.round(root.labelSize * 0.85)
     readonly property real captionBand: root.captionSize + 16
     readonly property real shelfPad: 12
-    readonly property var groupBoxes: {
+    readonly property int sectionColumns: Math.max(1, root.options.groupColumns ?? 3)
+    // Inside a card rows sit 10 px apart; two cards keep their pads, the
+    // caption band and a 16 px gap between them, on the 10 px snap.
+    readonly property real sectionRowGap: 10
+    readonly property real sectionGap: Math.ceil((root.shelfPad * 2 + root.captionBand + 16) / 10) * 10
+    // A list out of the config arrives as a QML sequence, not an Array:
+    // Array.from gives it includes().
+    function memberOf(group, entry) {
+        const names = Array.from(group?.items ?? []);
+        return names.includes(entry.name) || names.includes(entry.path) || names.includes(entry.fileName);
+    }
+    function sectionIndexOf(entry) {
+        for (let i = 0; i < root.groups.length; ++i) {
+            if (root.memberOf(root.groups[i], entry))
+                return i;
+        }
+        return -1;
+    }
+    // Each section's cell box and card, from the stored positions, leaving
+    // out `exceptIds` (a Set, or null): a drop is judged against the cards of
+    // what stayed put.
+    function boxesFor(exceptIds) {
         const out = [];
-        for (const g of root.groups) {
-            // A list out of the config arrives as a QML sequence, not an
-            // Array: Array.from gives it includes().
-            const names = Array.from(g?.items ?? []);
+        for (let i = 0; i < root.groups.length; ++i) {
+            const g = root.groups[i];
             let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
             for (const entry of root.items) {
-                if (!names.includes(entry.name) && !names.includes(entry.path) && !names.includes(entry.fileName))
+                if ((exceptIds && exceptIds.has(entry.id)) || !root.memberOf(g, entry))
                     continue;
                 const p = root.positionAt(entry.x, entry.y);
                 x0 = Math.min(x0, p.x);
@@ -81,26 +106,161 @@ Item {
                 x1 = Math.max(x1, p.x + root.cellWidth);
                 y1 = Math.max(y1, p.y + root.cellHeight);
             }
-            if (x0 !== Infinity)
-                out.push({ "title": String(g?.title ?? ""), "x": x0, "y": y0, "width": x1 - x0, "height": y1 - y0 });
+            if (x0 === Infinity)
+                continue;
+            const title = String(g?.title ?? "");
+            const band = title !== "" ? root.captionBand : 0;
+            out.push({ "index": i, "title": title, "x": x0, "y": y0, "width": x1 - x0, "height": y1 - y0,
+                "card": Qt.rect(x0 - root.shelfPad, y0 - root.shelfPad - band,
+                    x1 - x0 + root.shelfPad * 2, y1 - y0 + root.shelfPad * 2 + band) });
         }
         return out;
     }
-    readonly property bool captioned: root.groupBoxes.some(b => b.title !== "")
-    readonly property rect shelfRect: {
-        const boxes = root.groupBoxes;
-        if (!root.shelf || boxes.length === 0)
-            return Qt.rect(0, 0, 0, 0);
-        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-        for (const b of boxes) {
-            x0 = Math.min(x0, b.x);
-            y0 = Math.min(y0, b.y);
-            x1 = Math.max(x1, b.x + b.width);
-            y1 = Math.max(y1, b.y + b.height);
+    readonly property var groupBoxes: root.boxesFor(null)
+    function sectionAt(x, y, exceptIds) {
+        const hit = root.boxesFor(exceptIds).find(b => x >= b.card.x && x < b.card.x + b.card.width
+            && y >= b.card.y && y < b.card.y + b.card.height);
+        return hit ? hit.index : -1;
+    }
+    // The card a dragged tile would join, lit while it is over it.
+    property int dropSection: -1
+
+    // Plain copies of the config's sections, safe to edit and write back.
+    function sectionsCopy() {
+        return Array.from(root.groups).map(g => ({ "title": String(g?.title ?? ""), "items": Array.from(g?.items ?? []).map(String) }));
+    }
+    function dropMember(sections, entry) {
+        for (const s of sections)
+            s.items = s.items.filter(n => n !== entry.name && n !== entry.path && n !== entry.fileName);
+    }
+
+    // Tiles just dropped (`landed`: id -> {x, y}): membership by the card
+    // under each tile's centre, then the reflow. False when nothing about
+    // the sections is touched - the caller then writes the plain move.
+    function settleSections(landed) {
+        if (root.groups.length === 0)
+            return false;
+        const moved = new Set(Object.keys(landed));
+        const staying = root.boxesFor(moved);
+        const sections = root.sectionsCopy();
+        let touched = false;
+        for (const entry of root.items) {
+            if (!moved.has(entry.id))
+                continue;
+            const p = landed[entry.id];
+            const cx = p.x + root.cellWidth / 2;
+            const cy = p.y + root.cellHeight / 2;
+            const hit = staying.find(b => cx >= b.card.x && cx < b.card.x + b.card.width
+                && cy >= b.card.y && cy < b.card.y + b.card.height);
+            const current = root.sectionIndexOf(entry);
+            const sectionMoved = current >= 0 && !staying.some(b => b.index === current);
+            const target = hit ? hit.index : (sectionMoved ? current : -1);
+            if (current >= 0 || target >= 0)
+                touched = true;
+            if (target === current)
+                continue;
+            root.dropMember(sections, entry);
+            if (target >= 0)
+                sections[target].items.push(entry.name || entry.fileName || entry.path);
         }
-        const band = root.captioned ? root.captionBand : 0;
-        return Qt.rect(x0 - root.shelfPad, y0 - root.shelfPad - band,
-            x1 - x0 + root.shelfPad * 2, y1 - y0 + root.shelfPad * 2 + band);
+        if (!touched)
+            return false;
+        root.reflowSections(sections.filter(s => s.items.length > 0), landed);
+        return true;
+    }
+
+    // The menu's Section page: `title` "" takes the tiles out of every
+    // section; an unknown title starts a new one at the bottom of the stack.
+    function moveToSection(ids, title) {
+        const sections = root.sectionsCopy();
+        const wanted = String(title ?? "").trim();
+        let target = wanted === "" ? null : sections.find(s => s.title === wanted);
+        if (wanted !== "" && !target) {
+            target = { "title": wanted, "items": [] };
+            sections.push(target);
+        }
+        for (const entry of root.items) {
+            if (ids.indexOf(entry.id) === -1)
+                continue;
+            root.dropMember(sections, entry);
+            if (target)
+                target.items.push(entry.name || entry.fileName || entry.path);
+        }
+        root.reflowSections(sections.filter(s => s.items.length > 0), {});
+    }
+    function renameSection(from, to) {
+        const title = String(to ?? "").trim();
+        if (title === "" || title === from)
+            return;
+        Config.options.background.desktopIcons.groups = root.sectionsCopy().map(s => s.title === from
+            ? { "title": title, "items": s.items } : s);
+    }
+
+    // Lays `sections` out as the stack and writes what changed: the config
+    // when the membership did, the positions of every tile that moves (the
+    // dropped ones included, section or not). The stack keeps its top-left,
+    // read from the tiles that stayed put (all of them when the whole stack
+    // was dragged); inside a section the order is reading order, the dropped
+    // tile ranked where it landed.
+    function reflowSections(sections, landed) {
+        const has = (s, e) => s.items.includes(e.name) || s.items.includes(e.path) || s.items.includes(e.fileName);
+        const pos = e => landed[e.id] ?? root.positionAt(e.x, e.y);
+        const members = sections.map(s => root.items.filter(e => has(s, e)));
+        const all = members.reduce((acc, list) => acc.concat(list), []);
+        const moves = [];
+        if (all.length > 0) {
+            const still = all.filter(e => landed[e.id] === undefined);
+            const ref = still.length > 0 ? still : all;
+            const anchorX = Math.min(...ref.map(e => pos(e).x));
+            let top = Math.min(...ref.map(e => pos(e).y));
+            const rowStep = root.cellHeight + root.sectionRowGap;
+            for (const list of members) {
+                if (list.length === 0)
+                    continue;
+                const stayed = list.filter(e => landed[e.id] === undefined);
+                const secTop = Math.min(...(stayed.length > 0 ? stayed : list).map(e => pos(e).y));
+                const rowOf = e => Math.floor((pos(e).y + root.cellHeight / 2 - secTop) / rowStep);
+                const ordered = list.slice().sort((a, b) => (rowOf(a) - rowOf(b)) || (pos(a).x - pos(b).x));
+                ordered.forEach((e, i) => moves.push({ "id": e.id,
+                    "x": anchorX + (i % root.sectionColumns) * root.cellWidth,
+                    "y": top + Math.floor(i / root.sectionColumns) * rowStep }));
+                const rows = Math.ceil(list.length / root.sectionColumns);
+                top += rows * root.cellHeight + (rows - 1) * root.sectionRowGap + root.sectionGap;
+            }
+        }
+        for (const id of Object.keys(landed)) {
+            if (!moves.some(m => m.id === id))
+                moves.push({ "id": id, "x": landed[id].x, "y": landed[id].y, "free": true });
+        }
+        const before = JSON.stringify(root.sectionsCopy());
+        if (JSON.stringify(sections) !== before)
+            Config.options.background.desktopIcons.groups = sections;
+        const changed = moves.filter(m => {
+            const e = root.items.find(item => item.id === m.id);
+            const p = e ? root.positionAt(e.x, e.y) : null;
+            return p && (p.x !== m.x || p.y !== m.y);
+        });
+        if (changed.length > 0)
+            DesktopShortcuts.placeMany(root.screenName, changed);
+    }
+    // Any other change to who is in a section - the config edited by hand,
+    // a member arriving or leaving the desktop - reflows the stack too, a
+    // beat later. Positions alone never trigger it, and an unchanged stack
+    // writes nothing, so its own write ends the loop.
+    readonly property string sectionSignature: JSON.stringify(root.sectionsCopy()) + "|"
+        + root.items.filter(e => root.sectionIndexOf(e) >= 0).map(e => e.id).sort().join(",")
+    onSectionSignatureChanged: sectionReflowTimer.restart()
+    Timer {
+        id: sectionReflowTimer
+        interval: 250
+        onTriggered: {
+            if (root.dragId !== "" || root.items.length === 0 || root.groups.length === 0) {
+                if (root.dragId !== "")
+                    sectionReflowTimer.restart();
+                return;
+            }
+            root.reflowSections(root.sectionsCopy(), {});
+        }
     }
     // A clean desktop: the icons fade out and stop taking input; the store
     // is untouched. Coming back replays the entrance wave.
@@ -138,6 +298,8 @@ Item {
     }
     readonly property var items: DesktopShortcuts.itemsFor(root.screenName)
     readonly property bool dialogOpen: contextDialog.active || groupPopup.active
+    // The open modal surface, for the depth cutout to leave uncovered.
+    readonly property Item modalItem: groupPopup.active ? groupPopup : contextDialog.active ? contextDialog : null
     property string dropTargetId: ""
     property string contextId: ""
     property point contextPosition: Qt.point(0, 0)
@@ -734,42 +896,63 @@ Item {
         }
     }
 
-    // The shelf: the widgets' card surface, so the launch pad and the cards
-    // read as one family; the compositor blurs behind it as behind them.
-    StyledRectangularShadow {
-        target: shelfPlate
-        visible: shelfPlate.visible && (Config.options.background.widgets.enableShadows ?? true)
-    }
-    Rectangle {
-        id: shelfPlate
-        visible: root.shelf && root.shelfRect.width > 0
-        x: root.shelfRect.x
-        y: root.shelfRect.y
-        width: root.shelfRect.width
-        height: root.shelfRect.height
-        radius: Appearance.rounding.windowRounding
-        color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
-
-        Behavior on x {
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-        }
-        Behavior on y {
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-        }
-        Behavior on width {
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-        }
-        Behavior on height {
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-        }
-    }
-    // Captions: each group's title in small caps on the primary, a hairline
-    // running on to the group's far edge.
+    // One card per section: the widgets' card surface, so the launch pad and
+    // the widgets read as one family; the compositor blurs behind it as
+    // behind them. Counted by section, not by box, so a reflow glides the
+    // cards instead of rebuilding them. The one a dragged tile would join
+    // takes a primary outline.
     Repeater {
-        model: root.groupBoxes
+        model: root.shelf ? root.groups.length : 0
+        delegate: Item {
+            id: sectionCard
+            required property int index
+            readonly property var box: root.groupBoxes.find(b => b.index === sectionCard.index) ?? null
+            visible: sectionCard.box !== null
+            x: sectionCard.box ? sectionCard.box.card.x : 0
+            y: sectionCard.box ? sectionCard.box.card.y : 0
+            width: sectionCard.box ? sectionCard.box.card.width : 0
+            height: sectionCard.box ? sectionCard.box.card.height : 0
+
+            Behavior on x {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            }
+            Behavior on y {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            }
+            Behavior on width {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            }
+            Behavior on height {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            }
+
+            StyledRectangularShadow {
+                target: sectionPlate
+                visible: Config.options.background.widgets.enableShadows ?? true
+            }
+            Rectangle {
+                id: sectionPlate
+                anchors.fill: parent
+                radius: Appearance.rounding.windowRounding
+                color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
+                border.width: 2
+                border.color: root.dropSection === sectionCard.index
+                    ? Appearance.colors.colPrimary : "transparent"
+                Behavior on border.color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                }
+            }
+        }
+    }
+    // Captions: each section's title in small caps on the primary, a
+    // hairline running on to the section's far edge.
+    Repeater {
+        model: root.groups.length
         delegate: Item {
             id: caption
-            required property var modelData
+            required property int index
+            readonly property var modelData: root.groupBoxes.find(b => b.index === caption.index)
+                ?? ({ "title": "", "x": 0, "y": 0, "width": 0, "height": 0 })
             visible: caption.modelData.title !== ""
             x: caption.modelData.x + 10
             y: caption.modelData.y - root.captionBand + 6
@@ -1035,11 +1218,15 @@ Item {
                     groupDrag.dx = travel.x;
                     groupDrag.dy = travel.y;
                     root.dragPlan = null;
+                    root.dropSection = root.sectionAt(tile.pending.x + root.cellWidth / 2,
+                        tile.pending.y + root.cellHeight / 2, new Set(groupDrag.ids));
                 } else {
                     root.dropTargetId = DesktopShortcuts.isGroupable(tile.entry) ? root.targetAt(p.x, p.y, tile.entry.id) : "";
                     root.dragPlan = root.dropTargetId !== "" ? null
                         : root.autoArrange ? DesktopShortcuts.planDrop(root.screenName, tile.entry.id, tile.pending.x, tile.pending.y)
                         : tile.systemDrag ? null : root.freePlan(tile, tile.pending);
+                    root.dropSection = root.dropTargetId !== "" ? -1
+                        : root.sectionAt(tile.pending.x + root.cellWidth / 2, tile.pending.y + root.cellHeight / 2, new Set([tile.entry.id]));
                 }
             }
 
@@ -1053,6 +1240,7 @@ Item {
                 root.dragId = "";
                 root.dropTargetId = "";
                 root.dragPlan = null;
+                root.dropSection = -1;
                 if (groupDrag.leaderId === itemId) {
                     // One write for the cluster; merging is a single-drag
                     // gesture, so the group just travels. Every member is
@@ -1071,13 +1259,18 @@ Item {
                     groupDrag.dy = 0;
                     if (ddx !== 0 || ddy !== 0) {
                         const moves = [];
+                        const landed = {};
                         for (const entry of root.items) {
                             if (ids.indexOf(entry.id) === -1)
                                 continue;
                             const s = root.positionAt(entry.x, entry.y);
                             moves.push({ id: entry.id, x: s.x + ddx, y: s.y + ddy });
+                            landed[entry.id] = { x: s.x + ddx, y: s.y + ddy };
                         }
-                        Qt.callLater(() => DesktopShortcuts.moveMany(root.screenName, moves));
+                        Qt.callLater(() => {
+                            if (!root.settleSections(landed))
+                                DesktopShortcuts.moveMany(root.screenName, moves);
+                        });
                     }
                     return;
                 }
@@ -1094,7 +1287,12 @@ Item {
                 // Held at the drop point; the store write moves the cell
                 // and the tile glides into it.
                 tile.holdAt(p.x, p.y);
-                Qt.callLater(() => DesktopShortcuts.move(root.screenName, itemId, p.x, p.y, targetId));
+                Qt.callLater(() => {
+                    const landed = {};
+                    landed[itemId] = { x: p.x, y: p.y };
+                    if (!root.settleSections(landed))
+                        DesktopShortcuts.move(root.screenName, itemId, p.x, p.y, targetId);
+                });
             }
 
             function cancelDrag() {
@@ -1109,6 +1307,7 @@ Item {
                 root.dragId = "";
                 root.dropTargetId = "";
                 root.dragPlan = null;
+                root.dropSection = -1;
             }
 
             HoverHandler {
@@ -1493,6 +1692,14 @@ Item {
             selectedIds: root.isSelected(root.contextId) ? root.selectedIds : [root.contextId]
             counterScale: root.counterScale
             page: root.contextInitialPage
+            sections: Array.from(root.groups).map(g => String(g?.title ?? ""))
+            currentSection: {
+                const entry = root.contextEntry;
+                const i = entry ? root.sectionIndexOf(entry) : -1;
+                return i >= 0 ? String(root.groups[i]?.title ?? "") : "";
+            }
+            onSectionRequested: (ids, title) => Qt.callLater(() => root.moveToSection(ids, title))
+            onSectionRenameRequested: (from, to) => root.renameSection(from, to)
             onSelectAllRequested: root.selectedIds = root.items.map(item => item.id)
             onCloseRequested: {
                 const remove = pendingAction === "remove";

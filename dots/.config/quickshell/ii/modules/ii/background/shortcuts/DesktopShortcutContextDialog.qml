@@ -24,6 +24,13 @@ ItemContextDialog {
     // The ids the selection pages act on: the whole selection when the menu
     // opened on a selected icon, else the clicked one alone.
     property var selectedIds: []
+    // The launch pad's sections (DesktopShortcutsLayer): every title, and
+    // the clicked icon's ("" when it is in none). The page only asks; the
+    // layer moves the tiles and writes the config.
+    property var sections: []
+    property string currentSection: ""
+    signal sectionRequested(var ids, string title)
+    signal sectionRenameRequested(string from, string to)
     // Other outputs the icons can be sent to.
     readonly property var otherScreens: Quickshell.screens.filter(s => s.name !== root.screenName)
     readonly property bool writable: Persistent.ready && !Persistent.blockWrites
@@ -142,6 +149,8 @@ ItemContextDialog {
             iconSource: root.zedIcon, visible: entry.path !== "" },
         { id: "copy", text: Translation.tr("Copy"), icon: "content_copy", submenu: true,
             visible: entry.name !== "" || entry.path !== "" },
+        { id: "section", text: root.selectionCount > 1 ? Translation.tr("Move selection to section")
+            : Translation.tr("Section"), icon: "dashboard", submenu: true, enabled: root.writable },
         { id: "arrange", text: Translation.tr("Arrange selection"), icon: "align_horizontal_left",
             submenu: true, visible: root.selectionCount > 1, enabled: root.writable },
         { id: "screen", text: root.selectionCount > 1 ? Translation.tr("Move selection to screen")
@@ -154,11 +163,13 @@ ItemContextDialog {
     pageComponent: page === "rename" ? renamePage : page === "members" ? membersPage
         : page === "add" ? addPage : page === "member" ? memberPage : page === "details" ? detailsPage
         : page === "icon" ? iconPage : page === "copy" ? copyPage
-        : page === "arrange" ? arrangePage : page === "screen" ? screenPage : null
-    pageDepth: page === "" ? 0 : (page === "add" || page === "member" ? 2 : 1)
+        : page === "arrange" ? arrangePage : page === "screen" ? screenPage
+        : page === "section" ? sectionPage : page === "sectionRename" ? sectionRenamePage : null
+    pageDepth: page === "" ? 0 : (page === "add" || page === "member" || page === "sectionRename" ? 2 : 1)
     onBackRequested: root.back()
     function back() {
-        root.page = root.page === "add" || root.page === "member" ? "members" : "";
+        root.page = root.page === "add" || root.page === "member" ? "members"
+            : root.page === "sectionRename" ? "section" : "";
     }
     function launch(item) {
         DesktopShortcuts.launch(item);
@@ -997,6 +1008,105 @@ esac`
                 onActivated: {
                     DesktopShortcuts.groupSelection(root.screenName, root.selectedIds);
                     root.dismiss();
+                }
+            }
+        }
+    }
+    // Which launch-pad section the icon (or the selection it is in) sits in:
+    // one row per section, none, or a new one named here.
+    Component {
+        id: sectionPage
+        ColumnLayout {
+            id: sectionColumn
+            spacing: 3
+            readonly property var titles: root.sections.filter(title => title !== "")
+            function pick(title) {
+                root.sectionRequested(root.selectedIds.length > 0 ? root.selectedIds : [root.entry.id], title);
+                root.dismiss();
+            }
+            PageHeader { title: Translation.tr("Section") }
+            Repeater {
+                model: sectionColumn.titles
+                delegate: MenuRow {
+                    required property var modelData
+                    required property int index
+                    readonly property bool current: modelData === root.currentSection
+                    first: index === 0
+                    last: false
+                    symbol: current ? "check" : "dashboard"
+                    title: modelData
+                    selected: current
+                    onActivated: sectionColumn.pick(modelData)
+                }
+            }
+            MenuRow {
+                first: sectionColumn.titles.length === 0
+                last: root.currentSection === ""
+                symbol: root.currentSection === "" ? "check" : "remove_selection"
+                title: Translation.tr("No section")
+                selected: root.currentSection === ""
+                onActivated: sectionColumn.pick("")
+            }
+            MenuRow {
+                visible: root.currentSection !== ""
+                first: false
+                last: true
+                symbol: "edit"
+                title: Translation.tr("Rename “%1”").arg(root.currentSection)
+                trailingKind: "chevron"
+                onActivated: root.page = "sectionRename"
+            }
+            StyledText {
+                Layout.fillWidth: true
+                Layout.leftMargin: 6
+                Layout.topMargin: 6
+                Layout.bottomMargin: 2
+                text: Translation.tr("New section")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+            MenuField {
+                id: newSectionField
+                Layout.bottomMargin: 3
+                placeholder: Translation.tr("Name")
+                onAccepted: createSection.activated()
+            }
+            MenuRow {
+                id: createSection
+                first: true
+                last: true
+                symbol: "add"
+                title: Translation.tr("Create and move here")
+                rowEnabled: newSectionField.text.trim().length > 0
+                onActivated: {
+                    if (rowEnabled)
+                        sectionColumn.pick(newSectionField.text.trim());
+                }
+            }
+        }
+    }
+    Component {
+        id: sectionRenamePage
+        ColumnLayout {
+            spacing: 3
+            PageHeader { title: Translation.tr("Rename section") }
+            MenuField {
+                id: sectionNameField
+                Layout.bottomMargin: 3
+                text: root.currentSection
+                onAccepted: saveSectionName.activated()
+                Component.onCompleted: sectionNameField.focusField(true)
+            }
+            MenuRow {
+                id: saveSectionName
+                symbol: "check"
+                title: Translation.tr("Save")
+                rowEnabled: sectionNameField.text.trim().length > 0
+                onActivated: {
+                    if (!rowEnabled)
+                        return;
+                    root.sectionRenameRequested(root.currentSection, sectionNameField.text.trim());
+                    root.page = "section";
                 }
             }
         }

@@ -159,6 +159,7 @@ Singleton {
                 { "id": "zed", "symbol": "code", "title": "Open in Zed" },
                 { "id": "copy", "symbol": "content_copy", "title": "Copy", "submenu": true, "bar": true },
                 { "id": "separator-2", "separator": true },
+                { "id": "section", "symbol": "dashboard", "title": "Section", "submenu": true },
                 { "id": "arrange", "symbol": "align_horizontal_left", "title": "Arrange selection", "submenu": true },
                 { "id": "screen", "symbol": "screen_share", "title": "Move to screen", "submenu": true },
                 { "id": "separator-3", "separator": true },

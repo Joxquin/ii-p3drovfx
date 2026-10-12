@@ -1082,6 +1082,22 @@ Singleton {
             next = root.resolveMoved(root.grid(screenName), next, moves.map(move => move.id));
         root.save(screenName, next);
     }
+    // The launch pad's reflow: every move lands exactly where it says (the
+    // sections' grid), except a `free` one - a tile dropped outside every
+    // section - which takes the nearest free spot like any drop. Whatever
+    // else sat under a placed tile steps aside to the nearest free spot.
+    function placeMany(screenName, moves) {
+        root.releaseKeptOrder();
+        const landed = new Map(moves.map(move => [move.id, move]));
+        const next = root.itemsFor(screenName).map(item => landed.has(item.id)
+            ? Object.assign({}, item, { x: Math.round(landed.get(item.id).x), y: Math.round(landed.get(item.id).y) })
+            : item);
+        const fixed = next.filter(item => landed.has(item.id) && !landed.get(item.id).free);
+        const overlaps = (a, b) => Math.abs(a.x - b.x) < root.cellWidth && Math.abs(a.y - b.y) < root.cellHeight;
+        const displaced = next.filter(item => landed.has(item.id) ? landed.get(item.id).free
+            : fixed.some(f => overlaps(f, item))).map(item => item.id);
+        root.save(screenName, displaced.length > 0 ? root.resolveMoved(root.grid(screenName), next, displaced) : next);
+    }
 
     function removeMany(screenName, ids) {
         const gone = new Set(ids);
