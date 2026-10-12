@@ -12,11 +12,11 @@
 
 <br><br>
 
-<!-- PLACEHOLDER — hero video (20 s, presets switching in Edit Mode).
-     Edit this file on github.com, drag the .mp4 onto the line below and keep the
-     https://github.com/user-attachments/assets/… URL GitHub writes there, alone on its line. -->
 
-HERO_VIDEO_URL
+
+https://github.com/user-attachments/assets/9bd6d47c-a6af-4352-8cf0-1819a526230f
+
+
 
 </div>
 
