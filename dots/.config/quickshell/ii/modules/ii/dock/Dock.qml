@@ -185,13 +185,15 @@ Scope {
                 readonly property string screenName: dockRoot.screen ? dockRoot.screen.name : ""
                 readonly property string side: dock.dockEffectivePosition
                 readonly property real thickness: dockRoot.unmagnifiedThickness
+                readonly property real reserved: dockRoot.exclusiveZone
 
                 function publish() {
-                    GlobalStates.setDockInset(editInsetPublisher.screenName, editInsetPublisher.side, editInsetPublisher.thickness);
+                    GlobalStates.setDockInset(editInsetPublisher.screenName, editInsetPublisher.side, editInsetPublisher.thickness, editInsetPublisher.reserved);
                 }
 
                 onSideChanged: publish()
                 onThicknessChanged: publish()
+                onReservedChanged: publish()
                 Component.onCompleted: publish()
                 Component.onDestruction: GlobalStates.setDockInset(editInsetPublisher.screenName, "", 0)
             }

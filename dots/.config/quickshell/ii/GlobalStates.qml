@@ -817,14 +817,18 @@ Singleton {
     // knows its padding and style, so the mode's viewport reads this rather
     // than deriving the dock's size a second time.
     property var dockInsets: ({})
-    function setDockInset(screenName, side, thickness) {
+    // `reserved` is the exclusive zone the dock holds for windows right now: its
+    // thickness while pinned and revealed, 0 otherwise. A surface that ignores the
+    // compositor's zones reads it to stay clear of the dock the way zone-respecting
+    // ones do.
+    function setDockInset(screenName, side, thickness, reserved) {
         if (!screenName)
             return;
         const next = Object.assign({}, root.dockInsets);
         if (!side || !(thickness > 0))
             delete next[screenName];
         else
-            next[screenName] = { "side": side, "thickness": thickness };
+            next[screenName] = { "side": side, "thickness": thickness, "reserved": reserved > 0 ? reserved : 0 };
         root.dockInsets = next;
     }
 
