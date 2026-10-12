@@ -104,15 +104,63 @@ ContentPage {
                 options: [
                     { displayName: Translation.tr("Default"),    icon: "style",     value: "default" },
                     { displayName: Translation.tr("Material 3"), icon: "interests", value: "material" },
-                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
+                    { displayName: Translation.tr("Sculpt"), icon: "shapes", value: "sculpt" }
                 ]
             }
         }
 
         ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.keyboard === "expressive"
+            visible: Config.options.bar.styles.keyboard === "expressive" || Config.options.bar.styles.keyboard === "sculpt"
             currentValue: Config.options.bar.keyboardLayout.colorMode
             onSelected: newValue => Config.options.bar.keyboardLayout.colorMode = String(newValue)
+        }
+
+        ContentSubsection {
+            visible: Config.options.bar.styles.keyboard === "sculpt"
+            title: Translation.tr("Sculpt variant")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.keyboardLayout.sculptVariant
+                onSelected: newValue => Config.options.bar.keyboardLayout.sculptVariant = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Selector"), icon: "view_week", value: "selector" },
+                    { displayName: Translation.tr("Carousel"), icon: "view_carousel", value: "carousel" },
+                    { displayName: Translation.tr("Dial"), icon: "radio_button_checked", value: "dial" }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.keyboard === "sculpt" && Config.options.bar.keyboardLayout.sculptVariant === "selector"
+            materialIcon: "view_week"
+            text: Translation.tr("Every layout as a pill: the current one wide and vivid, the others small soft pills. Click a pill to switch straight to it.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.keyboard === "sculpt" && Config.options.bar.keyboardLayout.sculptVariant === "carousel"
+            materialIcon: "view_carousel"
+            text: Translation.tr("The current layout as the large item and the next one peeking, cropped. Switching slides the carousel.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.keyboard === "sculpt" && Config.options.bar.keyboardLayout.sculptVariant === "dial"
+            materialIcon: "radio_button_checked"
+            text: Translation.tr("A small dial with a tick per layout and a marker that travels forward round it, with the layout's full name beside.")
+        }
+
+        ConfigSwitch {
+            visible: Config.options.bar.styles.keyboard === "sculpt" && (Config.options.bar.keyboardLayout.sculptVariant === "dial")
+            buttonIcon: "badge"
+            text: Translation.tr("Show the layout's name")
+            checked: Config.options.bar.keyboardLayout.sculptShowName
+            onCheckedChanged: Config.options.bar.keyboardLayout.sculptShowName = checked
+            StyledToolTip {
+                text: Translation.tr("Full layout name and the next layout beside the dial (horizontal bar only)")
+            }
         }
     }
 

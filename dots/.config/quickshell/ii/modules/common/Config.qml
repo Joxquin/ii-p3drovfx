@@ -4981,22 +4981,22 @@ Singleton {
                     property string clock: "expressive" // default, material, expressive, neural, relief
                     property string media: "default" // default | expressive | neural | ring | tonal
                     property string notification: "default"
-                    property string utilButtons: "expressive" // default | expressive | segments
+                    property string utilButtons: "expressive" // default | expressive | segments | sculpt
                     property string workspaces: "default" // default | minimal | expressive | dock | index
                     property string weather: "expressive"
-                    property string dashboard: "expressive" // default | expressive | orbs
+                    property string dashboard: "expressive" // default | expressive | orbs | sculpt
                     property string resources: "expressive"
                     property string policies: "expressive" // default | expressive | outline
                     property string power: "expressive" // default | expressive | solid | dot
                     property string battery: "expressive"
                     property string systray: "expressive"
-                    property string bluetooth: "expressive"
-                    property string keyboard: "expressive"
+                    property string bluetooth: "expressive" // default | expressive | sculpt
+                    property string keyboard: "expressive" // default | material | expressive | sculpt
                     property string sports: "expressive"
                     property string portWatcher: "expressive"
                     property string networkSpeed: "default" // default | expressive
                     property string aiPlanUsage: "expressive"
-                    property string search: "default"
+                    property string search: "default" // default | expressive | neural | sculpt
                     property string date: "default"
                     property string timer: "expressive"
                     property string recordIndicator: "expressive" // default | expressive | neural
@@ -5276,6 +5276,7 @@ Singleton {
 
                 property JsonObject searchWidget: JsonObject {
                     property string sizeMode: "compact" // compact | balanced | extended
+                    property string sculptVariant: "field" // Sculpt style: field | display | split
                     property string colorMode: "tonal" // tonal | vibrant | neutral
                     property bool showShortcutHint: true
                 }
@@ -5350,6 +5351,7 @@ Singleton {
                 }
                 property JsonObject utilButtons: JsonObject {
                     property string colorMode: "primary"
+                    property string sculptVariant: "toolbar" // Sculpt style: toolbar | media | shapes
                     property bool showScreenSnip: false
                     property bool showColorPicker: true
                     property bool showMicToggle: false
@@ -5421,6 +5423,7 @@ Singleton {
                     // Orbs style: a solid disc per indicator, or a ring with the
                     // bar showing through it.
                     property string orbVariant: "filled" // filled | outline
+                    property string sculptVariant: "tile" // Sculpt style: tile | chip | cluster
                     property bool showCaffeine: true
                     property bool showVolume: false
                     property bool showMic: true
@@ -5510,6 +5513,8 @@ Singleton {
                 }
                 property JsonObject keyboardLayout: JsonObject {
                     property string colorMode: "primary"
+                    property string sculptVariant: "selector" // Sculpt style: selector | carousel | dial
+                    property bool sculptShowName: true // Sculpt dial: the layout's full name beside it
                     property bool secondaryOpposite: false
                     property bool showSecondary: true
                     property bool showPrimary: true
@@ -5531,6 +5536,8 @@ Singleton {
                 }
                 property JsonObject bluetooth: JsonObject {
                     property string colorMode: "primary"
+                    property string sculptVariant: "ring" // Sculpt style: card | ring | badge
+                    property bool sculptShowName: true // Sculpt card/badge: the device's name
                 }
                 property JsonObject power: JsonObject {
                     property string colorMode: "primary"

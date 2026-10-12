@@ -55,13 +55,14 @@ ContentPage {
                 options: [
                     { displayName: Translation.tr("Default"), icon: "style", value: "default" },
                     { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
-                    { displayName: Translation.tr("Segments"), icon: "view_week", value: "segments" }
+                    { displayName: Translation.tr("Segments"), icon: "view_week", value: "segments" },
+                    { displayName: Translation.tr("Sculpt"), icon: "shapes", value: "sculpt" }
                 ]
             }
         }
 
         ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.utilButtons === "expressive"
+            visible: Config.options.bar.styles.utilButtons === "expressive" || Config.options.bar.styles.utilButtons === "sculpt"
             currentValue: Config.options.bar.utilButtons.colorMode
             onSelected: newValue => Config.options.bar.utilButtons.colorMode = String(newValue)
         }
@@ -71,6 +72,42 @@ ContentPage {
             visible: Config.options.bar.styles.utilButtons === "segments"
             materialIcon: "view_week"
             text: Translation.tr("Segments joins the buttons into one track and lets the corners carry the state: square while they are part of the strip, lifting under the pointer, fully round and filled once a toggle is on. Nothing changes width, so the bar never shifts as you move across it.")
+        }
+
+        ContentSubsection {
+            visible: Config.options.bar.styles.utilButtons === "sculpt"
+            title: Translation.tr("Sculpt variant")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.utilButtons.sculptVariant
+                onSelected: newValue => Config.options.bar.utilButtons.sculptVariant = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Toolbar"), icon: "toolbar", value: "toolbar" },
+                    { displayName: Translation.tr("Media"), icon: "play_circle", value: "media" },
+                    { displayName: Translation.tr("Shapes"), icon: "interests", value: "shapes" }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.utilButtons === "sculpt" && Config.options.bar.utilButtons.sculptVariant === "toolbar"
+            materialIcon: "toolbar"
+            text: Translation.tr("A floating toolbar: the first button becomes its FAB, the rest are bare icons on a soft bar, and a toggle that is on gets a filled disc.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.utilButtons === "sculpt" && Config.options.bar.utilButtons.sculptVariant === "media"
+            materialIcon: "play_circle"
+            text: Translation.tr("Laid out like player controls: the middle button is a wide hero, its neighbours smaller circles, and a toggle that is on fills with the vivid tone.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.utilButtons === "sculpt" && Config.options.bar.utilButtons.sculptVariant === "shapes"
+            materialIcon: "interests"
+            text: Translation.tr("Every button has its own expressive shape. Under the pointer it morphs into its partner shape, and a toggle that is on keeps it and fills with the vivid tone.")
         }
     }
 

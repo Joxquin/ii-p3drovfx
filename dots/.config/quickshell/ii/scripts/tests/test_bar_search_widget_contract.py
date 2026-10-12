@@ -86,6 +86,11 @@ class BarSearchWidgetContractTest(unittest.TestCase):
 
         for widget in WIDGET_DIR.glob("*SearchBarWidget.qml"):
             body = widget.read_text(encoding="utf-8")
+            if widget.name == "SculptSearchBarWidget.qml":
+                # Sculpt draws through its variants; every one carries the badge.
+                for variant in ("SculptSearchField", "SculptSearchDisplay", "SculptSearchSplit"):
+                    self.assertIn("SearchShortcutBadge", (WIDGET_DIR / f"{variant}.qml").read_text(encoding="utf-8"))
+                continue
             self.assertIn("SearchShortcutBadge", body)
             self.assertNotIn("&& !root.vertical", body)
             self.assertNotIn('Translation.tr("Search launcher")', body)

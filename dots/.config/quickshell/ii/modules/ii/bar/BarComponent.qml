@@ -621,9 +621,9 @@ Item {
             return true;
         if (modelData.id === "system_tray" && Config.options.bar.styles.systray === "expressive")
             return true;
-        if (modelData.id === "bluetooth_devices" && Config.options.bar.styles.bluetooth === "expressive")
+        if (modelData.id === "bluetooth_devices" && (Config.options.bar.styles.bluetooth === "expressive" || Config.options.bar.styles.bluetooth === "sculpt"))
             return true;
-        if (modelData.id === "keyboard_layout" && Config.options.bar.styles.keyboard === "expressive")
+        if (modelData.id === "keyboard_layout" && (Config.options.bar.styles.keyboard === "expressive" || Config.options.bar.styles.keyboard === "sculpt"))
             return true;
         if (modelData.id === "sports" && Config.options.bar.styles.sports === "expressive")
             return true;
@@ -650,7 +650,7 @@ Item {
             return true;
         if (modelData.id === "network_speed" && Config.options.bar.styles.networkSpeed === "expressive")
             return true;
-        if (modelData.id === "search" && (Config.options.bar.styles.search === "expressive" || Config.options.bar.styles.search === "neural"))
+        if (modelData.id === "search" && ["expressive", "neural", "sculpt"].includes(Config.options.bar.styles.search))
             return true;
         if (modelData.id === "date" && (Config.options.bar.styles.date === "expressive" || Config.options.bar.styles.date === "neural"))
             return true;
@@ -836,10 +836,14 @@ Item {
         case "keyboard_layout":
             if (isExp)
                 return keyboardCompExpressive;
+            if (style === "sculpt")
+                return keyboardCompSculpt;
             return isVert ? keyboardCompVert : keyboardComp;
         case "utility_buttons":
             if (style === "segments")
                 return utilityButtonsCompSegments;
+            if (style === "sculpt")
+                return utilityButtonsCompSculpt;
             if (isExp)
                 return utilityButtonsCompExpressive;
             return utilityButtonsComp;
@@ -868,12 +872,16 @@ Item {
         case "dashboard_panel_button":
             if (style === "orbs")
                 return isVert ? dashboardPanelButtonOrbsVert : dashboardPanelButtonOrbs;
+            if (style === "sculpt")
+                return isVert ? dashboardPanelButtonSculptVert : dashboardPanelButtonSculpt;
             if (isExp)
                 return isVert ? dashboardPanelButtonExpressiveVert : dashboardPanelButtonExpressive;
             return isVert ? dashboardPanelButtonVert : dashboardPanelButton;
         case "bluetooth_devices":
             if (isExp)
                 return bluetoothCompExpressive;
+            if (style === "sculpt")
+                return bluetoothCompSculpt;
             return isVert ? bluetoothCompVert : bluetoothComp;
         case "sports":
             if (isExp)
@@ -932,6 +940,8 @@ Item {
                 return searchCompExpressive;
             if (style === "neural")
                 return searchCompNeural;
+            if (style === "sculpt")
+                return searchCompSculpt;
             return searchComp;
         default:
             return null;
@@ -1351,6 +1361,12 @@ Item {
             vertical: rootItem.vertical
         }
     }
+    Component {
+        id: searchCompSculpt
+        SculptSearchBarWidget {
+            vertical: rootItem.vertical
+        }
+    }
 
     // Expressive variants
     Component {
@@ -1462,6 +1478,18 @@ Item {
         }
     }
     Component {
+        id: dashboardPanelButtonSculpt
+        SculptDashboardPanelButton {
+            vertical: false
+        }
+    }
+    Component {
+        id: dashboardPanelButtonSculptVert
+        SculptDashboardPanelButton {
+            vertical: true
+        }
+    }
+    Component {
         id: policiesPanelButtonOutline
         OutlinePoliciesPanelButton {
             vertical: rootItem.vertical
@@ -1470,6 +1498,12 @@ Item {
     Component {
         id: utilityButtonsCompSegments
         SegmentedUtilButtons {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: utilityButtonsCompSculpt
+        SculptUtilButtons {
             vertical: rootItem.vertical
         }
     }
@@ -1512,6 +1546,18 @@ Item {
     Component {
         id: keyboardCompExpressive
         ExpressiveKeyboardLayout {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: keyboardCompSculpt
+        SculptKeyboardLayout {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: bluetoothCompSculpt
+        SculptBluetoothDevices {
             vertical: rootItem.vertical
         }
     }

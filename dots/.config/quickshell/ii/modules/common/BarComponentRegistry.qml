@@ -72,6 +72,11 @@ Singleton {
                     displayName: qsTr("Neural"),
                     icon: "neurology",
                     value: "neural"
+                },
+                {
+                    displayName: qsTr("Sculpt"),
+                    icon: "shapes",
+                    value: "sculpt"
                 }
             ],
             configPage: "SearchBarWidgetConfig.qml"
@@ -244,6 +249,11 @@ Singleton {
                     displayName: qsTr("Orbs"),
                     icon: "workspaces",
                     value: "orbs"
+                },
+                {
+                    displayName: qsTr("Sculpt"),
+                    icon: "shapes",
+                    value: "sculpt"
                 }
             ],
             configPage: "DashboardButtonConfig.qml"
@@ -413,6 +423,11 @@ Singleton {
                     displayName: qsTr("Segments"),
                     icon: "view_week",
                     value: "segments"
+                },
+                {
+                    displayName: qsTr("Sculpt"),
+                    icon: "shapes",
+                    value: "sculpt"
                 }
             ],
             configPage: "UtilButtonsConfig.qml"
@@ -422,7 +437,23 @@ Singleton {
             icon: "bluetooth_connected",
             title: "Bluetooth Devices",
             styleConfigKey: "bluetooth",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Sculpt"),
+                    icon: "shapes",
+                    value: "sculpt"
+                }
+            ],
             configPage: "BluetoothConfig.qml"
         },
         {
@@ -446,6 +477,11 @@ Singleton {
                     displayName: qsTr("Expressive"),
                     icon: "fluid_med",
                     value: "expressive"
+                },
+                {
+                    displayName: qsTr("Sculpt"),
+                    icon: "shapes",
+                    value: "sculpt"
                 }
             ]
         },
