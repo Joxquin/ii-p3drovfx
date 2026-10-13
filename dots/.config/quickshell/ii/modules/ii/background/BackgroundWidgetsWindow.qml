@@ -203,7 +203,7 @@ PanelWindow {
         else if (activeId > 1000000)
             activeId = 2147483647 - activeId;
         return HyprlandData.windowList.some(function (w) {
-            return w.workspace.id === activeId;
+            return HyprlandData.sameWorkspace(w.workspace.id, activeId);
         });
     }
     // Widgets stop their clocks, repeating timers and endless animations while windows

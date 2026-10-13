@@ -252,7 +252,7 @@ PanelWindow {
             activeId = GlobalStates._editSavedWorkspace;
         else if (activeId > 1000000)
             activeId = 2147483647 - activeId;
-        return HyprlandData.windowList.some(function(w) { return w.workspace.id === activeId; });
+        return HyprlandData.windowList.some(function(w) { return HyprlandData.sameWorkspace(w.workspace.id, activeId); });
     }
     // Deferred to avoid Wayland dispatch reentrancy crash in PanelWindow visibility
     property bool deferredFullscreen: false
