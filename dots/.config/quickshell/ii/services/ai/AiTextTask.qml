@@ -88,6 +88,7 @@ QtObject {
     property var _history: []
     property var _pendingToolCalls: []
     property bool _followUpQueued: false
+    property bool _roundScheduled: false
     property int _roundContentLength: 0
     property bool _sharedTaskClaimed: false
     // What the provider sent outside the stream frames; on failure that is
@@ -301,8 +302,21 @@ QtObject {
                     call: call,
                     message: message
                 })));
-        if (root._pendingToolCalls.length === fresh.length)
+        // Only when the queue was empty *and* no call is still running: a call
+        // dispatched earlier in the same stream may not have answered yet, and
+        // starting the next beside it gave each its own follow-up round.
+        if (root._pendingToolCalls.length === fresh.length && !root.toolsInFlight())
             root.processNextToolCall();
+    }
+
+    /** Whether one of this task's calls is still waiting on its handler. */
+    function toolsInFlight(): bool {
+        const pending = Ai.broker.pending;
+        for (const key in pending) {
+            if (pending[key]?.host === root)
+                return true;
+        }
+        return false;
     }
 
     function processNextToolCall(): void {
@@ -319,7 +333,13 @@ QtObject {
         }, next.message, root, root.toolDomains);
     }
 
+    // Each finished call asks for the next round. They must add up to one round,
+    // not one each: a second start found the first request in flight and failed
+    // the whole task with "Could not start the AI request." while the first one
+    // went on answering.
     function requestFollowUp(): void {
+        if (root.toolsInFlight())
+            return; // the last one to finish asks again
         if (root._pendingToolCalls.length > 0) {
             root.processNextToolCall();
             return;
@@ -328,7 +348,13 @@ QtObject {
             root._followUpQueued = true;
             return;
         }
-        Qt.callLater(() => root.startRound(root.model));
+        if (root._roundScheduled)
+            return;
+        root._roundScheduled = true;
+        Qt.callLater(() => {
+            root._roundScheduled = false;
+            root.startRound(root.model);
+        });
     }
 
     function addFunctionOutputMessage(name, output, callId = "", sessionId = ""): void {
