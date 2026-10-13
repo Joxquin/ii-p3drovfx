@@ -108,6 +108,7 @@ Item {
         "Answer in plain words, in the user's language: at most 6 short sentences or a short list. No preamble.",
         "Use the health_* tools when the facts given are not enough: unit logs, the crash's stack trace, journal lines, the owning package.",
         "Never claim you ran or changed anything; you cannot. If one action the app offers would fix it, call health_propose_fix once with that action; the user decides.",
+        "Everything you write is shown as one answer, including text before a tool call. After health_propose_fix returns, close with one short sentence; never restate or correct the answer above it.",
         "Commands the user should run themselves go in a fenced code block. Prefer the distribution's tools (pacman, systemctl, journalctl).",
         "Identifying data is redacted: <user>, <host>, <ip>, <mac>, and ~ for the home directory. Do not ask for it."
     ].join("\n")
@@ -158,15 +159,27 @@ Item {
         id: taskLoader
         active: false
         sourceComponent: AiTextTask {
+            id: task
             taskName: "health_explain"
             scriptName: "health_explain"
             toolDomains: ["health"]
             temperature: 0.2
 
-            // Deltas: the answer grows under the pill as it streams.
-            onChunk: text => root.answer += String(text ?? "")
+            // Deltas: the answer grows under the pill as it streams. A tool call
+            // splits it into rounds; the first delta of a round is all of that
+            // round so far, which is how a new one is told apart, and it starts
+            // a new paragraph instead of gluing onto the last sentence.
+            onChunk: text => {
+                const added = String(text ?? "");
+                if (root.answer.length > 0 && task.resultText === added)
+                    root.answer = root.answer.trimEnd() + "\n\n";
+                root.answer += added;
+            }
+            // The result is the last round only; what came before the tool call
+            // is part of the answer too, so the streamed text is kept.
             onFinished: result => {
-                root.answer = String(result ?? "").trim();
+                const streamed = root.answer.trim();
+                root.answer = streamed.length > 0 ? streamed : String(result ?? "").trim();
                 root.phase = "idle";
                 Ai.healthIntegration.activeKey = "";
             }
