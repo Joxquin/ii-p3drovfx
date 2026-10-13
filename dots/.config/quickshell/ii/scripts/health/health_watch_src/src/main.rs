@@ -1303,7 +1303,9 @@ impl App {
         };
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let r = match conn.and_then(|c| Manager::connect(scope, c)) {
+            // A bare manager, not `connect`: the scan already subscribed on this
+            // shared connection, and systemd refuses a second Subscribe from it.
+            let r = match conn.map(|c| Manager { scope, conn: c }) {
                 None => json!({"t": "reply", "req": req, "ok": false, "error": "dbus", "message": "manager unavailable"}),
                 Some(m) => match m.act(&verb, &unit) {
                     Ok(()) => json!({"t": "reply", "req": req, "ok": true, "data": {}}),
