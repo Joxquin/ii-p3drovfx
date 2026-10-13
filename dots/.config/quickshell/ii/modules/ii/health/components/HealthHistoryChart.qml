@@ -48,7 +48,9 @@ Rectangle {
     }
     readonly property bool hasData: root.days.some(d => d.row !== null)
     readonly property real maxStack: Math.max(1, ...root.days.map(d => d.row ? Number(d.row.failed ?? 0) + Number(d.row.crashes ?? 0) + Number(d.row.newErrors ?? 0) : 0))
-    readonly property real maxLine: root.series === "disk" ? 100 : Math.max(1, ...root.days.map(d => Number(d.row?.psiMemPeak ?? 0)))
+    /// The history field the line draws. A day's bootMs is 0 when it did not boot.
+    readonly property string lineField: root.series === "disk" ? "diskPct" : root.series === "boot" ? "bootMs" : "psiMemPeak"
+    readonly property real maxLine: root.series === "disk" ? 100 : Math.max(1, ...root.days.map(d => Number(d.row?.[root.lineField] ?? 0)))
 
     function sum(from, to, field): int {
         let n = 0;
@@ -70,6 +72,7 @@ Rectangle {
                 HealthText.plural(d.row.crashes ?? 0, Translation.tr("%1 crash"), Translation.tr("%1 crashes")),
                 HealthText.plural(d.row.newErrors ?? 0, Translation.tr("%1 new error"), Translation.tr("%1 new errors"))];
             parts.push(root.series === "disk" ? Translation.tr("disk %1 %").arg(Math.round(Number(d.row.diskPct ?? 0)))
+                : root.series === "boot" ? (Number(d.row.bootMs ?? 0) > 0 ? Translation.tr("booted in %1").arg(HealthText.seconds(d.row.bootMs)) : Translation.tr("no boot"))
                 : Translation.tr("memory stalled %1 %").arg(Number(d.row.psiMemPeak ?? 0).toFixed(1)));
             return parts.join(" · ");
         }
@@ -126,6 +129,12 @@ Rectangle {
                 label: Translation.tr("Memory")
                 selected: root.series === "memory"
                 onClicked: root.series = "memory"
+            }
+            ClockChip {
+                symbol: "timer"
+                label: Translation.tr("Boot")
+                selected: root.series === "boot"
+                onClicked: root.series = "boot"
             }
         }
 
@@ -196,7 +205,7 @@ Rectangle {
                     }
 
                     // The line, broken over days without data.
-                    const field = root.series === "disk" ? "diskPct" : "psiMemPeak";
+                    const field = root.lineField;
                     ctx.strokeStyle = root.colLine;
                     ctx.lineWidth = 2;
                     ctx.lineJoin = "round";
@@ -205,7 +214,8 @@ Rectangle {
                     ctx.beginPath();
                     for (let i = 0; i < n; i++) {
                         const row = root.days[i].row;
-                        if (!row) {
+                        // A day without a boot has no boot time: a gap, not a zero.
+                        if (!row || (field === "bootMs" && !(Number(row.bootMs) > 0))) {
                             drawing = false;
                             continue;
                         }
@@ -246,7 +256,7 @@ Rectangle {
                     [root.colFailed, Translation.tr("Failed units")],
                     [root.colCrashes, Translation.tr("Crashes")],
                     [root.colErrors, Translation.tr("New errors")],
-                    [root.colLine, root.series === "disk" ? Translation.tr("Root disk used") : Translation.tr("Memory pressure peak")]
+                    [root.colLine, root.series === "disk" ? Translation.tr("Root disk used") : root.series === "boot" ? Translation.tr("Boot time") : Translation.tr("Memory pressure peak")]
                 ]
                 RowLayout {
                     id: legendItem

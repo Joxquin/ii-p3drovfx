@@ -3,15 +3,18 @@
 //! Watches the things that break quietly on a Linux desktop and reports them as
 //! NDJSON on stdout: failed units and restart loops, crashes, new journal error
 //! groups, drive SMART, filling filesystems, firmware and update chores, memory
-//! pressure, throttling and time sync. Commands arrive as NDJSON on stdin. The
-//! contract is PROTOCOL.md beside this crate.
+//! pressure, throttling and time sync, packages that need a rebuild, the shell's
+//! own helpers and memory, and how long the boot took. Commands arrive as NDJSON
+//! on stdin. The contract is PROTOCOL.md beside this crate.
 //!
 //! Everything is read as the user. The only privileged operations are systemd
 //! and UDisks method calls that systemd/UDisks themselves send through polkit.
 //! Core dumps are never opened, only checked for readability.
 
+mod boot;
 mod coredump;
 mod disks;
+mod elf;
 mod fingerprint;
 mod fs;
 mod fwupd;
@@ -19,6 +22,8 @@ mod journal;
 mod packages;
 mod pressure;
 mod proto;
+mod rebuild;
+mod shell;
 mod store;
 mod units;
 
@@ -43,6 +48,10 @@ pub enum Ev {
     Fwupd(Value),
     Reply(Value),
     Rescan(Scope),
+    /// The rebuild scan's result (rebuild.rs), from its thread.
+    Rebuild(Vec<Value>),
+    /// Helpers built from older sources (shell.rs), from its thread.
+    Helpers(Vec<Value>),
 }
 
 #[derive(Clone)]
@@ -58,10 +67,15 @@ struct Config {
     psi_mem: f64,
     restart_loop: u64,
     history_days: usize,
+    /// The shell's memory, in MiB, past which it is a finding.
+    shell_mem_mb: u64,
 }
 
-const ALL_SOURCES: [&str; 12] = [
+/// The sources on when --sources is not given. `shellLog` is not among them: it
+/// keeps a `qs log` follower running, so it is only ever asked for by name.
+const ALL_SOURCES: [&str; 15] = [
     "units", "userUnits", "appLaunches", "crashes", "journal", "drives", "filesystems", "firmware", "packages", "pressure", "thermals", "timesync",
+    "rebuild", "shell", "boot",
 ];
 
 fn parse_args() -> Config {
@@ -82,6 +96,7 @@ fn parse_args() -> Config {
         psi_mem: 10.0,
         restart_loop: 5,
         history_days: 30,
+        shell_mem_mb: 1200,
     };
     // "--disk-warn=90" and "--disk-warn 90" both work.
     let mut args: Vec<String> = Vec::new();
@@ -115,6 +130,7 @@ fn parse_args() -> Config {
             "--psi-mem" => c.psi_mem = num(&val, 10.0).clamp(0.1, 100.0),
             "--restart-loop" => c.restart_loop = num(&val, 5.0).max(2.0) as u64,
             "--history-days" => c.history_days = num(&val, 30.0).clamp(1.0, 366.0) as usize,
+            "--shell-mem-mb" => c.shell_mem_mb = num(&val, 1200.0).clamp(200.0, 65536.0) as u64,
             _ => {
                 i += 1;
                 continue;
@@ -181,7 +197,25 @@ struct App {
     unsynced_checks: u32,
     visible: bool,
     dump_access: String,
+    /// "scope:unit" → (verb, when): what the user last did to a unit, so a finding
+    /// that resolves right after can say it was fixed by that.
+    last_act: HashMap<String, (String, u64)>,
+    rebuild_cache: std::sync::Arc<std::sync::Mutex<rebuild::Cache>>,
+    rebuild_running: bool,
+    /// The shell's memory: the highest in its first hour (its normal), when it
+    /// was first read, and since when it has been too high.
+    shell_base: u64,
+    shell_first: u64,
+    shell_high_since: Option<u64>,
+    shell_rss: Option<u64>,
+    /// QML errors counted from the shell's log, and the follower process.
+    shell_log: shell::LogErrors,
+    shell_log_child: Option<std::process::Child>,
+    boot_tries: u32,
     // timers
+    rebuild_due: Option<Instant>,
+    boot_due: Option<Instant>,
+    helpers_next: Instant,
     units_due: HashMap<Scope, Instant>,
     units_first: HashMap<Scope, Instant>,
     pkg_due: Option<Instant>,
@@ -246,6 +280,19 @@ impl App {
             unsynced_checks: 0,
             visible: false,
             dump_access: "denied".into(),
+            last_act: HashMap::new(),
+            rebuild_cache: Default::default(),
+            rebuild_running: false,
+            shell_base: 0,
+            shell_first: 0,
+            shell_high_since: None,
+            shell_rss: None,
+            shell_log: Default::default(),
+            shell_log_child: None,
+            boot_tries: 0,
+            rebuild_due: None,
+            boot_due: None,
+            helpers_next: now + Duration::from_secs(6 * 3600),
             units_due: HashMap::new(),
             units_first: HashMap::new(),
             pkg_due: None,
@@ -274,6 +321,60 @@ impl App {
         !fp.is_empty() && self.store.state.fingerprints.get(fp).is_some_and(|r| r.muted)
     }
 
+    /// A finding's `snoozed` field: the epoch ms it wakes at, "boot" for until the
+    /// next boot, or null.
+    fn snoozed(&self, id: &str) -> Value {
+        match self.store.state.snoozed.get(id) {
+            Some(s) if s.active(now_ms(), &self.boot) => {
+                if s.boot.is_some() { json!("boot") } else { json!(s.until) }
+            }
+            _ => Value::Null,
+        }
+    }
+
+    /// Kinds whose going away is a fix worth listing. A crash ageing out of the
+    /// week, a journal group turning "known" or a failed app launch are not.
+    fn fix_worth_listing(kind: &str) -> bool {
+        !matches!(kind, "crash" | "journal" | "appLaunch")
+    }
+
+    /// Remembers a finding that went away for "Fixed recently", with what fixed it:
+    /// the user's own action on that unit in the two minutes before, or "self".
+    fn remember_resolved(&mut self, f: &Value) {
+        let kind = f["kind"].as_str().unwrap_or("");
+        let id = f["id"].as_str().unwrap_or("");
+        if !Self::fix_worth_listing(kind) || self.store.state.dismissed.contains_key(id) {
+            return;
+        }
+        let now = now_ms();
+        let key = format!("{}:{}", f["data"]["scope"].as_str().unwrap_or(""), f["data"]["unit"].as_str().unwrap_or(""));
+        let by = match self.last_act.get(&key) {
+            Some((verb, at)) if now.saturating_sub(*at) <= 120_000 => verb.clone(),
+            _ => "self".to_string(),
+        };
+        self.store.remember_resolved(json!({
+            "id": id, "kind": kind, "sev": f["sev"], "data": f["data"], "since": f["since"],
+            "resolvedAt": now, "by": by,
+        }));
+        self.publish_resolved();
+    }
+
+    fn publish_resolved(&self) {
+        emit(&json!({"t": "resolved", "items": self.store.state.resolved}));
+    }
+
+    /// Lifts snoozes that ran out and re-sends their findings without the flag.
+    fn expire_snoozes(&mut self) {
+        let now = now_ms();
+        let boot = self.boot.clone();
+        let before = self.store.state.snoozed.len();
+        self.store.state.snoozed.retain(|_, s| s.active(now, &boot));
+        if self.store.state.snoozed.len() != before {
+            self.store.dirty = true;
+            self.refresh_muted();
+        }
+    }
+
     /// Replaces every finding whose id starts with one of `prefixes` by `fresh`:
     /// upserts what is new or changed, resolves what is gone. `fresh` carries each
     /// finding's event time, which decides whether a dismissal still hides it.
@@ -290,6 +391,7 @@ impl App {
             let fp = f["fp"].as_str().unwrap_or("").to_string();
             let muted = self.is_muted(&fp, &kind, &f["data"]);
             f["muted"] = json!(muted);
+            f["snoozed"] = self.snoozed(&id);
             f["alert"] = json!(false);
             keep.insert(id.clone());
             let changed = self.findings.get(&id) != Some(&f);
@@ -303,6 +405,7 @@ impl App {
                 && first_time
                 && f["sev"] == "critical"
                 && !muted
+                && f["snoozed"].is_null()
                 && kind != "appLaunch"
                 && self.store.state.alerted.get(&alert_key) != Some(&self.boot);
             if alert {
@@ -319,7 +422,9 @@ impl App {
             .cloned()
             .collect();
         for id in gone {
-            self.findings.remove(&id);
+            if let Some(f) = self.findings.remove(&id) {
+                self.remember_resolved(&f);
+            }
             emit(&json!({"t": "finding", "op": "resolve", "id": id}));
         }
     }
@@ -328,15 +433,17 @@ impl App {
         json!({"id": id, "kind": kind, "sev": sev, "since": since, "count": count.max(1), "fp": fp, "data": data})
     }
 
-    /// Re-sends every finding whose muted flag changed.
+    /// Re-sends every finding whose muted or snoozed flag changed.
     fn refresh_muted(&mut self) {
         let ids: Vec<String> = self.findings.keys().cloned().collect();
         for id in ids {
             let f = self.findings[&id].clone();
             let muted = self.is_muted(f["fp"].as_str().unwrap_or(""), f["kind"].as_str().unwrap_or(""), &f["data"]);
-            if f["muted"] != json!(muted) {
+            let snoozed = self.snoozed(&id);
+            if f["muted"] != json!(muted) || f["snoozed"] != snoozed {
                 let mut g = f.clone();
                 g["muted"] = json!(muted);
+                g["snoozed"] = snoozed;
                 self.findings.insert(id, g.clone());
                 emit(&json!({"t": "finding", "op": "upsert", "f": g}));
             }
@@ -975,6 +1082,12 @@ impl App {
             }
             self.apply(&["thermal:".into()], tf);
         }
+        if has(&self.cfg, "shell") {
+            self.check_shell_memory(now);
+        }
+        if has(&self.cfg, "shellLog") {
+            self.check_shell_log(now);
+        }
         emit(&json!({
             "t": "vitals",
             "psi": Value::Object(psi),
@@ -983,6 +1096,7 @@ impl App {
             "cpuTempC": temp,
             "fs": self.fs_last,
             "memory": pressure::memory(),
+            "shellRss": self.shell_rss,
         }));
         // Unit failures count toward today's row as the worst seen.
         let failed = self.findings.values().filter(|f| f["kind"] == "unit").count() as u64;
@@ -996,6 +1110,162 @@ impl App {
         if rolled {
             self.publish_history();
         }
+    }
+
+    /// The shell's resident memory, and `shellMemory` when it has stayed above the
+    /// limit, or 600 MiB above its own first hour, for five minutes. Rounded to
+    /// 50 MiB in the finding, so it is not re-sent on every small change.
+    fn check_shell_memory(&mut self, now: u64) {
+        const MIB: u64 = 1 << 20;
+        let Some((pid, rss)) = shell::shell_rss() else {
+            self.shell_rss = None;
+            return;
+        };
+        self.shell_rss = Some(rss);
+        if self.shell_first == 0 {
+            self.shell_first = now;
+        }
+        let settled = now.saturating_sub(self.shell_first) >= 3_600_000;
+        if !settled {
+            self.shell_base = self.shell_base.max(rss);
+        }
+        let limit = self.cfg.shell_mem_mb * MIB;
+        let grown = settled && self.shell_base > 0 && rss > self.shell_base + 600 * MIB;
+        if rss > limit || grown {
+            self.shell_high_since.get_or_insert(now);
+        } else {
+            self.shell_high_since = None;
+        }
+        let mut fresh = Vec::new();
+        if let Some(since) = self.shell_high_since.filter(|s| now.saturating_sub(*s) >= 300_000) {
+            let round = |b: u64| (b + 25 * MIB) / (50 * MIB) * 50;
+            let data = json!({"pid": pid, "rssMb": round(rss), "baseMb": round(self.shell_base), "limitMb": self.cfg.shell_mem_mb, "grown": grown});
+            fresh.push((Self::finding("shellMemory".into(), "shellMemory", "warning", since, 1, String::new(), data), since));
+        }
+        self.apply(&["shellMemory".into()], fresh);
+    }
+
+    /// `shellErrors`: QML errors the shell logged in the last hour, the follower
+    /// started the first time (the shell is this helper's parent).
+    fn check_shell_log(&mut self, now: u64) {
+        if self.shell_log_child.is_none() {
+            let Some((pid, _)) = shell::shell_rss() else { return };
+            self.shell_log_child = shell::follow_log(pid, self.shell_log.clone());
+        }
+        let mut recent: Vec<(String, u64, u64)> = match self.shell_log.lock() {
+            Ok(m) => m.iter().filter(|(_, v)| now.saturating_sub(v.1) <= 3_600_000).map(|(k, v)| (k.clone(), v.0, v.1)).collect(),
+            Err(_) => return,
+        };
+        recent.sort_by(|a, b| b.1.cmp(&a.1));
+        let mut fresh = Vec::new();
+        if !recent.is_empty() {
+            let since = self.findings.get("shellErrors").and_then(|o| o["since"].as_u64()).unwrap_or(now);
+            let total: u64 = recent.iter().map(|r| r.1).sum();
+            let top: Vec<Value> = recent.iter().take(5).map(|(k, n, _)| json!({"message": k, "count": n})).collect();
+            fresh.push((Self::finding("shellErrors".into(), "shellErrors", "warning", since, recent.len() as u64, String::new(),
+                json!({"errors": top, "kinds": recent.len(), "total": total})), since));
+        }
+        self.apply(&["shellErrors".into()], fresh);
+    }
+
+    // ── Rebuilds, helpers, boot ─────────────────────────────────────────
+
+    /// Runs the rebuild scan on its own thread: the first one reads every foreign
+    /// package's programs, which can take a few seconds.
+    fn start_rebuild(&mut self) {
+        self.rebuild_due = None;
+        if !has(&self.cfg, "rebuild") || self.pkg != packages::Manager::Pacman || self.rebuild_running {
+            return;
+        }
+        self.rebuild_running = true;
+        let cache = self.rebuild_cache.clone();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let list = match cache.lock() {
+                Ok(mut c) => rebuild::scan(&mut c),
+                Err(_) => Vec::new(),
+            };
+            let _ = tx.send(Ev::Rebuild(list));
+        });
+    }
+
+    fn on_rebuild(&mut self, list: Vec<Value>) {
+        self.rebuild_running = false;
+        let mut fresh = Vec::new();
+        if !list.is_empty() {
+            let now = now_ms();
+            let since = self.findings.get("rebuild").and_then(|o| o["since"].as_u64()).unwrap_or(now);
+            // Quickshell needing a rebuild can leave the shell unable to start.
+            let sev = if list.iter().any(|p| p["reason"] == "quickshell") { "critical" } else { "warning" };
+            let aur = ["yay", "paru"].into_iter().find(|h| proto::which(h)).unwrap_or("");
+            let data = json!({"packages": list, "aurHelper": aur});
+            fresh.push((Self::finding("rebuild".into(), "rebuild", sev, since, list.len() as u64, String::new(), data), since));
+        }
+        self.apply(&["rebuild".into()], fresh);
+    }
+
+    fn start_helpers(&mut self) {
+        self.helpers_next = Instant::now() + Duration::from_secs(6 * 3600);
+        if !has(&self.cfg, "shell") {
+            return;
+        }
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let list = shell::scripts_dir().map(|d| shell::stale_helpers(&d)).unwrap_or_default();
+            let _ = tx.send(Ev::Helpers(list));
+        });
+    }
+
+    fn on_helpers(&mut self, list: Vec<Value>) {
+        let now = now_ms();
+        let fresh = list
+            .into_iter()
+            .filter_map(|h| {
+                let name = h["name"].as_str()?.to_string();
+                let id = format!("shellHelper:{name}");
+                let since = self.findings.get(&id).and_then(|o| o["since"].as_u64()).unwrap_or(now);
+                Some((Self::finding(id, "shellHelper", "warning", since, 1, String::new(), json!({"name": name})), since))
+            })
+            .collect();
+        self.apply(&["shellHelper:".into()], fresh);
+    }
+
+    /// This boot's timing, once it has finished; tried again every minute for a
+    /// quarter of an hour when it has not.
+    fn record_boot(&mut self) {
+        self.boot_due = None;
+        if !has(&self.cfg, "boot") {
+            return;
+        }
+        let Some(sys) = self.bus_sys.clone() else { return };
+        let Some(mut t) = boot::times(&sys, self.bus_user.as_ref()) else {
+            self.boot_tries += 1;
+            if self.boot_tries < 15 {
+                self.boot_due = Some(Instant::now() + Duration::from_secs(60));
+            }
+            return;
+        };
+        let now = now_ms();
+        let uptime_ms = std::fs::read_to_string("/proc/uptime")
+            .ok()
+            .and_then(|s| s.split_whitespace().next()?.parse::<f64>().ok())
+            .map(|s| (s * 1000.0) as u64)
+            .unwrap_or(0);
+        let total = t["total"].as_u64().unwrap_or(0);
+        t["boot"] = json!(self.boot);
+        t["at"] = json!(now.saturating_sub(uptime_ms));
+        t["top"] = boot::blame(10).into_iter().map(|(unit, ms)| json!({"unit": unit, "ms": ms})).collect();
+        if self.store.remember_boot(t) {
+            let keep = self.cfg.history_days;
+            let (_, day) = self.store.today(&packages::local_date(now), keep);
+            day.boot_ms = total;
+        }
+        emit(&json!({"t": "boot", "boots": self.store.state.boots}));
+        let mut fresh = Vec::new();
+        if let Some(data) = boot::slow(&self.store.state.boots) {
+            fresh.push((Self::finding("slowBoot".into(), "slowBoot", "info", now, 1, String::new(), data), now));
+        }
+        self.apply(&["slowBoot".into()], fresh);
     }
 
     fn publish_history(&mut self) {
@@ -1039,6 +1309,9 @@ impl App {
                 "pressure": src("pressure") && std::path::Path::new("/proc/pressure/memory").exists(),
                 "thermals": src("thermals") && (pressure::throttle_supported() || pressure::cpu_temp().is_some()),
                 "timesync": src("timesync"),
+                "rebuild": src("rebuild") && self.pkg == packages::Manager::Pacman,
+                "shell": src("shell"),
+                "boot": src("boot") && self.bus_sys.is_some(),
             },
             "dumpAccess": self.dump_access,
             "user": self.user,
@@ -1073,9 +1346,16 @@ impl App {
         }
         self.scan_fs();
         self.scan_system(true);
+        self.record_boot();
         self.vitals();
         // After every source has filled today's row.
         self.publish_history();
+        self.publish_resolved();
+        if !self.cfg.once {
+            // Off the start's critical path: the first scan reads many files.
+            self.rebuild_due = Some(Instant::now() + Duration::from_secs(10));
+            self.start_helpers();
+        }
         if has(&self.cfg, "firmware") && fwupd::available() {
             if self.cfg.once {
                 let v = fwupd::scan(self.bus_sys.as_ref());
@@ -1118,6 +1398,8 @@ impl App {
         self.dump_access = self.dump_access_state();
         emit(&json!({"t": "access", "dumpAccess": self.dump_access}));
         self.start_fwupd();
+        self.start_rebuild();
+        self.start_helpers();
         self.mark_synced();
     }
 
@@ -1193,6 +1475,28 @@ impl App {
                 } else if self.findings.remove(&id).is_some() {
                     emit(&json!({"t": "finding", "op": "resolve", "id": id}));
                 }
+            }
+            "snooze" | "unsnooze" => {
+                let id = s("id");
+                if id.is_empty() {
+                    return true;
+                }
+                if t == "snooze" {
+                    let snooze = if msg["untilBoot"].as_bool() == Some(true) {
+                        store::Snooze { until: 0, boot: Some(self.boot.clone()) }
+                    } else {
+                        let until = msg["until"].as_u64().unwrap_or(0);
+                        if until <= now_ms() {
+                            return true;
+                        }
+                        store::Snooze { until, boot: None }
+                    };
+                    self.store.state.snoozed.insert(id, snooze);
+                } else {
+                    self.store.state.snoozed.remove(&id);
+                }
+                self.store.dirty = true;
+                self.refresh_muted();
             }
             "resetNoise" => {
                 self.store.reset_noise();
@@ -1295,6 +1599,9 @@ impl App {
         if unit.is_empty() {
             return Self::reply_err(&req, "args", "unit");
         }
+        // Remembered for "Fixed recently": a finding that resolves soon after was
+        // fixed by this.
+        self.last_act.insert(format!("{}:{}", scope.name(), unit), (verb.clone(), now_ms()));
         // Each act runs on its own thread: a polkit prompt can hold the call for as
         // long as the user takes to answer, and the loop must not wait on it.
         let conn = match scope {
@@ -1321,11 +1628,14 @@ impl App {
 
     fn next_deadline(&self) -> Instant {
         let mut d = self.vitals_next.min(self.fs_next).min(self.drives_next).min(self.fwupd_next).min(self.system_next)
-            .min(self.time_next).min(self.save_next);
+            .min(self.time_next).min(self.save_next).min(self.helpers_next);
         for t in self.units_due.values() {
             d = d.min(*t);
         }
-        for t in [self.pkg_due, self.journal_flush_due, self.journal_restart, self.sync_deadline].into_iter().flatten() {
+        for t in [self.pkg_due, self.journal_flush_due, self.journal_restart, self.sync_deadline, self.rebuild_due, self.boot_due]
+            .into_iter()
+            .flatten()
+        {
             d = d.min(t);
         }
         d
@@ -1345,6 +1655,17 @@ impl App {
             self.owner_cache.clear();
             self.publish_crashes();
             self.scan_system(true);
+            // After a transaction: what it installed may need others rebuilt.
+            self.start_rebuild();
+        }
+        if self.rebuild_due.is_some_and(|t| t <= now) {
+            self.start_rebuild();
+        }
+        if self.boot_due.is_some_and(|t| t <= now) {
+            self.record_boot();
+        }
+        if self.helpers_next <= now {
+            self.start_helpers();
         }
         if self.journal_flush_due.is_some_and(|t| t <= now) {
             self.flush_journal();
@@ -1387,6 +1708,7 @@ impl App {
             self.time_next = now + Duration::from_secs(300);
         }
         if self.save_next <= now {
+            self.expire_snoozes();
             self.store.prune(now_ms());
             self.store.save();
             // Queries and rescans read journal output in bulk; give it back.
@@ -1423,6 +1745,8 @@ impl App {
                 }
             }
             Ev::Reply(v) => emit(&v),
+            Ev::Rebuild(list) => self.on_rebuild(list),
+            Ev::Helpers(list) => self.on_helpers(list),
         }
         true
     }
@@ -1509,6 +1833,10 @@ fn main() {
     }
     run_loop(&mut app, rx);
     drop(app.follower.take());
+    if let Some(mut child) = app.shell_log_child.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }
 
 #[cfg(test)]

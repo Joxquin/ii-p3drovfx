@@ -121,16 +121,22 @@ Rectangle {
                         { key: "packages", symbol: "package_2", title: Translation.tr("Update chores") },
                         { key: "pressure", symbol: "speed", title: Translation.tr("Memory and disk pressure") },
                         { key: "thermals", symbol: "device_thermostat", title: Translation.tr("Throttling") },
-                        { key: "timesync", symbol: "schedule", title: Translation.tr("Clock synchronisation") }
+                        { key: "timesync", symbol: "schedule", title: Translation.tr("Clock synchronisation") },
+                        { key: "rebuild", symbol: "construction", title: Translation.tr("Packages that need a rebuild") },
+                        { key: "shell", symbol: "deployed_code", title: Translation.tr("The shell's helpers and memory") },
+                        { key: "boot", symbol: "timer", title: Translation.tr("Boot time") },
+                        { key: "shellLog", symbol: "bug_report", title: Translation.tr("QML errors in the shell's log"),
+                          description: Translation.tr("Keeps a log reader of about 50 MB running") }
                     ]
 
                     ClockSettingsRow {
                         required property var modelData
                         required property int index
                         first: index === 0
-                        last: index === 11
+                        last: index === 15
                         symbol: modelData.symbol
                         title: modelData.title
+                        description: modelData.description ?? ""
                         Toggle { target: root.h.sources; key: modelData.key }
                     }
                 }
@@ -203,11 +209,17 @@ Rectangle {
                     Stepper { target: root.h.thresholds; key: "psiMemPercent"; from: 1; to: 80; format: v => `${v} %` }
                 }
                 ClockSettingsRow {
-                    last: true
                     symbol: "autorenew"
                     title: Translation.tr("A restart loop is this many restarts")
                     description: Translation.tr("Within 10 minutes")
                     Stepper { target: root.h.thresholds; key: "restartLoop"; from: 2; to: 50 }
+                }
+                ClockSettingsRow {
+                    last: true
+                    symbol: "memory_alt"
+                    title: Translation.tr("The shell's memory to warn at")
+                    description: Translation.tr("Or 600 MB more than in its first hour")
+                    Stepper { target: root.h.thresholds; key: "shellMemoryMb"; from: 400; to: 8000; stepSize: 100; format: v => Translation.tr("%1 MB").arg(v) }
                 }
             }
 

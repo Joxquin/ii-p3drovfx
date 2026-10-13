@@ -84,11 +84,50 @@ Singleton {
     /// them); everything that counts or alerts leaves them out.
     readonly property var findings: {
         const order = { critical: 0, warning: 1, info: 2 };
-        return Object.values(root.findingsById).filter(f => f.muted !== true).sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3) || Number(b.since ?? 0) - Number(a.since ?? 0));
+        return Object.values(root.findingsById).concat(root.localFindings).filter(f => f.muted !== true).sort((a, b) => (order[a.sev] ?? 3) - (order[b.sev] ?? 3) || Number(b.since ?? 0) - Number(a.since ?? 0));
     }
-    /// What the hero counts: critical and warning findings, app launches excluded.
-    readonly property var attention: root.findings.filter(f => f.kind !== "appLaunch" && (f.sev === "critical" || f.sev === "warning"))
+    /// What the hero counts: critical and warning findings, app launches and snoozed
+    /// ones excluded.
+    readonly property var attention: root.findings.filter(f => f.kind !== "appLaunch" && !root.isSnoozed(f) && (f.sev === "critical" || f.sev === "warning"))
     readonly property int attentionCount: root.attention.length
+    /// Snoozed findings, for the Overview's folded "Snoozed" group.
+    readonly property var snoozedFindings: root.findings.filter(f => root.isSnoozed(f))
+
+    function isSnoozed(f): bool {
+        return f?.snoozed !== null && f?.snoozed !== undefined;
+    }
+
+    /// Snoozes finding `id` until `until` (epoch ms), or until the next boot when
+    /// `until` is "boot". The helper wakes it and keeps it quiet meanwhile.
+    function snooze(id, until): void {
+        if (until === "boot")
+            root.send({ t: "snooze", id: String(id), untilBoot: true });
+        else
+            root.send({ t: "snooze", id: String(id), until: Math.round(Number(until)) });
+    }
+    function unsnooze(id): void { root.send({ t: "unsnooze", id: String(id) }); }
+
+    // ── Findings the shell makes itself ─────────────────────────────────
+    // The settings file is the shell's, not the helper's: a broken one is said here.
+    property double configHealthSince: Date.now()
+    readonly property string configState: Config.configHealthState
+    onConfigStateChanged: root.configHealthSince = Date.now()
+    readonly property var localFindings: {
+        const s = root.configState;
+        if (s === "ok" || s === "migrated" || s === "recovered")
+            return [];
+        return [{
+            id: "config", kind: "config", sev: s === "malformed" ? "critical" : "info", since: root.configHealthSince,
+            count: 1, fp: "", muted: false, snoozed: null, alert: false,
+            data: { state: s, keys: Array.from(Config.configHealthKeys ?? []) }
+        }];
+    }
+
+    /// Findings that went away in the last week, newest last: { id, kind, sev,
+    /// data, since, resolvedAt, by } ("restart" and the like, or "self").
+    property var resolved: []
+    /// One row per boot, oldest first: phases in ms and the slowest units.
+    property var boots: []
 
     property var crashGroups: []
     property var updateTransactions: []
@@ -105,7 +144,7 @@ Singleton {
     }
 
     function finding(id): var {
-        return root.findingsById[String(id)] ?? null;
+        return root.findingsById[String(id)] ?? root.localFindings.find(f => f.id === String(id)) ?? null;
     }
 
     /// Whether the subject of an assistant key ("finding:<id>", "journal:<fp>",
@@ -251,6 +290,12 @@ Singleton {
             break;
         case "history":
             root.history = Array.from(msg.days ?? []);
+            break;
+        case "resolved":
+            root.resolved = Array.from(msg.items ?? []);
+            break;
+        case "boot":
+            root.boots = Array.from(msg.boots ?? []);
             break;
         case "reply": {
             const cb = root._callbacks[msg.req];
@@ -417,9 +462,29 @@ Singleton {
             return { label: Translation.tr("Copy report"), verb: "copyReport" };
         case "reboot":
             return { label: Translation.tr("Restart"), verb: "reboot" };
+        case "rebuild":
+            return { label: Translation.tr("Rebuild in a terminal"), verb: "rebuild" };
+        case "shellHelper":
+            return { label: Translation.tr("Rebuild"), verb: "rebuildHelper" };
+        case "config":
+            return { label: Translation.tr("Open Settings"), verb: "openSettings" };
         default:
             return null;
         }
+    }
+
+    readonly property string guardDir: `${Directories.scriptPath}/quickshell-guard`
+
+    /// The terminal command that rebuilds what a `rebuild` finding lists: Quickshell
+    /// through qs-rebuild.sh (it knows a repository build from an AUR one), the rest
+    /// with the AUR helper; `--rebuild`, or yay reinstalls its cached build.
+    function rebuildCommand(d): var {
+        const pkgs = Array.from(d?.packages ?? []);
+        if (pkgs.some(p => p.reason === "quickshell"))
+            return ["bash", `${root.guardDir}/qs-rebuild.sh`];
+        const names = pkgs.filter(p => p.foreign !== false).map(p => String(p.name));
+        const aur = String(d?.aurHelper ?? "") || "yay";
+        return [aur, "-S", "--rebuild", ...names];
     }
 
     function runPrimaryFix(id, callback): void {
@@ -475,6 +540,23 @@ Singleton {
         };
         if (verb === "reboot") {
             GlobalStates.sessionOpen = true;
+            finish(true);
+            return;
+        }
+        // Handed to a terminal or another window: nothing to wait for here.
+        if (verb === "rebuild" || verb === "rebuildHelper" || verb === "openSettings") {
+            if (verb === "rebuild") {
+                const cmd = root.rebuildCommand(d);
+                // qs-rebuild.sh asks and waits for Enter itself.
+                if (cmd[0] === "bash")
+                    root.openTerminal(cmd);
+                else
+                    root.runInTerminal(cmd);
+            } else if (verb === "rebuildHelper") {
+                root.runInTerminal(["bash", Directories.rustHelpersScriptPath, "build", String(d.name ?? "")]);
+            } else {
+                GlobalStates.openSettingsPage("", "", "");
+            }
             finish(true);
             return;
         }
@@ -569,7 +651,7 @@ Singleton {
             : f.kind === "crash" ? "crashes"
             : f.kind === "journal" ? "journal"
             : ["disk", "drive"].includes(f.kind) ? "storage"
-            : ["firmware", "security", "reboot", "deletedLibs", "pacnew", "timesync"].includes(f.kind) ? "system"
+            : ["firmware", "security", "reboot", "deletedLibs", "pacnew", "timesync", "rebuild", "shellHelper", "shellMemory", "shellErrors", "slowBoot", "config"].includes(f.kind) ? "system"
             : "overview";
         GlobalStates.openHealthApp(tab, String(id ?? ""));
     }
@@ -734,6 +816,14 @@ Singleton {
         Quickshell.execDetached(cmd);
     }
 
+    /// A terminal on a command that keeps its own window open (asks, then waits).
+    function openTerminal(args): void {
+        const terminal = Config.options?.apps?.terminal || "kitty -1";
+        const cmd = terminal.split(" ").filter(part => part.length > 0);
+        cmd.push("-e", ...args);
+        Quickshell.execDetached(cmd);
+    }
+
     // ── Process ─────────────────────────────────────────────────────────
     function checkBinary(): void {
         probe.running = false;
@@ -768,8 +858,12 @@ Singleton {
 
     readonly property var srcOpts: root.opts?.sources ?? null
     readonly property var launchArgs: {
-        const names = ["units", "userUnits", "appLaunches", "crashes", "journal", "drives", "filesystems", "firmware", "packages", "pressure", "thermals", "timesync"];
+        const names = ["units", "userUnits", "appLaunches", "crashes", "journal", "drives", "filesystems", "firmware", "packages", "pressure", "thermals", "timesync",
+            "rebuild", "shell", "boot"];
         const on = names.filter(n => root.srcOpts?.[n] ?? true);
+        // Off unless asked for: following the shell's log keeps a 50 MB `qs log` running.
+        if (root.srcOpts?.shellLog === true)
+            on.push("shellLog");
         const noise = root.opts?.noise;
         const th = root.opts?.thresholds;
         return [
@@ -782,7 +876,8 @@ Singleton {
             "--disk-crit", String(th?.diskCritPercent ?? 97),
             "--psi-mem", String(th?.psiMemPercent ?? 10),
             "--restart-loop", String(th?.restartLoop ?? 5),
-            "--history-days", String(root.opts?.historyDays ?? 30)
+            "--history-days", String(root.opts?.historyDays ?? 30),
+            "--shell-mem-mb", String(th?.shellMemoryMb ?? 1200)
         ];
     }
     readonly property string launchKey: root.launchArgs.join("|")

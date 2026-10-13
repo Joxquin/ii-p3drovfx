@@ -42,7 +42,11 @@ Item {
         };
     }
     readonly property int count: HealthService.attentionCount
-    readonly property var info: HealthService.findings.filter(f => !root.attention.includes(f))
+    readonly property var info: HealthService.findings.filter(f => !root.attention.includes(f) && !HealthService.isSnoozed(f))
+    /// Folded groups under the list: what was snoozed, and what got fixed this week.
+    property bool showSnoozed: false
+    property bool showFixed: false
+    readonly property var fixed: HealthService.resolved.slice().reverse().slice(0, 12)
     readonly property bool clear: root.count === 0
     readonly property bool loading: HealthService.enabled && !HealthService.synced && HealthService.findings.length === 0
 
@@ -423,7 +427,7 @@ Item {
 
             Column {
                 id: cards
-                readonly property int count: cardRepeater.count
+                readonly property int count: cardRepeater.count + HealthService.snoozedFindings.length + root.fixed.length
                 width: attFlick.width
                 spacing: ClockStyle.gapTiny
 
@@ -437,6 +441,43 @@ Item {
                         width: cards.width
                         finding: modelData
                         entranceIndex: index + 1
+                    }
+                }
+
+                FoldHeader {
+                    width: cards.width
+                    visible: HealthService.snoozedFindings.length > 0
+                    symbol: "snooze"
+                    label: Translation.tr("Snoozed")
+                    count: HealthService.snoozedFindings.length
+                    open: root.showSnoozed
+                    onFoldRequested: root.showSnoozed = !root.showSnoozed
+                }
+                Repeater {
+                    model: root.showSnoozed ? HealthService.snoozedFindings : []
+                    FindingCard {
+                        required property var modelData
+                        width: cards.width
+                        finding: modelData
+                        opacity: 0.6
+                    }
+                }
+
+                FoldHeader {
+                    width: cards.width
+                    visible: root.fixed.length > 0
+                    symbol: "task_alt"
+                    label: Translation.tr("Fixed recently")
+                    count: root.fixed.length
+                    open: root.showFixed
+                    onFoldRequested: root.showFixed = !root.showFixed
+                }
+                Repeater {
+                    model: root.showFixed ? root.fixed : []
+                    FixedRow {
+                        required property var modelData
+                        width: cards.width
+                        entry: modelData
                     }
                 }
             }
@@ -456,6 +497,104 @@ Item {
             shapeSize: ClockStyle.emptyShapeSmall
             title: Translation.tr("Nothing to look at")
             subtitle: Translation.tr("New problems show up here and on the island.")
+        }
+    }
+
+    // A folded group's line: its name and count, the chevron that opens it.
+    component FoldHeader: RippleButton {
+        id: fold
+        property string symbol: ""
+        property string label: ""
+        property int count: 0
+        property bool open: false
+        // Not `toggled`: the button already has a signal by that name.
+        signal foldRequested()
+
+        implicitHeight: 44
+        buttonRadius: ClockStyle.radiusLarge
+        colBackground: "transparent"
+        colBackgroundHover: ClockStyle.colSurfaceHover
+        colRipple: ClockStyle.colSurfaceActive
+        onClicked: fold.foldRequested()
+
+        contentItem: RowLayout {
+            anchors {
+                left: parent.left
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+                leftMargin: ClockStyle.gapLarge
+                rightMargin: ClockStyle.gapLarge
+            }
+            spacing: ClockStyle.gap
+
+            MaterialSymbol {
+                text: fold.symbol
+                iconSize: ClockStyle.iconSmall
+                color: ClockStyle.colSubtext
+            }
+            StyledText {
+                Layout.fillWidth: true
+                text: `${fold.label} · ${fold.count}`
+                font.pixelSize: ClockStyle.textSmall
+                font.weight: Font.Bold
+                color: ClockStyle.colSubtext
+            }
+            MaterialSymbol {
+                text: fold.open ? "expand_less" : "expand_more"
+                iconSize: ClockStyle.iconSmall
+                color: ClockStyle.colSubtext
+            }
+        }
+    }
+
+    // A finding that went away: what it was, when, and whether the user's own action
+    // did it. Read from the helper's memory, so it outlives the finding.
+    component FixedRow: Rectangle {
+        id: fixedRow
+        property var entry: null
+        readonly property string by: String(fixedRow.entry?.by ?? "self")
+
+        implicitHeight: fixedLayout.implicitHeight + ClockStyle.gap * 2
+        radius: ClockStyle.radiusLarge
+        color: ClockStyle.colPane
+
+        RowLayout {
+            id: fixedLayout
+            anchors {
+                left: parent.left
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+                leftMargin: ClockStyle.gapLarge
+                rightMargin: ClockStyle.gapLarge
+            }
+            spacing: ClockStyle.gap
+
+            MaterialSymbol {
+                text: "check_circle"
+                iconSize: ClockStyle.iconNormal
+                fill: 1
+                color: ClockStyle.colPrimary
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
+                StyledText {
+                    Layout.fillWidth: true
+                    text: HealthText.title(fixedRow.entry)
+                    elide: Text.ElideRight
+                    font.pixelSize: ClockStyle.textNormal
+                    color: ClockStyle.colOnSurface
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    text: fixedRow.by === "self"
+                        ? Translation.tr("Fixed %1 ago, on its own").arg(HealthText.age(fixedRow.entry?.resolvedAt, root.now))
+                        : Translation.tr("Fixed %1 ago, after you chose %2").arg(HealthText.age(fixedRow.entry?.resolvedAt, root.now)).arg(HealthText.verbLabel(fixedRow.by))
+                    elide: Text.ElideRight
+                    font.pixelSize: ClockStyle.textSmall
+                    color: ClockStyle.colSubtext
+                }
+            }
         }
     }
 

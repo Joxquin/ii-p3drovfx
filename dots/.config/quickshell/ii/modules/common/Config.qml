@@ -6583,6 +6583,15 @@ Singleton {
                     property bool pressure: true
                     property bool thermals: true
                     property bool timesync: true
+                    // Packages built here that a library or Qt update broke.
+                    property bool rebuild: true
+                    // The shell's own helpers and memory.
+                    property bool shell: true
+                    // How long each boot took, and which unit slowed it.
+                    property bool boot: true
+                    // QML errors in the shell's log. Off: following the log keeps a
+                    // `qs log` process of about 50 MB running.
+                    property bool shellLog: false
                 }
                 property JsonObject noise: JsonObject {
                     // A journal error group is "known" once it appeared on this many of
@@ -6597,6 +6606,8 @@ Singleton {
                     property int diskCritPercent: 97
                     property int psiMemPercent: 10
                     property int restartLoop: 5
+                    // The shell's memory, in MiB, past which it is a finding.
+                    property int shellMemoryMb: 1200
                 }
                 property JsonObject assistant: JsonObject {
                     // The "Explain with the assistant" button. Nothing is sent until it

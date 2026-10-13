@@ -199,8 +199,62 @@ Singleton {
                  : Translation.tr("The processor is overloaded");
         case "thermal":
             return Translation.tr("The processor is throttling");
+        case "rebuild": {
+            const pkgs = Array.from(d.packages ?? []);
+            return pkgs.some(p => p.reason === "quickshell")
+                ? Translation.tr("Rebuild Quickshell before you log out")
+                : root.plural(pkgs.length, Translation.tr("%1 package needs a rebuild"), Translation.tr("%1 packages need a rebuild"));
+        }
+        case "shellHelper":
+            return Translation.tr("%1 is out of date").arg(d.name ?? "");
+        case "shellMemory":
+            return Translation.tr("The shell is using %1 of memory").arg(root.bytes(Number(d.rssMb ?? 0) * 1048576));
+        case "shellErrors":
+            return root.plural(d.kinds ?? f.count, Translation.tr("The shell logged %1 QML error"), Translation.tr("The shell logged %1 QML errors"));
+        case "slowBoot":
+            return Translation.tr("This boot took %1").arg(root.seconds(d.total));
+        case "config":
+            return d.state === "malformed" ? Translation.tr("The shell's settings file is broken") : Translation.tr("The shell's settings were repaired");
         default:
             return Translation.tr("Something needs attention");
+        }
+    }
+
+    /// A unit action's verb as the button that ran it says it.
+    function verbLabel(verb) {
+        switch (String(verb ?? "")) {
+        case "restart": return Translation.tr("Restart");
+        case "stop": return Translation.tr("Stop");
+        case "start": return Translation.tr("Start");
+        case "resetFailed": return Translation.tr("Clear the failure");
+        case "disable": return Translation.tr("Disable");
+        case "enable": return Translation.tr("Enable");
+        default: return String(verb ?? "");
+        }
+    }
+
+    /// "17.5 s", "1 min 3 s" from milliseconds.
+    function seconds(ms) {
+        const s = Number(ms ?? 0) / 1000;
+        if (s < 60)
+            return Translation.tr("%1 s").arg(s < 10 ? s.toFixed(1) : Math.round(s));
+        return Translation.tr("%1 min %2 s").arg(Math.floor(s / 60)).arg(Math.round(s % 60));
+    }
+
+    /// One package of a `rebuild` finding, in words: why it needs the rebuild.
+    function rebuildReason(p) {
+        switch (String(p?.reason ?? "")) {
+        case "quickshell":
+            return p.built && p.installed ? Translation.tr("built for Qt %1, Qt %2 is installed").arg(p.built).arg(p.installed)
+                : Translation.tr("built for another Qt");
+        case "lib":
+            return Translation.tr("cannot find %1").arg(Array.from(p.libs ?? []).slice(0, 3).join(", "));
+        case "qt":
+            return Translation.tr("uses Qt internals and was built before Qt %1").arg(p.qt ?? "");
+        case "python":
+            return Translation.tr("installed for %1, %2 is installed now").arg(Array.from(p.python ?? []).join(", ")).arg(p.current ?? "");
+        default:
+            return "";
         }
     }
 
@@ -240,6 +294,24 @@ Singleton {
             return Translation.tr("%1 % of the last minute was spent waiting").arg(Number(d.avg60 ?? 0).toFixed(1));
         case "thermal":
             return Translation.tr("%1 slowdowns in 5 minutes").arg(d.events5min ?? 0);
+        case "rebuild": {
+            const pkgs = Array.from(d.packages ?? []);
+            const qs = pkgs.find(p => p.reason === "quickshell");
+            return qs ? Translation.tr("It was %1; the shell may not start again").arg(root.rebuildReason(qs))
+                : pkgs.slice(0, 3).map(p => p.name).join(", ");
+        }
+        case "shellHelper":
+            return Translation.tr("Built from older sources than the shell's");
+        case "shellErrors":
+            return String(Array.from(d.errors ?? [])[0]?.message ?? "");
+        case "shellMemory":
+            return d.grown ? Translation.tr("%1 more than in its first hour").arg(root.bytes((Number(d.rssMb ?? 0) - Number(d.baseMb ?? 0)) * 1048576))
+                : Translation.tr("Above the %1 limit").arg(root.bytes(Number(d.limitMb ?? 0) * 1048576));
+        case "slowBoot":
+            return d.unit ? Translation.tr("Usually %1; %2 took %3").arg(root.seconds(d.median)).arg(d.unit).arg(root.seconds(d.unitMs))
+                : Translation.tr("Usually %1").arg(root.seconds(d.median));
+        case "config":
+            return d.state === "malformed" ? Translation.tr("Defaults are in use until it is fixed") : Translation.tr("Some values were reset to their defaults");
         default:
             return "";
         }

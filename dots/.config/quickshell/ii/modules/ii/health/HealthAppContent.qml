@@ -72,7 +72,8 @@ FocusScope {
         const crashes = HealthService.crashGroups.filter(g => !g.muted && !(g.dismissedAt > 0)).reduce((n, g) => n + Number(g.count ?? 0), 0);
         const newErrors = HealthService.journal.groups.filter(g => g.state === "new").length;
         const storage = HealthService.findingsOfKind(["disk", "drive"]).length;
-        const system = HealthService.findingsOfKind(["firmware", "reboot", "deletedLibs", "pacnew", "timesync", "security"]).filter(f => f.sev !== "info").length;
+        const system = HealthService.findingsOfKind(["firmware", "reboot", "deletedLibs", "pacnew", "timesync", "security",
+            "rebuild", "shellHelper", "shellMemory", "shellErrors", "slowBoot", "config"]).filter(f => f.sev !== "info" && !HealthService.isSnoozed(f)).length;
         return {
             overview: "",
             services: units > 0 ? String(units) : "",

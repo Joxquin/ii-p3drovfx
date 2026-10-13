@@ -56,6 +56,12 @@ Singleton {
         case "timesync": return "schedule";
         case "pressure": return "speed";
         case "thermal": return "device_thermostat";
+        case "rebuild": return "construction";
+        case "shellHelper": return "build_circle";
+        case "shellMemory": return "memory_alt";
+        case "shellErrors": return "bug_report";
+        case "slowBoot": return "timer";
+        case "config": return "settings_alert";
         default: return "info";
         }
     }

@@ -152,12 +152,66 @@ ClockSheet {
             return [
                 ["schedule", S.Sunny, Translation.tr("Network time"), d.ntp ? Translation.tr("On, not synchronised yet") : Translation.tr("Off")]
             ];
+        case "rebuild":
+            return Array.from(d.packages ?? []).slice(0, 12).map(p =>
+                [p.reason === "quickshell" ? "warning" : "deployed_code", p.reason === "quickshell" ? S.Sunny : S.Cookie7Sided, p.name, HealthText.rebuildReason(p)]);
+        case "shellHelper":
+            return [
+                ["build_circle", S.Cookie9Sided, Translation.tr("Helper"), d.name ?? ""],
+                ["info", S.Cookie7Sided, Translation.tr("Why it matters"), Translation.tr("It still runs the old code until rebuilt")]
+            ];
+        case "shellMemory":
+            return [
+                ["memory_alt", S.Sunny, Translation.tr("Now"), HealthText.bytes(Number(d.rssMb ?? 0) * 1048576)],
+                ["history", S.Cookie7Sided, Translation.tr("First hour"), HealthText.bytes(Number(d.baseMb ?? 0) * 1048576)],
+                ["rule", S.Clover4Leaf, Translation.tr("Limit"), HealthText.bytes(Number(d.limitMb ?? 0) * 1048576)]
+            ];
+        case "shellErrors":
+            return Array.from(d.errors ?? []).map(e => ["bug_report", S.Cookie7Sided, Translation.tr("%1×").arg(e.count), e.message]);
+        case "slowBoot":
+            return [
+                ["timer", S.Sunny, Translation.tr("This boot"), HealthText.seconds(d.total)],
+                ["history", S.Cookie7Sided, Translation.tr("Usually"), HealthText.seconds(d.median)],
+                ["deployed_code", S.Cookie9Sided, d.unit ?? Translation.tr("Slowest unit"), d.unit ? Translation.tr("%1, usually %2").arg(HealthText.seconds(d.unitMs)).arg(HealthText.seconds(d.unitMedian)) : "—"]
+            ];
+        case "config":
+            return [
+                ["description", S.Cookie7Sided, Translation.tr("File"), "~/.config/illogical-impulse/config.json"],
+                ["list", S.Clover4Leaf, Translation.tr("Settings"), Array.from(d.keys ?? []).slice(0, 6).join(", ") || "—"]
+            ];
         default:
             return [];
         }
     }
 
+    // ── Snooze ──────────────────────────────────────────────────────────
+    /// The chips row under the header, opened by its button.
+    property bool snoozeOpen: false
+    readonly property bool snoozed: HealthService.isSnoozed(root.finding)
+    readonly property bool canSnooze: root.finding !== null && root.kind !== "config"
+
+    function snoozeFor(ms): void {
+        HealthService.snooze(root.findingId, ms === "boot" ? "boot" : Date.now() + ms);
+        root.snoozeOpen = false;
+    }
+
+    function snoozedText(): string {
+        const s = root.finding?.snoozed;
+        if (s === "boot")
+            return Translation.tr("Snoozed until the next restart");
+        if (s)
+            return Translation.tr("Snoozed until %1").arg(Qt.formatDateTime(new Date(Number(s)), "ddd d MMM hh:mm"));
+        return "";
+    }
+
     headerActions: [
+        ClockIconButton {
+            visible: root.canSnooze && !root.resolved
+            symbol: root.snoozed ? "notifications_paused" : "snooze"
+            size: 38
+            tooltip: root.snoozed ? root.snoozedText() : Translation.tr("Snooze")
+            onClicked: root.snoozeOpen = !root.snoozeOpen
+        },
         HealthAssistantButton {
             assistant: root.assistant ?? placeholderAssistant
             key: root.assistantKey
@@ -192,6 +246,51 @@ ClockSheet {
             }
         }
     ]
+
+    // Snooze: for how long, or "until restart"; a snoozed finding says until when.
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: root.snoozeOpen || root.snoozed
+        spacing: ClockStyle.gapSmall
+
+        StyledText {
+            Layout.fillWidth: true
+            visible: root.snoozed
+            text: root.snoozedText()
+            font.pixelSize: ClockStyle.textSmall
+            color: ClockStyle.colSubtext
+        }
+
+        Flow {
+            Layout.fillWidth: true
+            visible: root.snoozeOpen || root.snoozed
+            spacing: ClockStyle.gapSmall
+
+            Repeater {
+                model: root.snoozeOpen ? [
+                    [Translation.tr("1 hour"), 3600000],
+                    [Translation.tr("1 day"), 86400000],
+                    [Translation.tr("1 week"), 7 * 86400000],
+                    [Translation.tr("Until restart"), "boot"]
+                ] : []
+                ClockChip {
+                    required property var modelData
+                    symbol: modelData[1] === "boot" ? "restart_alt" : "snooze"
+                    label: modelData[0]
+                    onClicked: root.snoozeFor(modelData[1])
+                }
+            }
+            ClockChip {
+                visible: root.snoozed
+                symbol: "notifications_active"
+                label: Translation.tr("Wake it now")
+                onClicked: {
+                    HealthService.unsnooze(root.findingId);
+                    root.snoozeOpen = false;
+                }
+            }
+        }
+    }
 
     HealthAssistantPanel {
         Layout.fillWidth: true
@@ -269,6 +368,15 @@ ClockSheet {
             label: root.busyVerb.length > 0 ? HealthService.actionText(root.action) : (fix?.label ?? "")
             symbol: fix?.verb === "disable" ? "block" : fix?.verb === "stop" ? "stop" : "restart_alt"
             onClicked: root.run(fix.verb)
+        },
+        ClockSheetAction {
+            // Fixes that hand off to a terminal or Settings: rebuilds, the config file.
+            readonly property var fix: HealthService.primaryFix(root.f)
+            visible: ["rebuild", "shellHelper", "config"].includes(root.kind) && !root.resolved && fix !== null
+            primary: true
+            label: fix?.label ?? ""
+            symbol: root.kind === "config" ? "settings" : "terminal"
+            onClicked: HealthService.runAction(root.findingId, fix.verb)
         },
         ClockSheetAction {
             // A missing program's fix is Disable; Restart stays one tap away.

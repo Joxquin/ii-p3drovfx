@@ -16,11 +16,16 @@ system text (log lines, stack frames, unit descriptions), which is passed throug
 
 ```
 health_watch [--state-dir DIR] [--once]
-             [--sources units,userUnits,appLaunches,crashes,journal,drives,filesystems,firmware,packages,pressure,thermals,timesync]
+             [--sources units,userUnits,appLaunches,crashes,journal,drives,filesystems,firmware,packages,pressure,thermals,timesync,rebuild,shell,boot[,shellLog]]
              [--known-after 3] [--of-last 5] [--quiet-days 14]
              [--disk-warn 90] [--disk-crit 97] [--psi-mem 10] [--restart-loop 5]
-             [--history-days 30]
+             [--history-days 30] [--shell-mem-mb 1200]
 ```
+
+- `shellLog` is never on by default: it keeps a `qs log --pid <shell> -f` follower
+  running (about 50 MB resident, near-zero CPU, measured 2026-10-13), so it is only
+  enabled by naming it.
+- `--shell-mem-mb`: the shell's resident memory, in MiB, past which it is a finding.
 
 - `--state-dir` defaults to `$XDG_STATE_HOME/quickshell/health` (falling back to
   `~/.local/state/quickshell/health`). Created if missing. A `file://` URL is
@@ -39,7 +44,8 @@ health_watch [--state-dir DIR] [--once]
 {"t":"ready","version":1,"stateDir":"/home/u/.local/state/quickshell/health",
  "sources":{"units":true,"userUnits":true,"appLaunches":true,"crashes":true,
             "journal":"full","drives":true,"filesystems":true,"firmware":true,
-            "packages":"pacman","pressure":true,"thermals":true,"timesync":true},
+            "packages":"pacman","pressure":true,"thermals":true,"timesync":true,
+            "rebuild":true,"shell":true,"boot":true},
  "dumpAccess":"granted","user":"scrimas","bootId":"5b92…"}
 ```
 - `journal`: `"full"` (system journal readable), `"user"` (own journal only), `"none"`.
@@ -69,6 +75,7 @@ A Finding:
 | `count` | int | occurrences (restarts, crashes, lines), 1 when not countable |
 | `fp` | string | noise fingerprint where one applies, else `""`. Unit, app launch and restart-loop findings use their `id` as `fp`, so `mute` works on them too |
 | `muted` | bool | the user muted this fingerprint (or, for `crash`, this program). Muted findings are still sent; they never alert |
+| `snoozed` | ms, `"boot"` or null | snoozed until that time, or until the next boot. Snoozed findings are still sent; they never alert, and are re-sent with `null` when the snooze ends |
 | `alert` | bool | true only for a live, new, unmuted, critical finding not yet alerted this boot. Never true for `appLaunch` |
 | `data` | object | kind-specific facts, below |
 
@@ -130,6 +137,32 @@ Kinds and their `data`:
   avg10, avg60, top:[{pid, comm, rssBytes}]}` (top 3 own processes by RSS for memory).
 - `thermal` — id `thermal:throttle`; 20 or more new throttle events in 5 minutes.
   `sev` `warning`. `data`: `{events5min, total, tempC}`.
+- `rebuild` — id `rebuild`; packages that no longer fit what is installed (pacman
+  only). `sev` `critical` when Quickshell is among them (the shell may not start
+  again), else `warning`. `data`: `{packages:[…], aurHelper:"yay"|"paru"|""}`, each
+  package `{name, reason, foreign, …}`:
+  `quickshell` (`--private-check-compat` failed; `built`, `installed` Qt versions),
+  `lib` (`libs`: libraries a runnable program of the package needs, directly or
+  through the package's own libraries, that the loader would not find), `qt` (uses
+  `Qt_6_PRIVATE_API` and was installed before the last qt6-base minor change; `qt`),
+  `python` (`python`: its `python3.N` dirs, `current`). Only foreign packages
+  (`pacman -Qm`) and Quickshell are looked at. Programs built for another machine
+  type or libc (no interpreter on this system) and plugins nothing runnable links
+  are not checked. Scanned 10 s after start, after every package transaction and on
+  `rescan`; ELF tables are cached per package version.
+- `shellHelper` — id `shellHelper:<name>`; a Rust helper whose binary was built from
+  older sources (`rust-helpers.sh status` says `stale`). `sev` `warning`. `data`:
+  `{name}`. Checked at start, on `rescan` and every 6 h.
+- `shellMemory` — id `shellMemory`; the shell's resident memory above
+  `--shell-mem-mb`, or 600 MiB above the highest of its first hour, for 5 minutes.
+  `sev` `warning`. `data`: `{pid, rssMb, baseMb, limitMb, grown}` (MiB, rounded to 50).
+- `shellErrors` — id `shellErrors`; QML errors (TypeError, ReferenceError, "is not a
+  type", …) the shell logged in the last hour. Source `shellLog` only. `sev`
+  `warning`. `data`: `{errors:[{message, count}], kinds, total}` (top 5).
+- `slowBoot` — id `slowBoot`; this boot took over 1.5× the median of the 10 before
+  it and more than 5 s over it (needs 3 earlier boots). `sev` `info`. `data`:
+  `{total, median, unit, unitMs, unitMedian}`: the unit that grew most against its
+  own median.
 
 ### `crashes`
 Sent at start and whenever the 7-day set changes:
@@ -194,8 +227,10 @@ Every 15 s, every 2 s while the app is visible:
  "psiHistory":[0.0,0.03,…],"throttle":{"total":0,"last5min":0},"cpuTempC":46,
  "fs":[{"mount":"/","device":"/dev/nvme0n1p2","fstype":"ext4","total":…,"avail":…,
         "usedPct":47.1,"inodesPct":3.2,"etaDays":null}],
- "memory":{"total":…,"available":…}}
+ "memory":{"total":…,"available":…},"shellRss":412000000}
 ```
+- `shellRss`: the shell's resident bytes (the helper's parent), `null` when the parent
+  is not Quickshell or the `shell` source is off.
 - `psiHistory`: memory `some10` samples, oldest first, at most 120 (one per sample).
 - `fs`: real filesystems from `/proc/self/mounts`, one entry per device (the shortest
   mount point names it). Re-read every 60 s; `vitals` in between repeat the last read.
@@ -224,6 +259,29 @@ At start, after every package transaction, and every 30 minutes:
 Daily summary, oldest first, `--history-days` long. Sent once the initial scan has
 filled today's row, and when a day rolls. `failed` is the most failed units seen at
 once that day.
+
+`bootMs` (in each day): that day's boot from firmware to the end of startup, 0 when
+it did not boot that day.
+
+### `resolved`
+```json
+{"t":"resolved","items":[{"id":"unit:user:zeron.service","kind":"unit","sev":"critical","data":{…},
+  "since":1791900000000,"resolvedAt":1791903600000,"by":"restart"}]}
+```
+Findings that went away in the last 7 days (at most 50), oldest first. Sent at start
+and after each. `by` is the verb of the user's own action on that unit in the 2
+minutes before (`restart`, `disable`, …), else `"self"`. Not listed: `crash`,
+`journal` and `appLaunch` findings (ageing out is not a fix), and dismissed ones.
+
+### `boot`
+```json
+{"t":"boot","boots":[{"boot":"5b92…","at":1791890000000,"firmware":5193,"loader":2989,"kernel":3285,
+  "initrd":0,"userspace":6061,"user":1625,"total":17528,"top":[{"unit":"logid.service","ms":11051}]}]}
+```
+One row per boot (the last 30), oldest first, phases in ms the way
+`systemd-analyze` splits them; `user` is the user manager's own startup, `top` the
+10 slowest units of `systemd-analyze blame`. Sent once the boot has finished
+(retried every minute for 15 minutes when it has not).
 
 ### `access`
 `{"t":"access","dumpAccess":"granted"}` after every `rescan`, so the UI sees a grant or
@@ -266,6 +324,9 @@ names). Runtime attributes have no HSI level; their `level` is `0`.
 {"t":"mute","fp":"…"}  {"t":"unmute","fp":"…"}  {"t":"markKnown","fp":"…"}
 {"t":"muteProgram","exe":"/usr/bin/x"}  {"t":"unmuteProgram","exe":"/usr/bin/x"}
 {"t":"dismiss","id":"crash:/usr/lib/fprintd"}    hides a crash or appLaunch finding until it happens again
+{"t":"snooze","id":"pacnew","until":1792000000000}  quiet until then (any kind)
+{"t":"snooze","id":"pacnew","untilBoot":true}       quiet until the next boot
+{"t":"unsnooze","id":"pacnew"}
 {"t":"resetNoise"}                    forget every mute, known group and dismissal; rebuild the baseline
 {"t":"quit"}
 ```
@@ -300,6 +361,8 @@ message only.
 ## State files (in the state dir)
 
 - `state.json` — fingerprints `{fp: {boots:[bootId…], firstSeen, lastSeen, muted, known}}`,
-  `mutedPrograms`, `dismissed {id: ms}`, `alerted {fp|id: bootId}`, `journalCursor`.
+  `mutedPrograms`, `dismissed {id: ms}`, `alerted {fp|id: bootId}`, `journalCursor`,
+  `snoozed {id: {until, boot}}`, `resolved [...]`, `boots [...]` (the last three added
+  2026-10-13; older files read with them empty).
 - `history.json` — the daily summaries.
 Both are written atomically (temp file + rename), at most once a minute and on quit.

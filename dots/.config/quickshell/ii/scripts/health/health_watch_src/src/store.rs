@@ -35,7 +35,41 @@ pub struct State {
     pub alerted: HashMap<String, String>,
     #[serde(default, rename = "journalCursor")]
     pub journal_cursor: Option<String>,
+    /// Finding id → until when it stays quiet.
+    #[serde(default)]
+    pub snoozed: HashMap<String, Snooze>,
+    /// Findings that went away, newest last (see `remember_resolved`).
+    #[serde(default)]
+    pub resolved: Vec<serde_json::Value>,
+    /// One row per boot: its phases and slowest units, oldest first.
+    #[serde(default)]
+    pub boots: Vec<serde_json::Value>,
 }
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+pub struct Snooze {
+    /// Epoch ms; 0 with `boot` set means "until the next boot".
+    #[serde(default)]
+    pub until: u64,
+    /// The boot id it was snoozed in, for "until restart".
+    #[serde(default)]
+    pub boot: Option<String>,
+}
+
+impl Snooze {
+    pub fn active(&self, now: u64, boot: &str) -> bool {
+        match &self.boot {
+            Some(b) => b == boot,
+            None => now < self.until,
+        }
+    }
+}
+
+/// How many resolved findings, and for how long, are remembered.
+pub const RESOLVED_KEEP: usize = 50;
+pub const RESOLVED_DAYS_MS: u64 = 7 * 86_400_000;
+/// How many boots are remembered.
+pub const BOOTS_KEEP: usize = 30;
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
 pub struct Day {
@@ -50,6 +84,9 @@ pub struct Day {
     pub disk_pct: f64,
     #[serde(default, rename = "psiMemPeak")]
     pub psi_mem_peak: f64,
+    /// This day's boot, start to finish, in ms; 0 when it did not boot that day.
+    #[serde(default, rename = "bootMs")]
+    pub boot_ms: u64,
 }
 
 pub struct Store {
@@ -115,7 +152,7 @@ impl Store {
     }
 
     /// Keeps the fingerprint table bounded: drops groups unseen for 60 days that
-    /// carry no user decision.
+    /// carry no user decision. Also lets old resolved entries go.
     pub fn prune(&mut self, now: u64) {
         let cutoff = now.saturating_sub(60 * 86_400_000);
         let before = self.state.fingerprints.len();
@@ -123,6 +160,38 @@ impl Store {
         if self.state.fingerprints.len() != before {
             self.dirty = true;
         }
+        let before = self.state.resolved.len();
+        let keep_after = now.saturating_sub(RESOLVED_DAYS_MS);
+        self.state.resolved.retain(|r| r["resolvedAt"].as_u64().unwrap_or(0) >= keep_after);
+        if self.state.resolved.len() != before {
+            self.dirty = true;
+        }
+    }
+
+    /// Adds a finding that went away to the recently-fixed list.
+    pub fn remember_resolved(&mut self, entry: serde_json::Value) {
+        let id = entry["id"].clone();
+        self.state.resolved.retain(|r| r["id"] != id);
+        self.state.resolved.push(entry);
+        if self.state.resolved.len() > RESOLVED_KEEP {
+            let excess = self.state.resolved.len() - RESOLVED_KEEP;
+            self.state.resolved.drain(..excess);
+        }
+        self.dirty = true;
+    }
+
+    /// Records this boot once; returns false when it was already there.
+    pub fn remember_boot(&mut self, entry: serde_json::Value) -> bool {
+        if self.state.boots.iter().any(|b| b["boot"] == entry["boot"]) {
+            return false;
+        }
+        self.state.boots.push(entry);
+        if self.state.boots.len() > BOOTS_KEEP {
+            let excess = self.state.boots.len() - BOOTS_KEEP;
+            self.state.boots.drain(..excess);
+        }
+        self.dirty = true;
+        true
     }
 }
 

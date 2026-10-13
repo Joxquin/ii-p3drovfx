@@ -32,9 +32,62 @@ Item {
     readonly property int columns: Math.max(1, Math.floor((root.layoutWidth + ClockStyle.paneGap) / (HealthStyle.systemCardMinWidth + ClockStyle.paneGap)))
     readonly property real cardWidth: Math.floor((root.width - ClockStyle.paneGap * (root.columns - 1)) / root.columns)
 
+    readonly property var lastBoot: HealthService.boots.length > 0 ? HealthService.boots[HealthService.boots.length - 1] : null
+
     readonly property var cards: {
         const S = MaterialShape.Shape;
         const out = [];
+        // Packages built here that an update broke; Quickshell among them can keep
+        // the shell from starting, so this comes first.
+        const rebuild = HealthService.finding("rebuild");
+        if (HealthService.packageManager === "pacman") {
+            out.push({
+                symbol: "construction", shape: S.Cookie12Sided, attention: !!rebuild, finding: rebuild?.id ?? "",
+                title: rebuild ? HealthText.title(rebuild) : Translation.tr("No package needs a rebuild"),
+                body: rebuild ? Array.from(rebuild.data?.packages ?? []).map(p => `${p.name}: ${HealthText.rebuildReason(p)}`).join("\n")
+                    : Translation.tr("Programs built on this computer still find their libraries, and Quickshell matches Qt.")
+            });
+        }
+        // The shell itself: its settings file, its helpers, its memory and errors.
+        const config = HealthService.finding("config");
+        const helpers = HealthService.findingsOfKind("shellHelper");
+        const memory = HealthService.finding("shellMemory");
+        const errors = HealthService.finding("shellErrors");
+        const shellIssue = (config?.sev === "critical" ? config : null) ?? helpers[0] ?? memory ?? errors ?? null;
+        const rss = Number(HealthService.vitals?.shellRss ?? 0);
+        const watchingLog = Config.options?.health?.sources?.shellLog === true;
+        out.push({
+            symbol: "deployed_code", shape: S.Cookie9Sided, attention: !!shellIssue, finding: shellIssue?.id ?? "",
+            title: shellIssue ? HealthText.title(shellIssue)
+                : helpers.length > 1 ? HealthText.plural(helpers.length, Translation.tr("%1 helper out of date"), Translation.tr("%1 helpers out of date"))
+                : Translation.tr("The shell is in shape"),
+            body: [
+                rss > 0 ? Translation.tr("Using %1 of memory.").arg(HealthText.bytes(rss)) : "",
+                helpers.length > 0 ? Translation.tr("Out of date: %1.").arg(helpers.map(h => h.data?.name).join(", ")) : Translation.tr("Its helpers match their sources."),
+                errors ? HealthText.detail(errors, root.now)
+                    : watchingLog ? Translation.tr("No QML errors in the last hour.") : Translation.tr("QML errors are not watched (Settings).")
+            ].filter(s => s.length > 0).join(" ")
+        });
+        // How long the last boot took, phase by phase, and what slowed it.
+        const slow = HealthService.finding("slowBoot");
+        const b = root.lastBoot;
+        if (b) {
+            const top = Array.from(b.top ?? []).slice(0, 3);
+            out.push({
+                symbol: "timer", shape: S.Puffy, attention: !!slow, finding: slow?.id ?? "",
+                title: Translation.tr("Started in %1").arg(HealthText.seconds(b.total)),
+                body: (slow ? HealthText.detail(slow, root.now) + ". " : "")
+                    + (top.length > 0 ? Translation.tr("Slowest: %1.").arg(top.map(u => `${u.unit} ${HealthText.seconds(u.ms)}`).join(", ")) : ""),
+                phases: [
+                    { label: Translation.tr("Firmware"), ms: Number(b.firmware ?? 0) },
+                    { label: Translation.tr("Loader"), ms: Number(b.loader ?? 0) },
+                    { label: Translation.tr("Kernel"), ms: Number(b.kernel ?? 0) },
+                    { label: Translation.tr("Initrd"), ms: Number(b.initrd ?? 0) },
+                    { label: Translation.tr("System"), ms: Number(b.userspace ?? 0) },
+                    { label: Translation.tr("Session"), ms: Number(b.user ?? 0) }
+                ].filter(p => p.ms > 0)
+            });
+        }
         const k = root.sys?.kernel;
         const reboot = HealthService.finding("reboot:kernel");
         out.push({
@@ -222,6 +275,55 @@ Item {
                 wrapMode: Text.Wrap
                 font.pixelSize: ClockStyle.textSmall + 1
                 color: ClockStyle.colSubtext
+            }
+
+            // A boot's phases as one bar, each as wide as it took, named under it.
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: ClockStyle.gapSmall
+                visible: (cc.card?.phases ?? []).length > 0
+                spacing: 6
+
+                readonly property var phases: cc.card?.phases ?? []
+                readonly property real total: Math.max(1, phases.reduce((n, p) => n + p.ms, 0))
+
+                Row {
+                    id: phaseBar
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 14
+                    spacing: 2
+
+                    Repeater {
+                        model: parent.parent.phases
+                        Rectangle {
+                            required property var modelData
+                            required property int index
+                            readonly property int n: phaseBar.parent.phases.length
+                            width: Math.max(4, (phaseBar.width - 2 * (n - 1)) * modelData.ms / phaseBar.parent.total)
+                            height: 14
+                            topLeftRadius: index === 0 ? 7 : 2
+                            bottomLeftRadius: index === 0 ? 7 : 2
+                            topRightRadius: index === n - 1 ? 7 : 2
+                            bottomRightRadius: index === n - 1 ? 7 : 2
+                            color: Qt.rgba(ClockStyle.colPrimary.r, ClockStyle.colPrimary.g, ClockStyle.colPrimary.b, 1 - index * 0.14)
+                        }
+                    }
+                }
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: ClockStyle.gap
+                    Repeater {
+                        model: parent.parent.phases
+                        StyledText {
+                            required property var modelData
+                            text: `${modelData.label} ${HealthText.seconds(modelData.ms)}`
+                            font.pixelSize: ClockStyle.textSmall
+                            font.features: { "tnum": 1 }
+                            color: ClockStyle.colSubtext
+                        }
+                    }
+                }
             }
 
             // fwupd's four HSI levels, the reached ones filled.
