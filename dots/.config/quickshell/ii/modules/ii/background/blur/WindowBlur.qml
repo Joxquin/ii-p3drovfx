@@ -48,7 +48,11 @@ Item {
     // stretches that texture to fill the final geometry once layout catches up — producing a
     // squashed/stretched wallpaper. Force a rebuild shortly after activation so it re-grabs
     // once layout has settled.
-    onShouldBlurChanged: if (shouldBlur) refreshBlur();
+    onShouldBlurChanged: {
+        if (shouldBlur)
+            refreshBlur();
+        syncFade();
+    }
 
     // The plane itself resizes whenever the wallpaper's real dimensions, the screen geometry or
     // the zoom scale land - all of which happen after startup, and none of which reach the
@@ -60,18 +64,38 @@ Item {
     // read as the blur falling away and creeping back every time it ran (once per workspace
     // switch, which is what made switching workspaces flash the sharp wallpaper).
     visible: windowBlurRoot.desiredBlurActive
-    opacity: windowBlurRoot.shouldBlur ? 1.0 : 0.0
     // Only the fade in is ever seen: when shouldBlur drops, `visible` drops with it and
     // the blur is gone at once. Animating the hidden item's opacity anyway redrew the
     // fullscreen wallpaper layer for 400 ms (~48 frames at 120 Hz, each one re-blurred
     // by the compositor) on every switch to an empty workspace.
-    Behavior on opacity {
-        enabled: windowBlurRoot.shouldBlur
-        NumberAnimation {
-            duration: 400
-            easing.type: Easing.OutCubic
+    //
+    // Started by hand, not a Behavior gated on shouldBlur: the gate and the value both
+    // followed that flag, and when the value was re-evaluated first the Behavior was
+    // still off and the blur landed in one frame - while the widgets' blur (and the
+    // depth subject over them, still sharp) faded over 400 ms beside it. Same clock as
+    // BackgroundWidgetsWindow's windowBlurProgress.
+    opacity: 0
+    NumberAnimation {
+        id: blurFadeIn
+        target: windowBlurRoot
+        property: "opacity"
+        to: 1
+        duration: 400
+        easing.type: Easing.OutCubic
+    }
+    function syncFade() {
+        blurFadeIn.stop();
+        if (!windowBlurRoot.shouldBlur) {
+            windowBlurRoot.opacity = 0;
+        } else if (GlobalStates.presetRecoloring) {
+            windowBlurRoot.opacity = 1;
+        } else {
+            windowBlurRoot.opacity = 0;
+            blurFadeIn.start();
         }
     }
+    // Already blurred when built (a reload over open windows): no fade.
+    Component.onCompleted: windowBlurRoot.opacity = windowBlurRoot.shouldBlur ? 1 : 0
 
     // GPU: Loader only instantiates the expensive MultiEffect when blur is actually needed.
     // Previously the MultiEffect (blurMax:64 shader + texture allocation) was always resident
