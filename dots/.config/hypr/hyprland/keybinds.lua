@@ -44,6 +44,7 @@ hl.bind("SUPER + ALT + T", hl.dsp.global("quickshell:clockToggle"), { descriptio
 hl.bind("SUPER + CTRL + E", hl.dsp.global("quickshell:easyEffectsToggle"), { description = "Shell: Toggle EasyEffects" })
 hl.bind("SUPER + U", hl.dsp.global("quickshell:usageToggle"), { description = "Shell: Toggle app usage stats" })
 hl.bind("SUPER + Y", hl.dsp.global("quickshell:modesToggle"), { description = "Shell: Toggle modes & routines" })
+hl.bind("SUPER + CTRL + H", hl.dsp.global("quickshell:healthToggle"), { description = "Shell: Toggle System Health" })
 --##! Screen & input
 hl.bind("SUPER + K", hl.dsp.global("quickshell:oskToggle"), { description = "Shell: Toggle on-screen keyboard" })
 hl.bind("SUPER + SHIFT + D", hl.dsp.global("quickshell:dictationToggle"), { description = "Shell: Toggle dictation" })

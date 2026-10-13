@@ -16,6 +16,7 @@ import qs.modules.ii.bluetoothPairing
 import qs.modules.ii.cheatsheet
 import qs.modules.ii.notes
 import qs.modules.ii.clock
+import qs.modules.ii.health
 import qs.modules.ii.dock
 import qs.modules.ii.lock
 import qs.modules.ii.mediaControls
@@ -124,6 +125,11 @@ Scope {
     PanelUrlLoader {
         extraCondition: Config.options.modes.overlayEnabled
         panelUrl: Qt.resolvedUrl("../modules/ii/modes/ModesApp.qml")
+    }
+    PanelUrlLoader {
+        // Same shape as the clock app; the helper runs in HealthService either way.
+        extraCondition: Config.options.health?.enable ?? true
+        panelUrl: Qt.resolvedUrl("../modules/ii/health/HealthApp.qml")
     }
     // The mode start/end banner; the dynamic island draws it when a notch is on.
     PanelUrlLoader {

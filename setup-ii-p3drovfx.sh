@@ -1507,7 +1507,9 @@ HELPERS_TO_BUILD=()
 # and compiling one nobody asked for would be a surprise; the tray watcher is a
 # fix that does nothing at all until it exists, and a shell without it loses its
 # tray icons on every restart. Offered, never forced — the prompt still asks.
-HELPERS_OFFERED_WHEN_MISSING=("sni_watcher")
+# System Health is on by default and shows only its setup page until its helper
+# exists, so the helper is offered the same way.
+HELPERS_OFFERED_WHEN_MISSING=("sni_watcher" "health_watch")
 
 offered_when_missing() {
     local name
@@ -1566,6 +1568,37 @@ plan_helper_rebuild() {
     return 0
 }
 
+# offer_crash_access <health_dir> — once System Health's helper is built, offer
+# the one privileged extra it has: read access for this account to the crash
+# dumps of system programs (root-owned files in /var/lib/systemd/coredump).
+# A dump is a copy of a program's memory and can hold passwords or keys, so it is
+# asked in words, defaults to no, and is never assumed by --yes. Settings can
+# grant or revoke it later; crash-access.sh does the work either way.
+offer_crash_access() {
+    local dir="$1" script="$1/crash-access.sh" user
+    user="$(id -un)"
+    [[ -f "$script" ]] || return 0
+    have setfacl || return 0
+    [[ "$(bash "$script" status "$user" 2>/dev/null)" == "granted" ]] && return 0
+    [[ "$OPT_ASSUME_YES" == true || ! -t 0 ]] && {
+        ui_note "System Health: crash dumps of system programs stay root-only. Settings can allow them."
+        return 0
+    }
+    ui_note "System Health can let your account read crash dumps of system programs."
+    ui_note "A dump is a copy of a program's memory and can contain passwords or keys."
+    ui_note "They never leave this computer, and the assistant never sees them."
+    if ui_confirm "Allow it? (Settings can revoke it any time)" no; then
+        if sudo_prime && sudo bash "$script" grant "$user" >>"$LOG_FILE" 2>&1; then
+            ui_ok "crash dumps" "readable by $user"
+        else
+            ui_warn "Not granted — see $(tilde "$LOG_FILE")"
+        fi
+    else
+        ui_note "Left root-only. The journal's stack traces still show on the Crashes page."
+    fi
+    return 0
+}
+
 # run_helper_rebuild <target_dir> — builds what plan_helper_rebuild collected.
 run_helper_rebuild() {
     local target="$1" script="$1/scripts/rust-helpers.sh"
@@ -1601,6 +1634,7 @@ run_helper_rebuild() {
         if ((rc == 0)); then
             ui_ok "$name" "rebuilt"
             built=$((built + 1))
+            [[ "$name" == "health_watch" ]] && offer_crash_access "$dir"
         else
             ui_fail "$name" "build failed — see $(tilde "$LOG_FILE")"
             failed=$((failed + 1))

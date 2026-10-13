@@ -31,6 +31,8 @@ hl.window_rule({match = {title = "^(ii Usage)$" },                           flo
 hl.window_rule({match = {title = "^(ii Usage)$" },                           center = true})
 hl.window_rule({match = {title = "^(ii Modes)$" },                           float = true})
 hl.window_rule({match = {title = "^(ii Modes)$" },                           center = true})
+hl.window_rule({match = {title = "^(ii System Health)$" },                   float = true})
+hl.window_rule({match = {title = "^(ii System Health)$" },                   center = true})
 -- The throwaway mirror the shell opens only so a phone's lockscreen can be
 -- dismissed from here. It lives for a few seconds, so it must not be tiled
 -- into the current layout.
