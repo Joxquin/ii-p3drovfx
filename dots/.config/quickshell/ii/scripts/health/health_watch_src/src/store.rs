@@ -229,4 +229,36 @@ mod tests {
         assert_eq!(s2.days[0].failed, 3);
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn resolved_and_boots_are_bounded() {
+        let dir = std::env::temp_dir().join(format!("health_watch_ring_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = Store::open(&dir);
+        let now = 10 * RESOLVED_DAYS_MS;
+        for i in 0..(RESOLVED_KEEP + 5) {
+            s.remember_resolved(serde_json::json!({"id": format!("x{i}"), "resolvedAt": now}));
+        }
+        assert_eq!(s.state.resolved.len(), RESOLVED_KEEP);
+        // The same id again replaces its entry rather than adding one.
+        s.remember_resolved(serde_json::json!({"id": format!("x{}", RESOLVED_KEEP + 4), "resolvedAt": now}));
+        assert_eq!(s.state.resolved.len(), RESOLVED_KEEP);
+        // Older than a week goes on prune.
+        s.state.resolved[0]["resolvedAt"] = serde_json::json!(now - RESOLVED_DAYS_MS - 1);
+        s.prune(now);
+        assert_eq!(s.state.resolved.len(), RESOLVED_KEEP - 1);
+
+        assert!(s.remember_boot(serde_json::json!({"boot": "b1", "total": 1})));
+        assert!(!s.remember_boot(serde_json::json!({"boot": "b1", "total": 2})), "a boot is recorded once");
+        for i in 0..BOOTS_KEEP + 3 {
+            s.remember_boot(serde_json::json!({"boot": format!("x{i}")}));
+        }
+        assert_eq!(s.state.boots.len(), BOOTS_KEEP);
+
+        // An old state file, without the new fields, still loads.
+        std::fs::write(dir.join("state.json"), br#"{"version":1,"baseline":true,"fingerprints":{}}"#).unwrap();
+        let old = Store::open(&dir);
+        assert!(old.state.baseline && old.state.snoozed.is_empty() && old.state.resolved.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

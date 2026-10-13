@@ -1988,4 +1988,90 @@ mod tests {
         assert_eq!(dump_access_from_acl("user:scrimas:r-x\n", "scrimas"), "denied");
         assert_eq!(dump_access_from_acl(granted, "scrima"), "denied");
     }
+
+    /// An App on a throwaway state dir; its events go nowhere.
+    fn test_app(tag: &str) -> (App, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("health_app_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut cfg = parse_args();
+        cfg.state_dir = dir.clone();
+        let (tx, _rx) = channel();
+        let mut app = App::new(cfg, tx);
+        app.synced = true;
+        (app, dir)
+    }
+
+    fn unit_finding(name: &str) -> Value {
+        let id = format!("unit:user:{name}");
+        App::finding(id.clone(), "unit", "critical", 1, 1, id, json!({"scope": "user", "unit": name}))
+    }
+
+    #[test]
+    fn snoozed_findings_do_not_alert_and_wake_up() {
+        let (mut app, dir) = test_app("snooze");
+        let id = "unit:user:a.service".to_string();
+        let until = now_ms() + 60_000;
+        app.store.state.snoozed.insert(id.clone(), store::Snooze { until, boot: None });
+        app.apply(&["unit:user:".into()], vec![(unit_finding("a.service"), 1)]);
+        assert_eq!(app.findings[&id]["snoozed"], json!(until));
+        assert!(app.store.state.alerted.is_empty(), "a snoozed finding alerted");
+
+        // Run out: the flag goes, the finding stays.
+        app.store.state.snoozed.insert(id.clone(), store::Snooze { until: 1, boot: None });
+        app.expire_snoozes();
+        assert!(app.store.state.snoozed.is_empty());
+        assert!(app.findings[&id]["snoozed"].is_null());
+
+        // "Until restart" holds for this boot only.
+        let s = store::Snooze { until: 0, boot: Some(app.boot.clone()) };
+        assert!(s.active(now_ms(), &app.boot));
+        assert!(!s.active(now_ms(), "another-boot"));
+
+        // An unsnoozed critical finding seen for the first time does alert.
+        app.apply(&["unit:user:".into()], vec![(unit_finding("a.service"), 1), (unit_finding("b.service"), 1)]);
+        assert!(app.store.state.alerted.contains_key("unit:user:b.service"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fixed_recently_says_what_fixed_it() {
+        let (mut app, dir) = test_app("resolved");
+        let prefix = vec!["unit:user:".to_string()];
+        app.apply(&prefix, vec![(unit_finding("a.service"), 1), (unit_finding("b.service"), 1), (unit_finding("c.service"), 1)]);
+        // The user restarted a; b recovers on its own; c was dismissed.
+        app.last_act.insert("user:a.service".into(), ("restart".into(), now_ms()));
+        app.store.state.dismissed.insert("unit:user:c.service".into(), now_ms());
+        app.apply(&prefix, vec![]);
+        fn by(app: &App, id: &str) -> Option<Value> {
+            app.store.state.resolved.iter().find(|r| r["id"] == id).map(|r| r["by"].clone())
+        }
+        assert_eq!(by(&app, "unit:user:a.service"), Some(json!("restart")));
+        assert_eq!(by(&app, "unit:user:b.service"), Some(json!("self")));
+        assert_eq!(by(&app, "unit:user:c.service"), None, "a dismissed finding is not a fix");
+
+        // Crashes ageing out are not fixes either.
+        let crash = App::finding("crash:/usr/bin/x".into(), "crash", "warning", 1, 1, String::new(), json!({"exe": "/usr/bin/x"}));
+        app.apply(&["crash:".into()], vec![(crash, 1)]);
+        app.apply(&["crash:".into()], vec![]);
+        assert_eq!(by(&app, "crash:/usr/bin/x"), None);
+
+        // An action long before the fix does not claim it.
+        app.apply(&prefix, vec![(unit_finding("d.service"), 1)]);
+        app.last_act.insert("user:d.service".into(), ("restart".into(), now_ms() - 600_000));
+        app.apply(&prefix, vec![]);
+        assert_eq!(by(&app, "unit:user:d.service"), Some(json!("self")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rebuild_finding_severity() {
+        let (mut app, dir) = test_app("rebuild");
+        app.on_rebuild(vec![json!({"name": "thor-git", "reason": "lib", "foreign": true, "libs": ["libsfml-graphics.so.2.6"]})]);
+        assert_eq!(app.findings["rebuild"]["sev"], "warning");
+        app.on_rebuild(vec![json!({"name": "quickshell", "reason": "quickshell", "foreign": false})]);
+        assert_eq!(app.findings["rebuild"]["sev"], "critical", "Quickshell can keep the shell from starting");
+        app.on_rebuild(vec![]);
+        assert!(!app.findings.contains_key("rebuild"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

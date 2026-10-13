@@ -110,5 +110,148 @@ class WiringTests(unittest.TestCase):
         self.assertEqual(rules.count('"^(ii System Health)$"'), 2)
 
 
+HEALTH_TEXT = read("services/HealthText.qml")
+HEALTH_STYLE = read("modules/ii/health/components/HealthStyle.qml")
+SHEET = read("modules/ii/health/components/FindingSheet.qml")
+SETTINGS = read("modules/ii/health/tabs/HealthSettingsPage.qml")
+HELPER_MAIN = read("scripts/health/health_watch_src/src/main.rs")
+GUARD = ROOT / "scripts/quickshell-guard"
+LAUNCHER = read("services/LauncherSearch.qml")
+
+# Every finding kind the helper or the shell can raise.
+KINDS = (
+    "unit", "appLaunch", "restartLoop", "crash", "journal", "disk", "drive", "firmware", "security", "reboot",
+    "deletedLibs", "pacnew", "timesync", "pressure", "thermal",
+    "rebuild", "shellHelper", "shellMemory", "shellErrors", "slowBoot", "config",
+    "battery", "peripheralBattery", "mce", "gpu", "oom", "edac", "radioFw", "usb", "aer", "overheat", "fan",
+)
+
+
+class FindingKindTests(unittest.TestCase):
+    """A kind the app has no words, icon or page for shows up as "Something needs attention"."""
+
+    def test_every_kind_is_documented(self):
+        for kind in KINDS:
+            if kind == "config":  # made by the shell, not the helper
+                continue
+            self.assertRegex(PROTOCOL, rf"`{kind}`", f"{kind} missing from PROTOCOL.md")
+
+    def test_every_kind_has_a_title_and_a_detail(self):
+        title = HEALTH_TEXT.split("function title(f)")[1].split("function seconds(")[0]
+        detail = HEALTH_TEXT.split("function detail(f, now)")[1].split("function driveProblems(")[0]
+        for kind in KINDS:
+            self.assertIn(f'case "{kind}"', title, f"{kind}: no title")
+            self.assertIn(f'case "{kind}"', detail, f"{kind}: no detail")
+
+    def test_every_kind_has_an_icon(self):
+        icons = HEALTH_STYLE.split("function severitySymbol(kind)")[1].split("default:")[0]
+        for kind in KINDS:
+            self.assertIn(f'case "{kind}":', icons, f"{kind}: no icon")
+
+    def test_every_kind_opens_on_a_page(self):
+        tabs = SERVICE.split("function openFinding(id)")[1].split("GlobalStates.openHealthApp")[0]
+        hardware = re.search(r"hardwareKinds: \[([^\]]*)\]", SERVICE).group(1)
+        for kind in KINDS:
+            # Their own pages open them by kind; pressure and throttling live in the
+            # Overview's vitals, so the Overview is their page.
+            if kind in ("unit", "appLaunch", "restartLoop", "crash", "journal", "pressure", "thermal"):
+                continue
+            self.assertTrue(f'"{kind}"' in tabs or f'"{kind}"' in hardware, f"{kind}: openFinding falls back to the Overview")
+
+    def test_new_kinds_have_sheet_rows(self):
+        rows = SHEET.split("readonly property var rows:")[1].split("// ── Snooze")[0]
+        for kind in KINDS[15:]:
+            self.assertIn(f'case "{kind}"', rows, f"{kind}: its sheet has no facts")
+
+
+class SourceTests(unittest.TestCase):
+    """A source must exist in the helper, the service's launch list, Config and Settings."""
+
+    def helper_sources(self):
+        block = re.search(r"const ALL_SOURCES: \[&str; (\d+)\] = \[(.*?)\];", HELPER_MAIN, re.S)
+        names = re.findall(r'"([a-zA-Z]+)"', block.group(2))
+        self.assertEqual(len(names), int(block.group(1)))
+        return names + ["shellLog"]
+
+    def test_sources_line_up(self):
+        launch = SERVICE.split("readonly property var launchArgs:")[1].split("return [")[0]
+        config = CONFIG.split("property JsonObject sources: JsonObject {")[1].split("}")[0]
+        for src in self.helper_sources():
+            self.assertIn(f'"{src}"', launch, f"service never passes {src}")
+            self.assertRegex(config, rf"property bool {src}: (true|false)", f"Config has no sources.{src}")
+            self.assertIn(f'key: "{src}"', SETTINGS, f"Settings cannot switch {src}")
+        self.assertRegex(config, r"property bool shellLog: false", "shellLog must be off by default")
+
+    def test_every_flag_the_service_passes_is_parsed(self):
+        args = SERVICE.split("readonly property var launchArgs:")[1].split("readonly property string launchKey")[0]
+        for flag in re.findall(r'"(--[a-z-]+)"', args):
+            self.assertIn(f'"{flag}"', HELPER_MAIN, f"the helper ignores {flag}")
+
+    def test_new_messages_and_commands(self):
+        stdin = PROTOCOL.split("## stdin")[1]
+        for cmd in ("snooze", "unsnooze"):
+            self.assertIn(f'"t":"{cmd}"', stdin)
+            self.assertIn(f'"{cmd}"', HELPER_MAIN)
+        self.assertIn('t: "snooze"', SERVICE)
+        self.assertIn('t: "unsnooze"', SERVICE)
+
+
+class GuardTests(unittest.TestCase):
+    def test_scripts_exist_and_hook_paths_match(self):
+        for name in ("qs-guard.sh", "qs-rebuild.sh", "quickshell-qt-check.sh", "install-hook.sh", "ii-quickshell-qt.hook"):
+            self.assertTrue((GUARD / name).is_file(), name)
+        hook = (GUARD / "ii-quickshell-qt.hook").read_text()
+        installer = (GUARD / "install-hook.sh").read_text()
+        exec_path = re.search(r"Exec = (\S+)", hook).group(1)
+        self.assertIn(f"CHECK={exec_path}", installer)
+        self.assertIn("quickshell-qt-check.sh", installer)
+        # Root runs it: it must be installed root-owned, never run from the home dir.
+        self.assertIn("-o root -g root", installer)
+        for target in ("qt6-base", "qt6-declarative", "quickshell"):
+            self.assertIn(f"Target = {target}\n", hook)
+
+    def test_shell_starts_through_the_guard_everywhere(self):
+        execs = (DOTS / "hypr/hyprland/execs.lua").read_text(encoding="utf-8")
+        keybinds = (DOTS / "hypr/hyprland/keybinds.lua").read_text(encoding="utf-8")
+        self.assertIn("quickshell-guard/qs-guard.sh", execs)
+        self.assertIn("quickshell-guard/qs-guard.sh", keybinds)
+        # The repository's setup script; a deployed config has none.
+        setup = DOTS.parents[1] / "setup-ii-p3drovfx.sh"
+        if setup.exists():
+            self.assertIn("scripts/quickshell-guard/qs-guard.sh", setup.read_text(encoding="utf-8"))
+        # With the guard missing, the plain start is still there.
+        self.assertIn("exec qs -c $qsConfig", execs)
+
+    def test_guard_settings_exist(self):
+        self.assertRegex(CONFIG, r"property JsonObject guard: JsonObject \{\s*(//[^\n]*\s*)*property bool enable: true")
+        self.assertIn("openTerminal", CONFIG)
+        guard = (GUARD / "qs-guard.sh").read_text()
+        self.assertIn(".health.guard.enable", guard)
+        self.assertIn(".health.guard.openTerminal", guard)
+
+
+class SurfaceTests(unittest.TestCase):
+    def test_report_is_always_redacted(self):
+        report = SERVICE.split("function buildReport()")[1].split("function copyReport(")[0]
+        self.assertRegex(report, r"return root\.redactText\(L\.join")
+
+    def test_launcher_and_keys_are_wired(self):
+        self.assertIn("root.healthMatches(root.query)", LAUNCHER)
+        app = read("modules/ii/health/HealthAppContent.qml")
+        self.assertIn("handleNavKey", app)
+        for page in ("OverviewTab", "ServicesTab"):
+            self.assertIn("function handleNavKey(event)", read(f"modules/ii/health/tabs/{page}.qml"))
+
+    def test_every_component_is_used(self):
+        components = ROOT / "modules/ii/health/components"
+        everything = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "modules/ii/health").rglob("*.qml"))
+        for qml in components.glob("Health*.qml"):
+            name = qml.stem
+            if "pragma Singleton" in qml.read_text(encoding="utf-8"):
+                continue
+            uses = len(re.findall(rf"\b{name}\s*\{{", everything))
+            self.assertGreater(uses, 0, f"{name} is never instantiated")
+
+
 if __name__ == "__main__":
     unittest.main()
