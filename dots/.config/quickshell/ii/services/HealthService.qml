@@ -52,23 +52,20 @@ Singleton {
         crateName: "health_watch"
         onFinished: ok => {
             root.checkBinary();
-            if (ok) {
+            if (ok)
                 root.restart();
-                root.builtInApp = true;
-            }
         }
     }
 
-    /// The helper was just built from the app: the Overview offers crash-dump access
-    /// once, the way the setup script does after its own build.
-    property bool builtInApp: false
-    readonly property bool offerDumpAccess: root.builtInApp && root.dumpAccess === "denied"
+    /// Once the helper exists, the Overview offers crash-dump access one time, the way
+    /// the setup script does after its own build — whichever way the helper was built
+    /// (the app, the setup script, a terminal). "Not now" is remembered.
+    readonly property bool offerDumpAccess: root.running && root.dumpAccess === "denied"
         && !(Persistent.states?.healthApp?.dumpAccessAsked ?? false)
 
     function answerDumpOffer(grant): void {
         if (Persistent.states?.healthApp)
             Persistent.states.healthApp.dumpAccessAsked = true;
-        root.builtInApp = false;
         if (grant)
             root.setDumpAccess(true);
     }

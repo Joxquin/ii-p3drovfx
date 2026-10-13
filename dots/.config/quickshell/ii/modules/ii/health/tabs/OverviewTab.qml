@@ -78,7 +78,7 @@ Item {
             width: flick.width
             spacing: ClockStyle.paneGap
 
-            // Once, right after the helper was built here: the crash-dump offer, said
+            // Once, the first time the helper runs without dump access: the offer, said
             // in words before any password prompt.
             Rectangle {
                 Layout.fillWidth: true
