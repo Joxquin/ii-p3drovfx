@@ -509,7 +509,7 @@ Item {
                         }
                     }
 
-                    ModeAiBar {
+                    AssistantPromptBar {
                         id: aiBar
                         Layout.fillWidth: true
                         Layout.topMargin: expanded ? 0 : -ClockStyle.gapLarge
