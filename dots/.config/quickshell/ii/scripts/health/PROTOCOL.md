@@ -19,8 +19,10 @@ health_watch [--state-dir DIR] [--once]
              [--sources units,userUnits,appLaunches,crashes,journal,drives,filesystems,firmware,packages,pressure,thermals,timesync,rebuild,shell,boot[,shellLog]]
              [--known-after 3] [--of-last 5] [--quiet-days 14]
              [--disk-warn 90] [--disk-crit 97] [--psi-mem 10] [--restart-loop 5]
-             [--history-days 30] [--shell-mem-mb 1200]
+             [--history-days 30] [--shell-mem-mb 1200] [--battery-wear 80]
 ```
+
+The `hardware` source is in the default set too.
 
 - `shellLog` is never on by default: it keeps a `qs log --pid <shell> -f` follower
   running (about 50 MB resident, near-zero CPU, measured 2026-10-13), so it is only
@@ -159,6 +161,20 @@ Kinds and their `data`:
 - `shellErrors` — id `shellErrors`; QML errors (TypeError, ReferenceError, "is not a
   type", …) the shell logged in the last hour. Source `shellLog` only. `sev`
   `warning`. `data`: `{errors:[{message, count}], kinds, total}` (top 5).
+- Hardware (source `hardware`, read every 60 s, every 10 s while the app is shown;
+  events count this boot's kernel and systemd-oomd lines at notice or worse):
+  `battery` (id `battery:<name>`; health below `--battery-wear`, `critical` 20
+  points lower; `{name, model, healthPct, cycles, limit}`), `peripheralBattery`
+  (`peripheral:<name>`, `info`, a wireless device at 15 % or less, not charging),
+  `mce` (`critical`, machine-check errors), `gpu` (`gpu:resets`; hangs and resets;
+  `warning`, `critical` from 3; `{count, drivers:{driver: n}, gpus}`), `oom`
+  (`warning`; kernel OOM and systemd-oomd kills; `{count, killed:{name: n}}`), `edac`
+  (`critical` with uncorrected errors, else `info`; `{ce, ue}`), `radioFw`
+  (`radioFw:<device>`, `warning`, Wi-Fi/Bluetooth firmware crashes), `usb`
+  (`usb:<port>`, `info`, 3+ errors on one port), `aer` (`pcie:fatal` `critical`,
+  `pcie:corrected` `info` from 100), `overheat` (`warning`, critical temperature
+  lines), `fan` (`fan:stopped`, `warning`, a fan at 0 RPM with the CPU at 80 °C+ for
+  2 minutes).
 - `slowBoot` — id `slowBoot`; this boot took over 1.5× the median of the 10 before
   it and more than 5 s over it (needs 3 earlier boots). `sev` `info`. `data`:
   `{total, median, unit, unitMs, unitMedian}`: the unit that grew most against its
@@ -261,7 +277,24 @@ filled today's row, and when a day rolls. `failed` is the most failed units seen
 once that day.
 
 `bootMs` (in each day): that day's boot from firmware to the end of startup, 0 when
-it did not boot that day.
+it did not boot that day. `batteryHealthPct` (0 when unknown), `cpuTempPeak` (°C),
+`gpuResets` and `oomKills` (the most counted in one boot that day).
+
+### `hardware`
+```json
+{"t":"hardware",
+ "batteries":[{"name":"BAT1","model":"…","manufacturer":"…","technology":"Li-ion","capacity":98,
+               "status":"Full","cycles":114,"healthPct":102.9}],
+ "peripherals":[{"name":"hidpp_battery_2","model":"MX Master 4","capacity":75,"status":"Discharging"}],
+ "gpus":[{"card":"card0","driver":"xe","slot":"0000:00:02.0","vendor":"Intel","model":"…","tempC":null,"busyPct":null}],
+ "cpu":{"tempC":67,"throttleTotal":0},
+ "memory":{"edac":null,"swapTotal":…,"swapFree":…,"zram":true},
+ "fans":[{"label":"…","rpm":2100}],
+ "events":{"counts":{"gpu":0,…},"details":{"oom":{"firefox":1}}}}
+```
+`healthPct` is full charge against design and can exceed 100 on a new pack. `edac` is
+`{ce, ue}` or null without memory controllers to ask (no ECC). Fans that fail to read
+are left out.
 
 ### `resolved`
 ```json

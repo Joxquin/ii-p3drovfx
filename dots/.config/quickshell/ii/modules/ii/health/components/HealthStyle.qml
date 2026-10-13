@@ -62,6 +62,17 @@ Singleton {
         case "shellErrors": return "bug_report";
         case "slowBoot": return "timer";
         case "config": return "settings_alert";
+        case "battery": return "battery_horiz_050";
+        case "peripheralBattery": return "battery_low";
+        case "mce": return "memory";
+        case "gpu": return "developer_board";
+        case "oom": return "memory_alt";
+        case "edac": return "memory_alt";
+        case "radioFw": return "wifi_off";
+        case "usb": return "usb";
+        case "aer": return "cable";
+        case "overheat": return "device_thermostat";
+        case "fan": return "mode_fan_off";
         default: return "info";
         }
     }

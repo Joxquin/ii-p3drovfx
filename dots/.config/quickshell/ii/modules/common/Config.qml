@@ -6589,6 +6589,8 @@ Singleton {
                     property bool shell: true
                     // How long each boot took, and which unit slowed it.
                     property bool boot: true
+                    // Battery wear, GPU resets, machine checks, OOM kills, fans, buses.
+                    property bool hardware: true
                     // QML errors in the shell's log. Off: following the log keeps a
                     // `qs log` process of about 50 MB running.
                     property bool shellLog: false
@@ -6608,6 +6610,9 @@ Singleton {
                     property int restartLoop: 5
                     // The shell's memory, in MiB, past which it is a finding.
                     property int shellMemoryMb: 1200
+                    // Battery health (full charge against design, %) to warn below;
+                    // 20 points lower is critical.
+                    property int batteryWearPercent: 80
                 }
                 property JsonObject assistant: JsonObject {
                     // The "Explain with the assistant" button. Nothing is sent until it

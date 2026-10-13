@@ -128,6 +128,27 @@ Singleton {
     property var resolved: []
     /// One row per boot, oldest first: phases in ms and the slowest units.
     property var boots: []
+    /// The latest `hardware` message: batteries, peripherals, gpus, cpu, memory,
+    /// fans and this boot's hardware events. Null until the first one.
+    property var hardware: null
+
+    /// The last `days` daily values of a history field, oldest first, null for a day
+    /// without a row (or, with `zeroIsGap`, a row whose value is 0: "not measured").
+    function historySeries(field, zeroIsGap, days): var {
+        const n = days ?? 30;
+        const byDate = {};
+        for (const d of root.history)
+            byDate[d.date] = d;
+        const out = [];
+        const today = new Date();
+        for (let i = n - 1; i >= 0; i--) {
+            const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+            const row = byDate[Qt.formatDate(d, "yyyy-MM-dd")];
+            const v = row ? Number(row[field] ?? 0) : null;
+            out.push(v === null || (zeroIsGap && !(v > 0)) ? null : v);
+        }
+        return out;
+    }
 
     property var crashGroups: []
     property var updateTransactions: []
@@ -296,6 +317,9 @@ Singleton {
             break;
         case "boot":
             root.boots = Array.from(msg.boots ?? []);
+            break;
+        case "hardware":
+            root.hardware = msg;
             break;
         case "reply": {
             const cb = root._callbacks[msg.req];
@@ -644,13 +668,16 @@ Singleton {
         }
     }
 
+    /// Kinds shown on the Hardware page (the "storage" tab: storage moved into it).
+    readonly property var hardwareKinds: ["disk", "drive", "battery", "peripheralBattery", "mce", "gpu", "oom", "edac", "radioFw", "usb", "aer", "overheat", "fan"]
+
     function openFinding(id): void {
         const f = root.finding(id);
         const tab = !f ? "overview"
             : ["unit", "appLaunch", "restartLoop"].includes(f.kind) ? "services"
             : f.kind === "crash" ? "crashes"
             : f.kind === "journal" ? "journal"
-            : ["disk", "drive"].includes(f.kind) ? "storage"
+            : root.hardwareKinds.includes(f.kind) ? "storage"
             : ["firmware", "security", "reboot", "deletedLibs", "pacnew", "timesync", "rebuild", "shellHelper", "shellMemory", "shellErrors", "slowBoot", "config"].includes(f.kind) ? "system"
             : "overview";
         GlobalStates.openHealthApp(tab, String(id ?? ""));
@@ -859,7 +886,7 @@ Singleton {
     readonly property var srcOpts: root.opts?.sources ?? null
     readonly property var launchArgs: {
         const names = ["units", "userUnits", "appLaunches", "crashes", "journal", "drives", "filesystems", "firmware", "packages", "pressure", "thermals", "timesync",
-            "rebuild", "shell", "boot"];
+            "rebuild", "shell", "boot", "hardware"];
         const on = names.filter(n => root.srcOpts?.[n] ?? true);
         // Off unless asked for: following the shell's log keeps a 50 MB `qs log` running.
         if (root.srcOpts?.shellLog === true)
@@ -877,7 +904,8 @@ Singleton {
             "--psi-mem", String(th?.psiMemPercent ?? 10),
             "--restart-loop", String(th?.restartLoop ?? 5),
             "--history-days", String(root.opts?.historyDays ?? 30),
-            "--shell-mem-mb", String(th?.shellMemoryMb ?? 1200)
+            "--shell-mem-mb", String(th?.shellMemoryMb ?? 1200),
+            "--battery-wear", String(th?.batteryWearPercent ?? 80)
         ];
     }
     readonly property string launchKey: root.launchArgs.join("|")

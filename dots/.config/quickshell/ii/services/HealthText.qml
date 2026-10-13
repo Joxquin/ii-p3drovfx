@@ -215,6 +215,28 @@ Singleton {
             return Translation.tr("This boot took %1").arg(root.seconds(d.total));
         case "config":
             return d.state === "malformed" ? Translation.tr("The shell's settings file is broken") : Translation.tr("The shell's settings were repaired");
+        case "battery":
+            return Translation.tr("The battery holds %1 % of its design charge").arg(Math.round(Number(d.healthPct ?? 0)));
+        case "peripheralBattery":
+            return Translation.tr("%1 is at %2 %").arg(d.model || d.name || Translation.tr("A wireless device")).arg(Math.round(Number(d.capacity ?? 0)));
+        case "mce":
+            return Translation.tr("The processor reported hardware errors");
+        case "gpu":
+            return root.plural(d.count ?? f.count, Translation.tr("The GPU was reset %1 time this boot"), Translation.tr("The GPU was reset %1 times this boot"));
+        case "oom":
+            return root.plural(d.count ?? f.count, Translation.tr("%1 program was killed for memory"), Translation.tr("%1 programs were killed for memory"));
+        case "edac":
+            return Number(d.ue ?? 0) > 0 ? Translation.tr("Memory errors that could not be corrected") : Translation.tr("Memory errors were corrected");
+        case "radioFw":
+            return Translation.tr("%1 firmware crashed").arg(d.device ?? "");
+        case "usb":
+            return Translation.tr("USB errors on port %1").arg(d.port ?? "");
+        case "aer":
+            return d.fatal ? Translation.tr("PCIe errors that were not corrected") : Translation.tr("Many corrected PCIe errors");
+        case "overheat":
+            return Translation.tr("The machine reached a critical temperature");
+        case "fan":
+            return Translation.tr("A fan stopped while the processor is hot");
         default:
             return Translation.tr("Something needs attention");
         }
@@ -312,6 +334,29 @@ Singleton {
                 : Translation.tr("Usually %1").arg(root.seconds(d.median));
         case "config":
             return d.state === "malformed" ? Translation.tr("Defaults are in use until it is fixed") : Translation.tr("Some values were reset to their defaults");
+        case "battery":
+            return d.cycles ? Translation.tr("After %1 charge cycles; plan a replacement below %2 %").arg(Math.round(d.cycles)).arg(Math.max(0, Number(d.limit ?? 80) - 20))
+                : Translation.tr("It runs out sooner than it used to");
+        case "peripheralBattery":
+            return Translation.tr("Charge it soon");
+        case "mce":
+            return Translation.tr("%1 machine-check errors: often a failing processor, memory or overclock").arg(d.count ?? f.count);
+        case "gpu":
+            return Translation.tr("Driver %1: hangs that reset the GPU, often a driver bug").arg(Object.keys(d.drivers ?? {}).join(", "));
+        case "oom":
+            return Object.keys(d.killed ?? {}).slice(0, 3).join(", ");
+        case "edac":
+            return Translation.tr("%1 corrected, %2 not").arg(d.ce ?? 0).arg(d.ue ?? 0);
+        case "radioFw":
+            return Translation.tr("%1 times this boot: the device restarted its firmware").arg(d.count ?? f.count);
+        case "usb":
+            return Translation.tr("%1 errors this boot: often a cable, hub or port").arg(d.count ?? f.count);
+        case "aer":
+            return Translation.tr("%1 this boot").arg(d.count ?? f.count);
+        case "overheat":
+            return Translation.tr("The kernel said so %1 times this boot").arg(d.count ?? f.count);
+        case "fan":
+            return d.tempC ? Translation.tr("Processor at %1 °C").arg(Math.round(d.tempC)) : "";
         default:
             return "";
         }

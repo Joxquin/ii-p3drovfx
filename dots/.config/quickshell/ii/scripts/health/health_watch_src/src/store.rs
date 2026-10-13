@@ -87,6 +87,17 @@ pub struct Day {
     /// This day's boot, start to finish, in ms; 0 when it did not boot that day.
     #[serde(default, rename = "bootMs")]
     pub boot_ms: u64,
+    /// The laptop battery's full charge against its design, %; 0 when unknown.
+    #[serde(default, rename = "batteryHealthPct")]
+    pub battery_health_pct: f64,
+    /// The hottest the CPU read that day, °C.
+    #[serde(default, rename = "cpuTempPeak")]
+    pub cpu_temp_peak: f64,
+    /// GPU resets and OOM kills: the most counted in one boot that day.
+    #[serde(default, rename = "gpuResets")]
+    pub gpu_resets: u64,
+    #[serde(default, rename = "oomKills")]
+    pub oom_kills: u64,
 }
 
 pub struct Store {

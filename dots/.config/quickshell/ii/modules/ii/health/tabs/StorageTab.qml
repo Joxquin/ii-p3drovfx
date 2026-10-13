@@ -11,9 +11,10 @@ import qs.modules.ii.clock.components
 import qs.modules.ii.health.components
 
 /**
- * Storage: free space as the one number per filesystem, a segmented bar that shows how
- * much of the used part is yours to take back, and each drive's SMART health with its
- * wear on the M3E wavy ring — the only ring in the app.
+ * Hardware (still the "storage" tab inside): storage first — free space as the one
+ * number per filesystem, a segmented bar that shows how much of the used part is yours
+ * to take back, and each drive's SMART health with its wear on the M3E wavy ring, the
+ * only ring in the app — then the rest of the machine (HealthHardwareSection).
  */
 Item {
     id: root
@@ -69,7 +70,7 @@ Item {
         id: flick
         anchors.fill: parent
         contentWidth: width
-        contentHeight: grid.implicitHeight + ClockStyle.fabClearance
+        contentHeight: grid.implicitHeight + (hardware.visible ? hardware.implicitHeight + ClockStyle.paneGap : 0) + ClockStyle.fabClearance
         clip: true
 
         GridLayout {
@@ -129,6 +130,14 @@ Item {
                     subtitle: HealthService.sources?.drives === false ? Translation.tr("Install udisks2 to read SMART without root.") : ""
                 }
             }
+        }
+
+        HealthHardwareSection {
+            id: hardware
+            y: grid.implicitHeight + ClockStyle.paneGap
+            width: flick.width
+            layoutWidth: flick.width
+            openFinding: id => root.toggle(id)
         }
     }
 

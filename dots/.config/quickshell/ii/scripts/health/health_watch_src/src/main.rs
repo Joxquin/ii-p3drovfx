@@ -18,6 +18,7 @@ mod elf;
 mod fingerprint;
 mod fs;
 mod fwupd;
+mod hw;
 mod journal;
 mod packages;
 mod pressure;
@@ -69,13 +70,15 @@ struct Config {
     history_days: usize,
     /// The shell's memory, in MiB, past which it is a finding.
     shell_mem_mb: u64,
+    /// Battery health (full charge against design, %) below which it is a finding.
+    battery_wear: f64,
 }
 
 /// The sources on when --sources is not given. `shellLog` is not among them: it
 /// keeps a `qs log` follower running, so it is only ever asked for by name.
-const ALL_SOURCES: [&str; 15] = [
+const ALL_SOURCES: [&str; 16] = [
     "units", "userUnits", "appLaunches", "crashes", "journal", "drives", "filesystems", "firmware", "packages", "pressure", "thermals", "timesync",
-    "rebuild", "shell", "boot",
+    "rebuild", "shell", "boot", "hardware",
 ];
 
 fn parse_args() -> Config {
@@ -97,6 +100,7 @@ fn parse_args() -> Config {
         restart_loop: 5,
         history_days: 30,
         shell_mem_mb: 1200,
+        battery_wear: 80.0,
     };
     // "--disk-warn=90" and "--disk-warn 90" both work.
     let mut args: Vec<String> = Vec::new();
@@ -131,6 +135,7 @@ fn parse_args() -> Config {
             "--restart-loop" => c.restart_loop = num(&val, 5.0).max(2.0) as u64,
             "--history-days" => c.history_days = num(&val, 30.0).clamp(1.0, 366.0) as usize,
             "--shell-mem-mb" => c.shell_mem_mb = num(&val, 1200.0).clamp(200.0, 65536.0) as u64,
+            "--battery-wear" => c.battery_wear = num(&val, 80.0).clamp(10.0, 100.0),
             _ => {
                 i += 1;
                 continue;
@@ -212,6 +217,11 @@ struct App {
     shell_log: shell::LogErrors,
     shell_log_child: Option<std::process::Child>,
     boot_tries: u32,
+    /// lspci's model name per GPU slot, asked once.
+    gpu_names: HashMap<String, String>,
+    /// Since when a fan has read 0 RPM with the CPU at 80 °C or more.
+    fan_hot_since: Option<u64>,
+    hardware_next: Instant,
     // timers
     rebuild_due: Option<Instant>,
     boot_due: Option<Instant>,
@@ -290,6 +300,9 @@ impl App {
             shell_log: Default::default(),
             shell_log_child: None,
             boot_tries: 0,
+            gpu_names: HashMap::new(),
+            fan_hot_since: None,
+            hardware_next: now + Duration::from_secs(60),
             rebuild_due: None,
             boot_due: None,
             helpers_next: now + Duration::from_secs(6 * 3600),
@@ -1073,6 +1086,14 @@ impl App {
             let (total, recent) = self.throttle.sample(now);
             throttle = json!({"total": total, "last5min": recent});
             temp = pressure::cpu_temp();
+            if let Some(t) = temp {
+                let keep = self.cfg.history_days;
+                let (_, day) = self.store.today(&packages::local_date(now), keep);
+                if t > day.cpu_temp_peak {
+                    day.cpu_temp_peak = t;
+                    self.store.dirty = true;
+                }
+            }
             let mut tf = Vec::new();
             if recent >= 20 {
                 let id = "thermal:throttle".to_string();
@@ -1166,6 +1187,115 @@ impl App {
                 json!({"errors": top, "kinds": recent.len(), "total": total})), since));
         }
         self.apply(&["shellErrors".into()], fresh);
+    }
+
+    // ── Hardware ────────────────────────────────────────────────────────
+
+    /// Batteries, GPUs, memory, fans and this boot's hardware complaints: the
+    /// `hardware` message, its findings, and today's history fields.
+    fn scan_hardware(&mut self) {
+        if !has(&self.cfg, "hardware") {
+            return;
+        }
+        let now = now_ms();
+        let (own, peripherals) = hw::batteries();
+        let gpus = hw::gpus(&mut self.gpu_names);
+        let edac = hw::edac();
+        let (swap_total, swap_free, zram) = hw::swap();
+        let fans = hw::fans();
+        let events = hw::read_events();
+        let temp = pressure::cpu_temp();
+        emit(&json!({
+            "t": "hardware",
+            "batteries": own,
+            "peripherals": peripherals,
+            "gpus": gpus,
+            "cpu": {"tempC": temp, "throttleTotal": pressure::throttle_total()},
+            "memory": {"edac": edac.map(|(ce, ue)| json!({"ce": ce, "ue": ue})), "swapTotal": swap_total, "swapFree": swap_free, "zram": zram},
+            "fans": fans,
+            "events": events.json(),
+        }));
+
+        let keep_since = |s: &Self, id: &str| s.findings.get(id).and_then(|o| o["since"].as_u64()).unwrap_or(now);
+        let mut fresh: Vec<(Value, u64)> = Vec::new();
+        let mut push = |s: &Self, id: String, kind: &str, sev: &str, count: u64, data: Value| {
+            let since = keep_since(s, &id);
+            fresh.push((Self::finding(id, kind, sev, since, count, String::new(), data), since));
+        };
+        for b in &own {
+            if let Some(h) = b["healthPct"].as_f64().filter(|h| *h < self.cfg.battery_wear) {
+                let sev = if h < self.cfg.battery_wear - 20.0 { "critical" } else { "warning" };
+                push(self, format!("battery:{}", b["name"].as_str().unwrap_or("")), "battery", sev, 1,
+                    json!({"name": b["name"], "model": b["model"], "healthPct": h, "cycles": b["cycles"], "limit": self.cfg.battery_wear}));
+            }
+        }
+        for p in &peripherals {
+            let low = p["capacity"].as_f64().is_some_and(|c| c <= 15.0);
+            let charging = p["status"].as_str().is_some_and(|s| s == "Charging" || s == "Full");
+            if low && !charging {
+                push(self, format!("peripheral:{}", p["name"].as_str().unwrap_or("")), "peripheralBattery", "info", 1, p.clone());
+            }
+        }
+        let details = |k: &str| events.details.get(k).cloned().unwrap_or_default();
+        let mce = events.count("mce");
+        if mce > 0 {
+            push(self, "mce".into(), "mce", "critical", mce, json!({"count": mce}));
+        }
+        let resets = events.count("gpu");
+        if resets > 0 {
+            push(self, "gpu:resets".into(), "gpu", if resets >= 3 { "critical" } else { "warning" }, resets,
+                json!({"count": resets, "drivers": details("gpu"), "gpus": gpus}));
+        }
+        let oom = events.count("oom");
+        if oom > 0 {
+            push(self, "oom".into(), "oom", "warning", oom, json!({"count": oom, "killed": details("oom")}));
+        }
+        if let Some((ce, ue)) = edac.filter(|(ce, ue)| *ce > 0 || *ue > 0) {
+            push(self, "edac".into(), "edac", if ue > 0 { "critical" } else { "info" }, ce + ue, json!({"ce": ce, "ue": ue}));
+        }
+        for (dev, n) in details("radioFw") {
+            push(self, format!("radioFw:{dev}"), "radioFw", "warning", n, json!({"device": dev, "count": n}));
+        }
+        for (port, n) in details("usb").into_iter().filter(|(_, n)| *n >= 3) {
+            push(self, format!("usb:{port}"), "usb", "info", n, json!({"port": port, "count": n}));
+        }
+        let fatal = events.count("aerFatal");
+        if fatal > 0 {
+            push(self, "pcie:fatal".into(), "aer", "critical", fatal, json!({"count": fatal, "fatal": true}));
+        }
+        let corrected = events.count("aer");
+        if corrected >= 100 {
+            push(self, "pcie:corrected".into(), "aer", "info", corrected, json!({"count": corrected, "fatal": false}));
+        }
+        let overheat = events.count("thermal");
+        if overheat > 0 {
+            push(self, "overheat".into(), "overheat", "warning", overheat, json!({"count": overheat, "tempC": temp}));
+        }
+        // A fan at 0 RPM while the CPU is at 80 °C or more, for two minutes.
+        let stopped: Vec<Value> = fans.iter().filter(|f| f["rpm"].as_f64() == Some(0.0)).cloned().collect();
+        if !stopped.is_empty() && temp.is_some_and(|t| t >= 80.0) {
+            self.fan_hot_since.get_or_insert(now);
+        } else {
+            self.fan_hot_since = None;
+        }
+        if self.fan_hot_since.is_some_and(|s| now.saturating_sub(s) >= 120_000) {
+            push(self, "fan:stopped".into(), "fan", "warning", stopped.len() as u64, json!({"fans": stopped, "tempC": temp}));
+        }
+        self.apply(
+            &["battery:", "peripheral:", "mce", "gpu:", "oom", "edac", "radioFw:", "usb:", "pcie:", "overheat", "fan:"]
+                .map(String::from),
+            fresh,
+        );
+
+        // Today's history: the battery's health, and this boot's resets and kills.
+        let keep = self.cfg.history_days;
+        let (_, day) = self.store.today(&packages::local_date(now), keep);
+        if let Some(h) = own.iter().filter_map(|b| b["healthPct"].as_f64()).reduce(f64::min) {
+            day.battery_health_pct = h;
+        }
+        day.gpu_resets = day.gpu_resets.max(resets);
+        day.oom_kills = day.oom_kills.max(oom);
+        self.store.dirty = true;
     }
 
     // ── Rebuilds, helpers, boot ─────────────────────────────────────────
@@ -1312,6 +1442,7 @@ impl App {
                 "rebuild": src("rebuild") && self.pkg == packages::Manager::Pacman,
                 "shell": src("shell"),
                 "boot": src("boot") && self.bus_sys.is_some(),
+                "hardware": src("hardware"),
             },
             "dumpAccess": self.dump_access,
             "user": self.user,
@@ -1347,6 +1478,7 @@ impl App {
         self.scan_fs();
         self.scan_system(true);
         self.record_boot();
+        self.scan_hardware();
         self.vitals();
         // After every source has filled today's row.
         self.publish_history();
@@ -1426,6 +1558,7 @@ impl App {
                 let v = msg["app"].as_bool().unwrap_or(false);
                 if v && !self.visible {
                     self.vitals_next = Instant::now();
+                    self.hardware_next = Instant::now();
                     if now_ms().saturating_sub(self.drives_at) > 60_000 {
                         self.scan_drives();
                     }
@@ -1628,7 +1761,7 @@ impl App {
 
     fn next_deadline(&self) -> Instant {
         let mut d = self.vitals_next.min(self.fs_next).min(self.drives_next).min(self.fwupd_next).min(self.system_next)
-            .min(self.time_next).min(self.save_next).min(self.helpers_next);
+            .min(self.time_next).min(self.save_next).min(self.helpers_next).min(self.hardware_next);
         for t in self.units_due.values() {
             d = d.min(*t);
         }
@@ -1663,6 +1796,10 @@ impl App {
         }
         if self.boot_due.is_some_and(|t| t <= now) {
             self.record_boot();
+        }
+        if self.hardware_next <= now {
+            self.scan_hardware();
+            self.hardware_next = now + Duration::from_secs(if self.visible { 10 } else { 60 });
         }
         if self.helpers_next <= now {
             self.start_helpers();

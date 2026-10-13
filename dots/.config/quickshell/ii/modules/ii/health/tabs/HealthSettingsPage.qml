@@ -125,6 +125,7 @@ Rectangle {
                         { key: "rebuild", symbol: "construction", title: Translation.tr("Packages that need a rebuild") },
                         { key: "shell", symbol: "deployed_code", title: Translation.tr("The shell's helpers and memory") },
                         { key: "boot", symbol: "timer", title: Translation.tr("Boot time") },
+                        { key: "hardware", symbol: "developer_board", title: Translation.tr("Battery, GPU, memory and other hardware") },
                         { key: "shellLog", symbol: "bug_report", title: Translation.tr("QML errors in the shell's log"),
                           description: Translation.tr("Keeps a log reader of about 50 MB running") }
                     ]
@@ -133,7 +134,7 @@ Rectangle {
                         required property var modelData
                         required property int index
                         first: index === 0
-                        last: index === 15
+                        last: index === 16
                         symbol: modelData.symbol
                         title: modelData.title
                         description: modelData.description ?? ""
@@ -213,6 +214,12 @@ Rectangle {
                     title: Translation.tr("A restart loop is this many restarts")
                     description: Translation.tr("Within 10 minutes")
                     Stepper { target: root.h.thresholds; key: "restartLoop"; from: 2; to: 50 }
+                }
+                ClockSettingsRow {
+                    symbol: "battery_horiz_050"
+                    title: Translation.tr("Battery health to warn below")
+                    description: Translation.tr("Full charge against its design; 20 points lower is critical")
+                    Stepper { target: root.h.thresholds; key: "batteryWearPercent"; from: 40; to: 95; stepSize: 5; format: v => `${v} %` }
                 }
                 ClockSettingsRow {
                     last: true

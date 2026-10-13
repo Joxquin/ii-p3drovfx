@@ -179,6 +179,30 @@ ClockSheet {
                 ["description", S.Cookie7Sided, Translation.tr("File"), "~/.config/illogical-impulse/config.json"],
                 ["list", S.Clover4Leaf, Translation.tr("Settings"), Array.from(d.keys ?? []).slice(0, 6).join(", ") || "—"]
             ];
+        case "battery":
+            return [
+                ["battery_horiz_050", S.Sunny, Translation.tr("Health"), `${Number(d.healthPct ?? 0).toFixed(1)} %`],
+                ["autorenew", S.Cookie7Sided, Translation.tr("Charge cycles"), d.cycles ? String(Math.round(d.cycles)) : "—"],
+                ["battery_full", S.Cookie9Sided, Translation.tr("Model"), d.model ?? "—"]
+            ];
+        case "gpu":
+            return Array.from(d.gpus ?? []).map(g => ["developer_board", S.Cookie12Sided, g.model || g.vendor || g.card, g.driver ?? ""])
+                .concat(Object.entries(d.drivers ?? {}).map(([drv, n]) => ["restart_alt", S.Sunny, Translation.tr("Resets by %1").arg(drv), String(n)]));
+        case "oom":
+            return Object.entries(d.killed ?? {}).slice(0, 10).map(([name, n]) => ["block", S.Cookie7Sided, name, n > 1 ? Translation.tr("%1 times").arg(n) : Translation.tr("once")]);
+        case "edac":
+            return [
+                ["check", S.Clover4Leaf, Translation.tr("Corrected"), String(d.ce ?? 0)],
+                ["error", S.Sunny, Translation.tr("Not corrected"), String(d.ue ?? 0)]
+            ];
+        case "mce":
+        case "radioFw":
+        case "usb":
+        case "aer":
+        case "overheat":
+            return [["numbers", S.Cookie7Sided, Translation.tr("This boot"), String(d.count ?? root.f?.count ?? 0)]];
+        case "fan":
+            return Array.from(d.fans ?? []).map(fan => ["mode_fan_off", S.Cookie9Sided, fan.label, Translation.tr("%1 RPM").arg(fan.rpm)]);
         default:
             return [];
         }
