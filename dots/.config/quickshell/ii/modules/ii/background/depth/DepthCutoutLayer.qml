@@ -56,6 +56,10 @@ Item {
 
     readonly property var plane: DepthEffect.planes[root.screenName] ?? null
     readonly property Item contentItem: cutoutChain.contentItem
+    // The subject alone, unmasked, in window space: the window blur cuts its
+    // (blurred) silhouette out of the blurred widgets, whose spill would
+    // otherwise lie over it.
+    readonly property Item subjectItem: cutoutPlane
     readonly property var parallaxTranslate: cutoutChain.parallaxTranslate
     readonly property Item framedItem: cutoutChain.framedItem
     readonly property var wallpaperItem: root.plane ? root.plane.wallpaperItem : null

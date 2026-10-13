@@ -751,10 +751,15 @@ PanelWindow {
         // cross-fade is this item's opacity. The two are parented here by
         // `parent:`, in window coordinates as before. Input is not gated by
         // opacity, so the desktop keeps every click while blurred.
+        // Never quite 0 while blurred: a subtree at opacity 0 is skipped by the
+        // renderer, so the cutout's own textures (the subject, the canvas mask)
+        // stopped refreshing, and the frame the blur dropped drew the sharp
+        // widgets over a stale mask - the widgets flashed in front of the
+        // subject. Under the blurred copy 0.4% is invisible.
         Item {
             id: desktopStack
             anchors.fill: parent
-            opacity: 1 - bgWidgetsWindow.windowBlurProgress
+            opacity: Math.max(0.004, 1 - bgWidgetsWindow.windowBlurProgress)
         }
 
         Loader {
@@ -1003,12 +1008,22 @@ PanelWindow {
         // same here as on the wallpaper beneath. Nothing in it takes the pointer: clicks fall
         // through to the canvas. It captures desktopStack - the canvas with the
         // depth subject over it - so the blurred widgets stay behind the subject.
+        //
+        // Blurring spreads each widget well past its edges, over the subject
+        // around it, where the sharp cutout (painted only on widget pixels)
+        // cannot follow. So with a subject on screen the subject's silhouette,
+        // blurred by the same kernel, is cut out of the blurred widgets: the
+        // blurred wallpaper shows through there, its own blurred subject in
+        // front, colours and all.
         Loader {
             id: widgetBlurLoader
             anchors.fill: parent
             active: widgetCanvas.visible && bgWidgetsWindow.windowBlurProgress > 0
             opacity: bgWidgetsWindow.windowBlurProgress
             sourceComponent: Item {
+                id: widgetBlurRoot
+                readonly property Item subject: depthCutoutLoader.item && depthCutoutLoader.item.opacity > 0.01
+                    ? depthCutoutLoader.item.subjectItem : null
                 ShaderEffectSource {
                     id: widgetBlurSource
                     anchors.fill: parent
@@ -1019,11 +1034,43 @@ PanelWindow {
                     visible: false
                 }
                 GE.GaussianBlur {
+                    id: widgetBlur
                     anchors.fill: parent
                     source: widgetBlurSource
                     radius: bgWidgetsWindow.windowBlurRadius
                     samples: Math.max(3, Math.round(bgWidgetsWindow.windowBlurRadius * 2 + 1))
                     transparentBorder: true
+                    visible: widgetBlurRoot.subject === null
+                }
+                Loader {
+                    anchors.fill: parent
+                    active: widgetBlurRoot.subject !== null
+                    sourceComponent: Item {
+                        ShaderEffectSource {
+                            id: subjectSource
+                            anchors.fill: parent
+                            sourceItem: widgetBlurRoot.subject
+                            textureSize: Qt.size(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
+                            live: true
+                            smooth: true
+                            visible: false
+                        }
+                        GE.GaussianBlur {
+                            id: subjectBlur
+                            anchors.fill: parent
+                            source: subjectSource
+                            radius: bgWidgetsWindow.windowBlurRadius
+                            samples: Math.max(3, Math.round(bgWidgetsWindow.windowBlurRadius * 2 + 1))
+                            transparentBorder: true
+                            visible: false
+                        }
+                        GE.OpacityMask {
+                            anchors.fill: parent
+                            source: widgetBlur
+                            maskSource: subjectBlur
+                            invert: true
+                        }
+                    }
                 }
             }
         }
