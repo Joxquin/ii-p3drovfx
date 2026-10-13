@@ -15,12 +15,13 @@ pragma ComponentBehavior: Bound
  * that exits and gives its memory back - and the desktop draws that cutout in
  * the widgets window, on top of the widgets, landing on the wallpaper's own
  * pixels (modules/ii/background/depth/DepthCutoutLayer.qml). At rest the cost
- * is one textured quad; the model only runs when a picture without a cutout
- * comes on screen.
+ * is one textured quad; the model only runs when a picture that was never cut
+ * out (or changed since) comes on screen.
  *
  * Nothing ships installed and nothing is on by default: the ONNX runtime comes
- * with the first model and goes with the last, and cutouts are kept only for
- * the pictures on screen right now.
+ * with the first model and goes with the last. Cutouts stay on disk as a cache
+ * (depth.py's CUTOUT_CACHE_BYTES), so a picture that comes back is not cut
+ * out again.
  */
 Singleton {
     id: root
@@ -274,7 +275,8 @@ Singleton {
         if (segmentProc.running || pruneProc.running)
             return;
         const keys = root.wantedKeys();
-        // Only the pictures on screen keep their cutout, in memory and on disk.
+        // Only the pictures on screen keep their cutout in memory; the files
+        // stay, and one that comes back is a cache hit (no model run).
         const kept = {};
         let dropped = false;
         for (const key in root.cutouts) {
@@ -293,8 +295,8 @@ Singleton {
             segmentProc.running = true;
             return;
         }
-        // Nothing left to cut: the cutout files on disk follow the set kept
-        // above (none at all once the effect is off).
+        // Nothing left to cut: the cache on disk sheds stale cutouts and, past
+        // its size, the least recently shown - never the ones kept above.
         const keep = keys.map(key => root.cutouts[key]?.key).filter(k => !!k).sort();
         if (root.anyInstalled && keep.join(" ") !== root.prunedTo) {
             root.prunedTo = keep.join(" ");
@@ -302,8 +304,8 @@ Singleton {
             pruneProc.running = true;
         }
     }
-    // The kept set the last prune left on disk; null until the first one, which
-    // also clears whatever a previous session left behind.
+    // The kept set of the last prune; null until the first one, which also
+    // sheds what a previous session left stale.
     property var prunedTo: null
 
     Process {

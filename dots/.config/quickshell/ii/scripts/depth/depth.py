@@ -14,8 +14,9 @@ as events:
 Layout of <root>:
     models/<file>.onnx      downloaded models (written as .part, renamed when verified)
     runtime/                onnxruntime, pip --target, no pip cache kept
-    cutouts/<key>.png|json  one cutout per (wallpaper file, model); pruned to the
-                            wallpapers actually on screen
+    cutouts/<key>.png|json  one cutout per (wallpaper file, model); a cache: kept
+                            while the file is unchanged, least recently shown
+                            dropped past CUTOUT_CACHE_BYTES
 """
 
 import argparse
@@ -37,6 +38,9 @@ HERE = Path(__file__).resolve().parent
 CATALOG = json.loads((HERE / "models.json").read_text())
 # Bump when the cutout pipeline changes, so stale cutouts are recomputed.
 CUTOUT_VERSION = 3
+# Cutouts of pictures no longer on screen stay for when they come back (a run of
+# the large model is ~9 s and several GB); past this the least recently shown go.
+CUTOUT_CACHE_BYTES = 256 * 1024 * 1024
 
 
 def emit(**fields):
@@ -100,14 +104,56 @@ def cmd_remove(root, args):
     cmd_status(root, args)
 
 
+def cutout_stale(meta_path):
+    """A cutout whose picture is gone or changed, or made by an older pipeline:
+    its key can never be asked for again."""
+    try:
+        meta = json.loads(meta_path.read_text())
+        source = meta.get("source", "")
+        return (meta.get("version") != CUTOUT_VERSION or not os.path.isfile(source)
+                or cutout_key(source, meta.get("model", "")) != meta_path.stem)
+    except (OSError, ValueError):
+        return True
+
+
 def cmd_prune(root, args):
+    """Drops stale cutouts, then the least recently shown ones past the cache
+    size. The keys in --keep (the pictures on screen) always stay."""
     keep = set(args.keep or [])
     removed = 0
+
+    def drop(meta_path):
+        nonlocal removed
+        for path in (meta_path, meta_path.with_suffix(".png")):
+            path.unlink(missing_ok=True)
+        removed += 1
+
     if root.cutouts.exists():
+        entries = []
+        for meta_path in root.cutouts.glob("*.json"):
+            if meta_path.stem in keep:
+                continue
+            if cutout_stale(meta_path):
+                drop(meta_path)
+                continue
+            png = meta_path.with_suffix(".png")
+            stat = meta_path.stat()
+            size = stat.st_size + (png.stat().st_size if png.exists() else 0)
+            entries.append((stat.st_mtime, size, meta_path))
+        total = sum(size for _, size, _ in entries)
         for path in root.cutouts.iterdir():
-            if path.stem not in keep:
+            if path.stem in keep:
+                total += path.stat().st_size
+        # Oldest first: a cache hit refreshes the metadata's mtime (cmd_segment).
+        for _, size, meta_path in sorted(entries):
+            if total <= CUTOUT_CACHE_BYTES:
+                break
+            drop(meta_path)
+            total -= size
+        # Halves left by an interrupted write.
+        for path in root.cutouts.iterdir():
+            if path.suffix != ".json" and path.stem not in keep and not path.with_suffix(".json").exists():
                 path.unlink(missing_ok=True)
-                removed += 1
     emit(event="pruned", removed=removed)
 
 
@@ -340,8 +386,20 @@ def cmd_segment(root, args):
         fail("Wallpaper not found", image=image)
     key = cutout_key(image, entry["id"])
     meta_path = root.cutouts / f"{key}.json"
-    if meta_path.exists() and meta_path.with_suffix(".png").exists():
-        meta = json.loads(meta_path.read_text())
+    # "No subject" is an answer too (metadata alone, no picture): without it a
+    # picture with nothing to cut out ran the model every time it came back.
+    meta = None
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+        except (OSError, ValueError):
+            meta = None
+    if meta is not None and (meta.get("empty") or meta_path.with_suffix(".png").exists()):
+        # Shown again: the last to go when the cache is pruned.
+        try:
+            os.utime(meta_path)
+        except OSError:
+            pass
         emit(event="result", cached=True, **meta)
         return
 
