@@ -621,6 +621,7 @@ Singleton {
             label: "System Health alerts",
             preferredSide: "left",
             canDetach: false,
+            interactive: true,         // the fix is a button: hovering must not open the dashboard
             settleMs: 0,
             ttlMs: 9000,
             compact: { width: 420, height: 64 },
