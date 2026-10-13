@@ -36,12 +36,23 @@ Item {
         ? Translation.tr("%1 free on /").arg(HealthText.bytes(root.rootFs.avail))
         : ""
 
+    // The FAB and the panes toggle: pressing what opened the sheet closes it.
     function primaryAction(): void {
-        root.panels?.show(cleanupSheet, {});
+        if (root.panels?.isShowing(cleanupSheet))
+            root.panels.close();
+        else
+            root.panels?.show(cleanupSheet, {});
     }
 
     function showFinding(id): void {
         root.panels?.show(findingSheet, { findingId: id, assistant: root.assistant, onFreeSpace: () => root.primaryAction() });
+    }
+
+    function toggle(id): void {
+        if (root.panels?.open && root.panels.current?.findingId === id)
+            root.panels.close();
+        else
+            root.showFinding(id);
     }
 
     Component {
@@ -146,7 +157,7 @@ Item {
             anchors.fill: parent
             enabled: pane.finding !== null
             cursorShape: pane.finding ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: root.showFinding(pane.finding.id)
+            onClicked: root.toggle(pane.finding.id)
         }
 
         ColumnLayout {

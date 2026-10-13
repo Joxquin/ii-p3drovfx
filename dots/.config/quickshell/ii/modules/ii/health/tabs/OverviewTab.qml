@@ -61,94 +61,142 @@ Item {
         root.panels?.show(findingSheet, { findingId: f.id, assistant: root.assistant });
     }
 
+    /// A card's click: the open card's second click closes its sheet.
+    function toggle(f): void {
+        if (f && root.panels?.open && root.panels.current?.findingId === f.id)
+            root.panels.close();
+        else
+            root.open(f);
+    }
+
     Component {
         id: findingSheet
         FindingSheet {}
     }
 
-    StyledFlickable {
-        id: flick
+    // Wide: the hero and the vitals on the left, the findings as their own scrolling
+    // column on the right, so a long list never stretches the page under the hero.
+    // Narrow: one scrolling column, the list between the hero and the vitals.
+    Loader {
         anchors.fill: parent
-        contentWidth: width
-        contentHeight: column.implicitHeight + ClockStyle.fabClearance
-        clip: true
+        sourceComponent: root.sideBySide ? sideLayout : stackLayout
+    }
 
-        ColumnLayout {
-            id: column
-            width: flick.width
+    Component {
+        id: sideLayout
+        RowLayout {
             spacing: ClockStyle.paneGap
 
-            // Once, the first time the helper runs without dump access: the offer, said
-            // in words before any password prompt.
-            Rectangle {
-                Layout.fillWidth: true
-                visible: HealthService.offerDumpAccess
-                implicitHeight: offerColumn.implicitHeight + ClockStyle.cardPadding * 2
-                radius: ClockStyle.radiusLarge
-                color: ClockStyle.colTertiaryContainer
+            StyledFlickable {
+                id: leftFlick
+                Layout.preferredWidth: Math.round((root.width - ClockStyle.paneGap) * 0.56)
+                Layout.fillHeight: true
+                contentWidth: width
+                contentHeight: leftColumn.implicitHeight + ClockStyle.gapHuge
+                clip: true
 
                 ColumnLayout {
-                    id: offerColumn
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        verticalCenter: parent.verticalCenter
-                        margins: ClockStyle.cardPadding
-                    }
-                    spacing: ClockStyle.gapSmall
+                    id: leftColumn
+                    width: leftFlick.width
+                    spacing: ClockStyle.paneGap
 
-                    StyledText {
-                        text: Translation.tr("Read crash dumps of system programs?")
-                        font.family: ClockStyle.fontTitle
-                        font.variableAxes: ClockStyle.axesTitle
-                        font.pixelSize: ClockStyle.textLarge
-                        color: ClockStyle.colOnTertiaryContainer
-                    }
-                    StyledText {
+                    DumpOffer {
                         Layout.fillWidth: true
-                        text: Translation.tr("Programs like fprintd run as root, and only root can read their dumps. Allowing your account lets you debug them here. A dump is a copy of a program's memory and can contain passwords or keys. They never leave this computer, and the assistant never sees them. Settings can revoke it any time.")
-                        wrapMode: Text.Wrap
-                        font.pixelSize: ClockStyle.textSmall + 1
-                        color: ClockStyle.colOnTertiaryContainer
                     }
-                    RowLayout {
-                        Layout.alignment: Qt.AlignRight
-                        spacing: ClockStyle.gapSmall
-                        ClockButton {
-                            variant: "text"
-                            label: Translation.tr("Not now")
-                            onClicked: HealthService.answerDumpOffer(false)
-                        }
-                        ClockButton {
-                            variant: "filled"
-                            symbol: "lock_open"
-                            label: Translation.tr("Allow, ask for my password")
-                            onClicked: HealthService.answerDumpOffer(true)
-                        }
+                    Hero {
+                        Layout.fillWidth: true
+                    }
+                    Vitals {
+                        Layout.fillWidth: true
+                        availableWidth: leftFlick.width
                     }
                 }
             }
 
-            GridLayout {
+            AttentionList {
                 Layout.fillWidth: true
-                columns: root.sideBySide ? 2 : 1
-                columnSpacing: ClockStyle.paneGap
-                rowSpacing: ClockStyle.paneGap
+                Layout.fillHeight: true
+                scrolling: true
+            }
+        }
+    }
 
-                Hero {
-                    Layout.fillWidth: !root.sideBySide
-                    Layout.preferredWidth: root.sideBySide ? Math.round((flick.width - ClockStyle.paneGap) * 0.56) : -1
-                    Layout.alignment: Qt.AlignTop
+    Component {
+        id: stackLayout
+        StyledFlickable {
+            id: flick
+            contentWidth: width
+            contentHeight: column.implicitHeight + ClockStyle.fabClearance
+            clip: true
+
+            ColumnLayout {
+                id: column
+                width: flick.width
+                spacing: ClockStyle.paneGap
+
+                DumpOffer {
+                    Layout.fillWidth: true
                 }
-
+                Hero {
+                    Layout.fillWidth: true
+                }
                 AttentionList {
                     Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignTop
+                }
+                Vitals {
+                    Layout.fillWidth: true
+                    availableWidth: flick.width
                 }
             }
+        }
+    }
 
-            Vitals {
+    // Once, the first time the helper runs without dump access: the offer, said in
+    // words before any password prompt.
+    component DumpOffer: Rectangle {
+        visible: HealthService.offerDumpAccess
+        implicitHeight: offerColumn.implicitHeight + ClockStyle.cardPadding * 2
+        radius: ClockStyle.radiusLarge
+        color: ClockStyle.colTertiaryContainer
+
+        ColumnLayout {
+            id: offerColumn
+            anchors {
+                left: parent.left
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+                margins: ClockStyle.cardPadding
+            }
+            spacing: ClockStyle.gapSmall
+
+            StyledText {
+                text: Translation.tr("Read crash dumps of system programs?")
+                font.family: ClockStyle.fontTitle
+                font.variableAxes: ClockStyle.axesTitle
+                font.pixelSize: ClockStyle.textLarge
+                color: ClockStyle.colOnTertiaryContainer
+            }
+            StyledText {
                 Layout.fillWidth: true
+                text: Translation.tr("Programs like fprintd run as root, and only root can read their dumps. Allowing your account lets you debug them here. A dump is a copy of a program's memory and can contain passwords or keys. They never leave this computer, and the assistant never sees them. Settings can revoke it any time.")
+                wrapMode: Text.Wrap
+                font.pixelSize: ClockStyle.textSmall + 1
+                color: ClockStyle.colOnTertiaryContainer
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: ClockStyle.gapSmall
+                ClockButton {
+                    variant: "text"
+                    label: Translation.tr("Not now")
+                    onClicked: HealthService.answerDumpOffer(false)
+                }
+                ClockButton {
+                    variant: "filled"
+                    symbol: "lock_open"
+                    label: Translation.tr("Allow, ask for my password")
+                    onClicked: HealthService.answerDumpOffer(true)
+                }
             }
         }
     }
@@ -328,6 +376,12 @@ Item {
 
     // ── Attention list ──────────────────────────────────────────────────
     component AttentionList: ColumnLayout {
+        id: att
+
+        /// Scrolls on its own and fills the height it is given (the wide layout);
+        /// otherwise it is as tall as its cards and the page scrolls.
+        property bool scrolling: false
+
         spacing: ClockStyle.gapTiny
 
         StyledText {
@@ -342,16 +396,43 @@ Item {
             visible: root.attention.length > 0 || root.info.length > 0
         }
 
-        Repeater {
-            model: root.attention.concat(root.info.slice(0, 6))
+        StyledFlickable {
+            id: attFlick
+            Layout.fillWidth: true
+            Layout.fillHeight: att.scrolling
+            Layout.preferredHeight: att.scrolling ? -1 : cards.implicitHeight
+            visible: cards.count > 0
+            contentWidth: width
+            // The page FAB sits over this column's bottom corner: the last card can
+            // always scroll clear of it.
+            contentHeight: cards.implicitHeight + (att.scrolling ? ClockStyle.fabClearance : 0)
+            interactive: att.scrolling && contentHeight > height
+            clip: att.scrolling
 
-            FindingCard {
-                required property var modelData
-                required property int index
-                Layout.fillWidth: true
-                finding: modelData
-                entranceIndex: index + 1
+            Column {
+                id: cards
+                readonly property int count: cardRepeater.count
+                width: attFlick.width
+                spacing: ClockStyle.gapTiny
+
+                Repeater {
+                    id: cardRepeater
+                    model: root.attention.concat(root.info.slice(0, 6))
+
+                    FindingCard {
+                        required property var modelData
+                        required property int index
+                        width: cards.width
+                        finding: modelData
+                        entranceIndex: index + 1
+                    }
+                }
             }
+        }
+
+        Item {
+            // Keeps the header at the top when the list is empty in the wide layout.
+            Layout.fillHeight: att.scrolling && cards.count === 0
         }
 
         ClockEmptyState {
@@ -379,7 +460,7 @@ Item {
         colBackground: HealthStyle.colSeverity(card.sev)
         colBackgroundHover: HealthStyle.colSeverityHover(card.sev)
         colRipple: HealthStyle.colSeverityHover(card.sev)
-        onClicked: root.open(card.finding)
+        onClicked: root.toggle(card.finding)
 
         StaggeredEntrance {
             index: card.entranceIndex
@@ -444,13 +525,15 @@ Item {
         readonly property var rootFs: Array.from(vitals.v?.fs ?? []).find(f => f.mount === "/") ?? (vitals.v?.fs ?? [])[0] ?? null
         readonly property var nvme: HealthService.drives[0] ?? null
 
-        columns: Math.max(1, Math.min(3, Math.floor((root.layoutWidth + ClockStyle.paneGap) / (HealthStyle.vitalMinWidth + ClockStyle.paneGap))))
+        property real availableWidth: root.layoutWidth
+        columns: Math.max(1, Math.min(3, Math.floor((vitals.availableWidth + ClockStyle.paneGap) / (HealthStyle.vitalMinWidth + ClockStyle.paneGap))))
         columnSpacing: ClockStyle.paneGap
         rowSpacing: ClockStyle.paneGap
         visible: vitals.v !== null
 
         VitalTile {
             Layout.fillWidth: true
+            Layout.fillHeight: true
             label: Translation.tr("Memory pressure")
             value: Number(vitals.v?.psi?.memory?.some10 ?? 0).toFixed(2)
             unit: Translation.tr("% stalled · 10 s")
@@ -465,6 +548,7 @@ Item {
 
         VitalTile {
             Layout.fillWidth: true
+            Layout.fillHeight: true
             label: Translation.tr("CPU throttling")
             value: String(vitals.v?.throttle?.last5min ?? 0)
             unit: Translation.tr("events in 5 min")
@@ -473,6 +557,7 @@ Item {
 
         VitalTile {
             Layout.fillWidth: true
+            Layout.fillHeight: true
             label: Translation.tr("Root disk")
             value: vitals.rootFs ? String(Math.round(vitals.rootFs.usedPct)) : "—"
             unit: vitals.rootFs ? Translation.tr("% used · %1 free").arg(HealthText.bytes(vitals.rootFs.avail)) : ""

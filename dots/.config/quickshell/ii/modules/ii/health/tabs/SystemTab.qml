@@ -101,6 +101,16 @@ Item {
         root.panels?.show(findingSheet, { findingId: id, assistant: root.assistant });
     }
 
+    readonly property string openId: root.panels?.open ? String(root.panels.current?.findingId ?? "") : ""
+
+    /// A card's click: the open card's second click closes its sheet.
+    function toggle(id): void {
+        if (root.openId === id)
+            root.panels.close();
+        else
+            root.showFinding(id);
+    }
+
     Component {
         id: findingSheet
         FindingSheet {}
@@ -169,7 +179,7 @@ Item {
             hoverEnabled: cc.clickable
             enabled: cc.clickable
             cursorShape: cc.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: root.showFinding(cc.card.finding)
+            onClicked: root.toggle(cc.card.finding)
         }
 
         ColumnLayout {

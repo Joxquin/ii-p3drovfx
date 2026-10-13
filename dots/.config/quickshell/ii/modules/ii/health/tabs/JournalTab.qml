@@ -235,7 +235,8 @@ Item {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.open(row.group)
+            // The open row's second click closes its sheet.
+            onClicked: row.isOpen ? root.panels.close() : root.open(row.group)
         }
 
         RowLayout {

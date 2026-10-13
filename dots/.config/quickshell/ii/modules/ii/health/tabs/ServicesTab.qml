@@ -71,6 +71,14 @@ Item {
         root.panels?.show(findingSheet, { findingId: id, assistant: root.assistant });
     }
 
+    /// A row's click: the open row's second click closes its sheet.
+    function toggle(id): void {
+        if (root.openId === id)
+            root.panels.close();
+        else
+            root.open(id);
+    }
+
     function run(f, verb): void {
         HealthService.act(verb, { scope: f.data?.scope, unit: f.data?.unit });
     }
@@ -197,7 +205,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.open(row.finding.id)
+            onClicked: root.toggle(row.finding.id)
         }
 
         RowLayout {
