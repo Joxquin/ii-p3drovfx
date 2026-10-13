@@ -892,6 +892,200 @@ Singleton {
             formats: ["gemini", "openai", "anthropic"],
             needsSearch: false
         },
+        // System Health: read-only views of what the health helper found, and one tool
+        // that only proposes a fix as a button. None of them changes the system, and
+        // none can return a crash dump — only the journal's stack-trace text.
+        {
+            id: "health_overview",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Read System Health"),
+            summary: Translation.tr("Lists what System Health found: failed services, crashes, new errors, disks and updates."),
+            icon: "monitor_heart",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 1400,
+            idempotent: true,
+            description: "Every current System Health finding with its id, kind, severity, title and detail, the crashes of the last 7 days and the running kernel. Use the ids with health_finding and health_propose_fix.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_finding",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Read a System Health finding"),
+            summary: Translation.tr("Reads every fact about one finding."),
+            icon: "monitor_heart",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 1200,
+            idempotent: true,
+            description: "All facts about one finding by id: for a unit its result, exit status and executable; for a crash the program, package, signal and top stack frames.",
+            parameters: {
+                type: "object",
+                properties: {
+                    id: { type: "string", description: "A finding id from health_overview" }
+                },
+                required: ["id"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_unit_log",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Read a service's log"),
+            summary: Translation.tr("Reads the last lines a systemd unit logged."),
+            icon: "receipt_long",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 10000,
+            maxResultTokens: 1600,
+            idempotent: true,
+            description: "The last journal lines of one systemd unit, newest last.",
+            parameters: {
+                type: "object",
+                properties: {
+                    unit: { type: "string", description: "Unit name, e.g. foo.service" },
+                    scope: { type: "string", description: "'system' or 'user'" },
+                    lines: { type: "integer", description: "How many lines (5-80, default 40)" }
+                },
+                required: ["unit"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_crash_trace",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Read a crash's stack trace"),
+            summary: Translation.tr("Reads the stack trace systemd wrote to the journal for a program's newest crash. Never the dump."),
+            icon: "heart_broken",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 10000,
+            maxResultTokens: 2200,
+            idempotent: true,
+            description: "The systemd-coredump journal message of the newest crash of a program: every thread's stack trace as text, and the COREDUMP_* metadata (package, signal, command line). The dump itself is never available.",
+            parameters: {
+                type: "object",
+                properties: {
+                    exe: { type: "string", description: "The crashed program's absolute path, from health_finding" }
+                },
+                required: ["exe"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_journal_search",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Search the journal"),
+            summary: Translation.tr("Reads recent journal lines, filtered by unit, program, text and priority."),
+            icon: "search",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 10000,
+            maxResultTokens: 1800,
+            idempotent: true,
+            description: "Recent journal lines, newest last. Filter by unit or syslog identifier, a text pattern, the worst priority to include (0 emerg - 7 debug, default 4) and how far back (hours, max 168).",
+            parameters: {
+                type: "object",
+                properties: {
+                    unit: { type: "string", description: "Unit name, optional" },
+                    identifier: { type: "string", description: "Syslog identifier, optional" },
+                    grep: { type: "string", description: "Text the line must contain, optional" },
+                    priority: { type: "integer", description: "Worst priority to include, 0-7" },
+                    sinceHours: { type: "integer", description: "How far back, 1-168" },
+                    limit: { type: "integer", description: "Lines, 1-100" }
+                },
+                required: []
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_package",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Find a file's package"),
+            summary: Translation.tr("Reads which package owns a file, and its version."),
+            icon: "package_2",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 10000,
+            maxResultTokens: 200,
+            idempotent: true,
+            description: "The installed package that owns an absolute path, and its version.",
+            parameters: {
+                type: "object",
+                properties: {
+                    path: { type: "string", description: "Absolute file path" }
+                },
+                required: ["path"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_propose_fix",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Propose a fix"),
+            summary: Translation.tr("Shows one fix as a button in System Health. Nothing runs until you press it."),
+            icon: "touch_app",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 200,
+            idempotent: true,
+            description: "Proposes one action System Health can run for a finding, shown to the user as a button; nothing runs until the user presses it. Only while explaining a System Health finding. Actions: units restart|stop|disable|resetFailed; crashes copyReport|muteProgram; journal markKnown|mute; drives selftest; disks cleanJournal|cleanPacmanCache|emptyTrash; reboot reboot; firmware updateFirmware.",
+            parameters: {
+                type: "object",
+                properties: {
+                    findingId: { type: "string", description: "The finding id" },
+                    action: { type: "string", description: "One action from the list for that finding's kind" }
+                },
+                required: ["findingId", "action"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
         {
             id: "tasks_list",
             version: 1,

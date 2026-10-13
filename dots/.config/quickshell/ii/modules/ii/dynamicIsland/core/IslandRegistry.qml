@@ -611,6 +611,24 @@ Singleton {
             content: {}
         },
         {
+            // A new critical System Health problem — a service failed, a program
+            // crashed — with the fix as its button. See HealthSource; without the
+            // island it is a notification.
+            id: "health",
+            legacyContent: "FloatingNotchHealth.qml",
+            tier: "transient",
+            icon: "monitor_heart",
+            label: "System Health alerts",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 9000,
+            compact: { width: 420, height: 64 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             // A phone mirror or app window that failed to open or died on its own, and
             // why. See PhoneMirrorErrorSource; without the island it is a notification.
             id: "phoneMirrorError",

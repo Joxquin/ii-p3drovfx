@@ -1736,6 +1736,8 @@ Singleton {
     readonly property AiNotesIntegration notesIntegration: AiNotesIntegration {}
     /** Modes & Routines authoring: the grammar, the list, and the reviewed writes. */
     readonly property AiModesIntegration modesIntegration: AiModesIntegration {}
+    /** System Health: read-only findings, logs and stack traces, and proposed fixes. */
+    readonly property AiHealthIntegration healthIntegration: AiHealthIntegration {}
     /** Local retrieval over folders the user indexed for search. */
     readonly property AiRagIntegration ragIntegration: AiRagIntegration {}
     /** Typed previews and reversible writes to existing local system services. */
@@ -1757,6 +1759,14 @@ Singleton {
             const activeSession = String(root.currentRunSessionId || root.sessions.currentId || "");
             if (String(sessionId ?? "").length > 0 && String(sessionId) !== activeSession)
                 return;
+            if (root.broker.isPending(String(key)))
+                root.broker.settle(String(key), outcome);
+        }
+    }
+
+    Connections {
+        target: root.healthIntegration
+        function onResultReady(key, outcome) {
             if (root.broker.isPending(String(key)))
                 root.broker.settle(String(key), outcome);
         }
@@ -1920,6 +1930,13 @@ Singleton {
             "modes_start": call => root.toolModesStart(call),
             "modes_stop": call => root.toolModesStop(call),
             "modes_delete": call => root.toolModesDelete(call),
+            "health_overview": call => root.healthIntegration.overview(),
+            "health_finding": call => root.healthIntegration.finding(call.args),
+            "health_unit_log": call => root.healthIntegration.unitLog(call.key, call.args),
+            "health_crash_trace": call => root.healthIntegration.crashTrace(call.key, call.args),
+            "health_journal_search": call => root.healthIntegration.journalSearch(call.key, call.args),
+            "health_package": call => root.healthIntegration.packageOf(call.key, call.args),
+            "health_propose_fix": call => root.healthIntegration.proposeFix(call.args),
             "audio_set": call => root.toolSystemControl(call),
             "brightness_set": call => root.toolSystemControl(call),
             "dnd_set": call => root.toolSystemControl(call),

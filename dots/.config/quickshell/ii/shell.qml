@@ -104,6 +104,8 @@ ShellRoot {
             RemindersSync.enabled; // Two-way Microsoft To Do sync
         if (Config.options?.clockApp?.phoneAlarm?.enable ?? true)
             PhoneAlarmService.enabled; // Mirrors the phone's next alarm over ADB
+        if (Config.options?.health?.enable ?? true)
+            HealthService.enabled; // Runs health_watch: failed services, crashes, new errors, disks
         const timetable = Config.options?.calendar?.timetable;
         const hasCalendarSubscriptions = (timetable?.imports?.enable ?? false) || ((timetable?.subscriptions ?? []).length > 0);
         if (hasCalendarSubscriptions)
