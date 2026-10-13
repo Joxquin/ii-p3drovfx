@@ -19,6 +19,11 @@ MaterialShape { // App icon
     property real materialIconSize: implicitSize * materialIconScale
     property real appIconSize: implicitSize * appIconScale
     property real smallAppIconSize: implicitSize * smallAppIconScale
+    // `notify-send -i <name>` arrives as an image-path hint, which the server turns into
+    // image://icon/<name>. Shell senders pass Material Symbol names there, which no icon
+    // theme has, so draw those as a glyph instead of the missing-icon checkerboard.
+    readonly property string themedImageName: image.startsWith("image://icon/") ? image.slice(13).split("?")[0] : ""
+    readonly property bool imageIsGlyph: themedImageName !== "" && Quickshell.iconPath(themedImageName, true) === ""
 
     implicitSize: 38 * scale
     property list<var> urgentShapes: [MaterialShape.Shape.VerySunny, MaterialShape.Shape.SoftBurst,]
@@ -27,10 +32,12 @@ MaterialShape { // App icon
     color: isUrgent ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
     Loader {
         id: materialSymbolLoader
-        active: root.appIcon == "" && root.image == ""
+        active: (root.appIcon == "" && root.image == "") || root.imageIsGlyph
         anchors.fill: parent
         sourceComponent: MaterialSymbol {
             text: {
+                if (root.imageIsGlyph)
+                    return root.themedImageName;
                 const defaultIcon = NotificationUtils.findSuitableMaterialSymbol("");
                 const guessedIcon = NotificationUtils.findSuitableMaterialSymbol(root.summary);
                 return (root.urgency == NotificationUrgency.Critical && guessedIcon === defaultIcon) ? "priority_high" : guessedIcon;
@@ -55,7 +62,7 @@ MaterialShape { // App icon
     }
     Loader {
         id: notifImageLoader
-        active: root.image != ""
+        active: root.image != "" && !root.imageIsGlyph
         anchors.fill: parent
         sourceComponent: Item {
             anchors.fill: parent
