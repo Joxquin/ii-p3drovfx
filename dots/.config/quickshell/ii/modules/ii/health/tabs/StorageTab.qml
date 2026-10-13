@@ -70,7 +70,7 @@ Item {
         id: flick
         anchors.fill: parent
         contentWidth: width
-        contentHeight: grid.implicitHeight + (hardware.visible ? hardware.implicitHeight + ClockStyle.paneGap : 0) + ClockStyle.fabClearance
+        contentHeight: grid.implicitHeight + ClockStyle.fabClearance
         clip: true
 
         GridLayout {
@@ -129,15 +129,16 @@ Item {
                     title: HealthService.sources?.drives === false ? Translation.tr("Drive health needs UDisks2") : Translation.tr("No drive reports its health")
                     subtitle: HealthService.sources?.drives === false ? Translation.tr("Install udisks2 to read SMART without root.") : ""
                 }
-            }
-        }
 
-        HealthHardwareSection {
-            id: hardware
-            y: grid.implicitHeight + ClockStyle.paneGap
-            width: flick.width
-            layoutWidth: flick.width
-            openFinding: id => root.toggle(id)
+                // Under the drives, in the column the drive card leaves half empty: the
+                // first cards show without scrolling, which says there is more below.
+                HealthHardwareSection {
+                    id: hardware
+                    Layout.fillWidth: true
+                    layoutWidth: width
+                    openFinding: id => root.toggle(id)
+                }
+            }
         }
     }
 

@@ -25,7 +25,9 @@ ColumnLayout {
     readonly property var hw: HealthService.hardware
     readonly property var events: root.hw?.events?.counts ?? ({})
     readonly property var details: root.hw?.events?.details ?? ({})
-    readonly property int columns: Math.max(1, Math.floor((root.layoutWidth + ClockStyle.paneGap) / (HealthStyle.systemCardMinWidth + ClockStyle.paneGap)))
+    /// Wider than the System page's cards: these carry a row of facts each.
+    readonly property int cardMinWidth: 320
+    readonly property int columns: Math.max(1, Math.floor((root.layoutWidth + ClockStyle.paneGap) / (root.cardMinWidth + ClockStyle.paneGap)))
     readonly property real cardWidth: Math.floor((root.width - ClockStyle.paneGap * (root.columns - 1)) / root.columns)
 
     function count(kind): int {
@@ -145,7 +147,7 @@ ColumnLayout {
 
     StyledText {
         Layout.leftMargin: ClockStyle.gapTiny
-        Layout.topMargin: ClockStyle.gapLarge
+        Layout.topMargin: ClockStyle.gapSmall
         text: Translation.tr("The rest of the machine")
         font.pixelSize: ClockStyle.textSmall
         font.weight: Font.Black
@@ -179,7 +181,7 @@ ColumnLayout {
         readonly property bool attention: hc.card?.attention === true
         readonly property bool clickable: String(hc.card?.finding ?? "").length > 0
 
-        implicitHeight: Math.max(180, hcColumn.implicitHeight + ClockStyle.cardPadding * 2)
+        implicitHeight: hcColumn.implicitHeight + ClockStyle.cardPadding * 2
         radius: ClockStyle.radiusLarge
         color: hcMouse.containsMouse && hc.clickable ? ClockStyle.colIdleCardHover : ClockStyle.colPane
 
