@@ -71,6 +71,17 @@ Item {
         root.errorText = "";
     }
 
+    /// Closes the answer card; the pill stays as it is, so another question can follow.
+    function clearAnswer(): void {
+        if (root.phase === "running")
+            root.stop();
+        root.phase = "idle";
+        root.errorText = "";
+        root.answer = "";
+        root.question = "";
+        root.proposal = null;
+    }
+
     function reset(): void {
         if (root.phase === "running")
             root.stop();

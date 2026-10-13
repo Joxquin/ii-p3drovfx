@@ -28,8 +28,105 @@ ColumnLayout {
     readonly property bool mine: root.assistant.subjectKey === root.key
     readonly property bool showAnswer: root.mine && (root.assistant.answer.length > 0 || root.assistant.phase === "running")
 
-    visible: (root.mine && root.assistant.expanded) || root.showAnswer
+    /// The card is folding away; the answer is cleared only once it is gone, so its text
+    /// does not vanish first and leave a header-sized card to snap out.
+    property bool closing: false
+
+    readonly property bool wanted: (root.mine && root.assistant.expanded) || root.showAnswer || root.closing
+
+    /// 1 open, 0 gone. Hiding on `wanted` alone cut the pill's own fold off on its first
+    /// frame, and the owner's spacing above the panel snapped shut with it; the panel
+    /// stays until this has folded that gap away, in step with the pill's height.
+    property real openness: root.wanted ? 1 : 0
+
+    Behavior on openness {
+        enabled: !ClockStyle.reducedMotion
+        NumberAnimation {
+            id: opennessAnim
+            duration: ClockStyle.motionDefault.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasized
+        }
+    }
+
+    visible: root.wanted || opennessAnim.running
+    Layout.topMargin: -(root.parent?.spacing ?? 0) * (1 - root.openness)
     spacing: ClockStyle.gapSmall
+
+    function closeAnswer(): void {
+        if (root.closing)
+            return;
+        if (root.assistant.phase === "running")
+            root.assistant.stop();
+        if (ClockStyle.reducedMotion) {
+            root.assistant.clearAnswer();
+            return;
+        }
+        card.foldHeight = card.height;
+        root.closing = true;
+        closeAnim.restart();
+    }
+
+    function endClose(clear): void {
+        closeAnim.stop();
+        if (clear && root.mine)
+            root.assistant.clearAnswer();
+        card.foldHeight = -1;
+        card.foldMargin = 0;
+        card.opacity = 1;
+        root.closing = false;
+    }
+
+    // A question sent or a subject switched mid-fold must not be wiped when the fold ends.
+    Connections {
+        target: root.assistant
+        enabled: root.closing
+        function onSubjectKeyChanged() {
+            root.endClose(false);
+        }
+    }
+
+    Component.onDestruction: {
+        if (root.closing && root.mine)
+            root.assistant.clearAnswer();
+    }
+
+    SequentialAnimation {
+        id: closeAnim
+
+        ParallelAnimation {
+            NumberAnimation {
+                target: card
+                property: "opacity"
+                to: 0
+                duration: ClockStyle.motionExit.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: ClockStyle.motionExit.bezierCurve
+            }
+            // Height and the gap above fold together, so nothing below jumps at the end.
+            // Emphasized, not the spatial spring: an overshoot would drive the height negative.
+            NumberAnimation {
+                target: card
+                property: "foldHeight"
+                to: 0
+                duration: ClockStyle.motionEnter.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasized
+            }
+            NumberAnimation {
+                target: card
+                property: "foldMargin"
+                to: -root.spacing
+                duration: ClockStyle.motionEnter.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasized
+            }
+        }
+
+        ScriptAction {
+            script: root.endClose(true)
+        }
+    }
 
     AssistantPromptBar {
         id: bar
@@ -41,6 +138,8 @@ ColumnLayout {
         allowEmpty: true
         showChatHop: false
         onSubmitted: text => {
+            if (root.closing)
+                root.endClose(false);
             root.assistant.submit(text);
             bar.clear();
         }
@@ -53,8 +152,15 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.showAnswer
         implicitHeight: answerColumn.implicitHeight + ClockStyle.gapLarge * 2
+        Layout.preferredHeight: foldHeight
+        Layout.topMargin: foldMargin
+        clip: root.closing
         radius: ClockStyle.radiusLarge
         color: root.colCard
+
+        /// -1 lets the layout use implicitHeight; the close animation drives both.
+        property real foldHeight: -1
+        property real foldMargin: 0
 
         StaggeredEntrance {
             index: 0
@@ -99,6 +205,16 @@ ColumnLayout {
                     colIcon: root.colOnCard
                     tooltip: Translation.tr("Copy the answer")
                     onClicked: Quickshell.clipboardText = root.assistant.answer
+                }
+
+                ClockIconButton {
+                    symbol: "close"
+                    size: 30
+                    iconSize: ClockStyle.iconSmall
+                    colIcon: root.colOnCard
+                    enabled: !root.closing
+                    tooltip: root.assistant.phase === "running" ? Translation.tr("Stop and close the answer") : Translation.tr("Close the answer")
+                    onClicked: root.closeAnswer()
                 }
             }
 
