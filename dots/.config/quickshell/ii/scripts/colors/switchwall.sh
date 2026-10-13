@@ -800,7 +800,12 @@ done"
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
             if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
-                set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+                # A light-mode pick only stores its own path; the dark wallpaper stays in wallpaperPath
+                if [[ -n "$lightmode_flag" ]]; then
+                    set_wallpaper_path "$imgpath" "lightmode"
+                else
+                    set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+                fi
             fi
             if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
                 remove_restore
