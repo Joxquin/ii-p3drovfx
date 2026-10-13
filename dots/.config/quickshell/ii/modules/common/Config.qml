@@ -4509,11 +4509,12 @@ Singleton {
                     property bool runningBadges: true // the dock's "open" dot under running apps
                     property bool notificationBadges: true // unread count from the app's notifications
                     // The launch pad: sections of icons named by their entry name or
-                    // path, each laid out as a rectangle `groupColumns` cells wide
-                    // with a caption over it, stacked top to bottom; `shelf` puts
-                    // each on its own glass card (the widgets' card surface).
-                    // Icons in no section - the arrivals strip - stay bare.
-                    property list<var> groups: [] // [{ "title": "Study", "items": ["M1 MCB", "Scrims"] }]
+                    // path, each on a card at its own rectangle (x, y, width, height,
+                    // set by dragging and resizing the card; a section without one
+                    // gets one `groupColumns` cells wide under the lowest card), with
+                    // a caption over it; `shelf` draws the cards (the widgets' card
+                    // surface). Icons in no section - the arrivals strip - stay bare.
+                    property list<var> groups: [] // [{ "title": "Study", "items": ["M1 MCB", "Scrims"], "x": 8, "y": 110, "width": 264, "height": 191 }]
                     property int groupColumns: 3
                     property bool shelf: false
                     // A soft shadow under every icon; hovering lifts the icon and

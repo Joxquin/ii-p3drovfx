@@ -57,25 +57,113 @@ Item {
     readonly property bool iconShadow: root.options.iconShadow ?? false
 
     // ── Launch pad: sections, captions, cards ──────────────────────────────
-    // A section (config `groups`: {title, items}) names its members by entry
-    // name or path. Each is laid out as one rectangle - rows of
-    // `groupColumns` cells - and the sections stack down from the stack's
-    // top-left, each on its own glass card (the widgets' card surface) with
-    // its caption in a band on top. Icons in no section draw bare.
+    // A section (config `groups`: {title, items, x, y, width, height}) names
+    // its members by entry name or path and owns a glass card - the widgets'
+    // card surface - at its stored rectangle, with its caption in a band on
+    // top. Inside, the members take as many columns as fit the card's width,
+    // spread evenly across it, in rows from the top; a card is never shorter
+    // than its rows need. A section with no rectangle yet (an older config,
+    // one just created) gets one under the lowest card and keeps it. Icons in
+    // no section draw bare.
     //
-    // Membership follows the hand: a tile dropped on a card joins that
-    // section, one dropped off every card leaves its own (its whole section
-    // dragged along keeps it). Every change - a drop, the menu's Section
-    // page, an edit of the config - reflows the stack, so the cards stay
-    // rectangles and never overlap.
+    // The cards move and resize like the widgets: drag the glass, pull the
+    // corner grip (free width and height). Membership follows the hand: a
+    // tile dropped on a card joins that section, one dropped off every card
+    // leaves it. Every change - a drop, the menu's Section page, a card moved
+    // or resized, an edit of the config - lays the members out again.
     readonly property real captionSize: Math.round(root.labelSize * 0.85)
     readonly property real captionBand: root.captionSize + 16
     readonly property real shelfPad: 12
+    // A new card's width, in cells.
     readonly property int sectionColumns: Math.max(1, root.options.groupColumns ?? 3)
-    // Inside a card rows sit 10 px apart; two cards keep their pads, the
-    // caption band and a 16 px gap between them, on the 10 px snap.
+    // Inside a card rows sit 10 px apart; a new card keeps 16 px from the
+    // one above it.
     readonly property real sectionRowGap: 10
-    readonly property real sectionGap: Math.ceil((root.shelfPad * 2 + root.captionBand + 16) / 10) * 10
+    readonly property real sectionGap: 16
+    readonly property real cardMinWidth: root.cellWidth + root.shelfPad * 2
+    function bandOf(title) {
+        return title !== "" ? root.captionBand : 0;
+    }
+    function columnsFor(width) {
+        return Math.max(1, Math.floor((width - root.shelfPad * 2) / root.cellWidth));
+    }
+    function cardHeightFor(count, width, title) {
+        const rows = Math.max(1, Math.ceil(count / root.columnsFor(width)));
+        return root.shelfPad * 2 + root.bandOf(title) + rows * root.cellHeight + (rows - 1) * root.sectionRowGap;
+    }
+    function hasRect(g) {
+        return Number(g?.width ?? 0) > 0 && Number(g?.height ?? 0) > 0;
+    }
+    // Where the k-th member sits in `card`: its column's centre, its row
+    // from the top, on the 10 px snap.
+    function slotIn(card, title, k) {
+        const cols = root.columnsFor(card.width);
+        const colW = (card.width - root.shelfPad * 2) / cols;
+        const snap = v => Math.round(v / 10) * 10;
+        return Qt.point(snap(card.x + root.shelfPad + (k % cols) * colW + (colW - root.cellWidth) / 2),
+            snap(card.y + root.shelfPad + root.bandOf(title) + Math.floor(k / cols) * (root.cellHeight + root.sectionRowGap)));
+    }
+    // A section's members in reading order of where they are (or, for the
+    // `landed` ones, where they were dropped), so a layout keeps the order
+    // and a drop ranks the tile where it landed.
+    function orderedMembers(list, landed) {
+        const pos = e => landed[e.id] ?? root.positionAt(e.x, e.y);
+        const stayed = list.filter(e => landed[e.id] === undefined);
+        const top = Math.min(...(stayed.length > 0 ? stayed : list).map(e => pos(e).y));
+        const rowStep = root.cellHeight + root.sectionRowGap;
+        const rowOf = e => Math.floor((pos(e).y + root.cellHeight / 2 - top) / rowStep);
+        return list.slice().sort((a, b) => (rowOf(a) - rowOf(b)) || (pos(a).x - pos(b).x));
+    }
+
+    // ── Card gestures ──────────────────────────────────────────────────────
+    // While a card is dragged or resized it is drawn at `cardPreview`
+    // ({index, rect}) and its members at `sectionPreview` (id -> point);
+    // nothing is written until the release.
+    property var cardPreview: null
+    property var sectionPreview: ({})
+    // A drag (not a resize): the members follow the pointer directly.
+    property bool cardMoving: false
+    // The section under the pointer, through its glass or one of its tiles
+    // (kept apart: their enter and leave arrive in either order): what
+    // shows the card's grip.
+    property int cardHoverSection: -1
+    property int tileHoverSection: -1
+    function previewCard(index, rect) {
+        const g = root.groups[index];
+        const title = String(g?.title ?? "");
+        const list = root.items.filter(e => root.memberOf(g, e));
+        const card = Qt.rect(rect.x, rect.y, rect.width,
+            Math.max(rect.height, root.cardHeightFor(list.length, rect.width, title)));
+        root.cardPreview = { "index": index, "rect": card };
+        const slots = {};
+        root.orderedMembers(list, {}).forEach((e, k) => slots[e.id] = root.slotIn(card, title, k));
+        root.sectionPreview = slots;
+    }
+    function commitCard() {
+        const preview = root.cardPreview;
+        if (!preview)
+            return;
+        const sections = root.sectionsCopy();
+        const s = sections[preview.index];
+        if (s) {
+            s.x = preview.rect.x;
+            s.y = preview.rect.y;
+            s.width = preview.rect.width;
+            s.height = preview.rect.height;
+            root.reflowSections(sections, {});
+        }
+        root.cancelCard();
+    }
+    function cancelCard() {
+        root.cardPreview = null;
+        root.sectionPreview = ({});
+    }
+    // The widgets' drag feedback: the wallpaper dims and the depth subject
+    // steps back while something is being placed.
+    function setCanvasDragging(active) {
+        if (root.canvas)
+            root.canvas.draggingActive = active;
+    }
     // A list out of the config arrives as a QML sequence, not an Array:
     // Array.from gives it includes().
     function memberOf(group, entry) {
@@ -89,30 +177,44 @@ Item {
         }
         return -1;
     }
-    // Each section's cell box and card, from the stored positions, leaving
-    // out `exceptIds` (a Set, or null): a drop is judged against the cards of
-    // what stayed put.
+    // Each section's card and the box inside it (under the caption band):
+    // the gesture's preview, else the stored rectangle (grown to its rows),
+    // else - a section not laid out yet - around its members' cells, leaving
+    // out `exceptIds` (a Set, or null).
     function boxesFor(exceptIds) {
         const out = [];
         for (let i = 0; i < root.groups.length; ++i) {
             const g = root.groups[i];
-            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-            for (const entry of root.items) {
-                if ((exceptIds && exceptIds.has(entry.id)) || !root.memberOf(g, entry))
-                    continue;
-                const p = root.positionAt(entry.x, entry.y);
-                x0 = Math.min(x0, p.x);
-                y0 = Math.min(y0, p.y);
-                x1 = Math.max(x1, p.x + root.cellWidth);
-                y1 = Math.max(y1, p.y + root.cellHeight);
-            }
-            if (x0 === Infinity)
-                continue;
             const title = String(g?.title ?? "");
-            const band = title !== "" ? root.captionBand : 0;
-            out.push({ "index": i, "title": title, "x": x0, "y": y0, "width": x1 - x0, "height": y1 - y0,
-                "card": Qt.rect(x0 - root.shelfPad, y0 - root.shelfPad - band,
-                    x1 - x0 + root.shelfPad * 2, y1 - y0 + root.shelfPad * 2 + band) });
+            const band = root.bandOf(title);
+            const members = root.items.filter(entry => root.memberOf(g, entry));
+            if (members.length === 0)
+                continue;
+            let card = null;
+            if (root.cardPreview && root.cardPreview.index === i) {
+                card = root.cardPreview.rect;
+            } else if (root.hasRect(g)) {
+                card = Qt.rect(Number(g.x), Number(g.y), Number(g.width),
+                    Math.max(Number(g.height), root.cardHeightFor(members.length, Number(g.width), title)));
+            } else {
+                let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+                for (const entry of members) {
+                    if (exceptIds && exceptIds.has(entry.id))
+                        continue;
+                    const p = root.positionAt(entry.x, entry.y);
+                    x0 = Math.min(x0, p.x);
+                    y0 = Math.min(y0, p.y);
+                    x1 = Math.max(x1, p.x + root.cellWidth);
+                    y1 = Math.max(y1, p.y + root.cellHeight);
+                }
+                if (x0 === Infinity)
+                    continue;
+                card = Qt.rect(x0 - root.shelfPad, y0 - root.shelfPad - band,
+                    x1 - x0 + root.shelfPad * 2, y1 - y0 + root.shelfPad * 2 + band);
+            }
+            out.push({ "index": i, "title": title, "card": card,
+                "x": card.x + root.shelfPad, "y": card.y + root.shelfPad + band,
+                "width": card.width - root.shelfPad * 2, "height": card.height - root.shelfPad * 2 - band });
         }
         return out;
     }
@@ -125,9 +227,20 @@ Item {
     // The card a dragged tile would join, lit while it is over it.
     property int dropSection: -1
 
-    // Plain copies of the config's sections, safe to edit and write back.
+    // Plain copies of the config's sections, safe to edit and write back;
+    // the rectangle only when there is one, keys always in this order (the
+    // reflow compares copies as JSON).
     function sectionsCopy() {
-        return Array.from(root.groups).map(g => ({ "title": String(g?.title ?? ""), "items": Array.from(g?.items ?? []).map(String) }));
+        return Array.from(root.groups).map(g => {
+            const s = { "title": String(g?.title ?? ""), "items": Array.from(g?.items ?? []).map(String) };
+            if (root.hasRect(g)) {
+                s.x = Number(g.x);
+                s.y = Number(g.y);
+                s.width = Number(g.width);
+                s.height = Number(g.height);
+            }
+            return s;
+        });
     }
     function dropMember(sections, entry) {
         for (const s of sections)
@@ -193,41 +306,50 @@ Item {
         if (title === "" || title === from)
             return;
         Config.options.background.desktopIcons.groups = root.sectionsCopy().map(s => s.title === from
-            ? { "title": title, "items": s.items } : s);
+            ? Object.assign(s, { "title": title }) : s);
     }
 
-    // Lays `sections` out as the stack and writes what changed: the config
-    // when the membership did, the positions of every tile that moves (the
-    // dropped ones included, section or not). The stack keeps its top-left,
-    // read from the tiles that stayed put (all of them when the whole stack
-    // was dragged); inside a section the order is reading order, the dropped
-    // tile ranked where it landed.
+    // Lays every section out in its card and writes what changed: the config
+    // when a membership or a rectangle did, the positions of every tile that
+    // moves (the dropped ones included, section or not). A section without a
+    // rectangle gets one: under the lowest card, or - the first one, from an
+    // older config - around where its members already are.
     function reflowSections(sections, landed) {
         const has = (s, e) => s.items.includes(e.name) || s.items.includes(e.path) || s.items.includes(e.fileName);
         const pos = e => landed[e.id] ?? root.positionAt(e.x, e.y);
+        const snap = v => Math.round(v / 10) * 10;
         const members = sections.map(s => root.items.filter(e => has(s, e)));
-        const all = members.reduce((acc, list) => acc.concat(list), []);
         const moves = [];
-        if (all.length > 0) {
-            const still = all.filter(e => landed[e.id] === undefined);
-            const ref = still.length > 0 ? still : all;
-            const anchorX = Math.min(...ref.map(e => pos(e).x));
-            let top = Math.min(...ref.map(e => pos(e).y));
-            const rowStep = root.cellHeight + root.sectionRowGap;
-            for (const list of members) {
-                if (list.length === 0)
-                    continue;
+        let low = null;
+        sections.forEach((s, i) => {
+            if (!root.hasRect(s) || members[i].length === 0)
+                return;
+            const bottom = s.y + Math.max(s.height, root.cardHeightFor(members[i].length, s.width, s.title));
+            if (!low || bottom > low.bottom)
+                low = { "x": s.x, "bottom": bottom };
+        });
+        sections.forEach((s, i) => {
+            const list = members[i];
+            if (list.length === 0)
+                return;
+            if (!root.hasRect(s)) {
                 const stayed = list.filter(e => landed[e.id] === undefined);
-                const secTop = Math.min(...(stayed.length > 0 ? stayed : list).map(e => pos(e).y));
-                const rowOf = e => Math.floor((pos(e).y + root.cellHeight / 2 - secTop) / rowStep);
-                const ordered = list.slice().sort((a, b) => (rowOf(a) - rowOf(b)) || (pos(a).x - pos(b).x));
-                ordered.forEach((e, i) => moves.push({ "id": e.id,
-                    "x": anchorX + (i % root.sectionColumns) * root.cellWidth,
-                    "y": top + Math.floor(i / root.sectionColumns) * rowStep }));
-                const rows = Math.ceil(list.length / root.sectionColumns);
-                top += rows * root.cellHeight + (rows - 1) * root.sectionRowGap + root.sectionGap;
+                const ref = stayed.length > 0 ? stayed : list;
+                s.x = low ? low.x : snap(Math.min(...ref.map(e => pos(e).x)) - root.shelfPad);
+                s.y = low ? snap(low.bottom + root.sectionGap)
+                    : snap(Math.min(...ref.map(e => pos(e).y)) - root.shelfPad - root.bandOf(s.title));
+                s.width = root.shelfPad * 2 + Math.min(list.length, root.sectionColumns) * root.cellWidth;
+                s.height = 0;
             }
-        }
+            s.height = Math.max(s.height, root.cardHeightFor(list.length, s.width, s.title));
+            if (!low || s.y + s.height > low.bottom)
+                low = { "x": low ? low.x : s.x, "bottom": s.y + s.height };
+            const card = Qt.rect(s.x, s.y, s.width, s.height);
+            root.orderedMembers(list, landed).forEach((e, k) => {
+                const p = root.slotIn(card, s.title, k);
+                moves.push({ "id": e.id, "x": p.x, "y": p.y });
+            });
+        });
         for (const id of Object.keys(landed)) {
             if (!moves.some(m => m.id === id))
                 moves.push({ "id": id, "x": landed[id].x, "y": landed[id].y, "free": true });
@@ -254,8 +376,9 @@ Item {
         id: sectionReflowTimer
         interval: 250
         onTriggered: {
-            if (root.dragId !== "" || root.items.length === 0 || root.groups.length === 0) {
-                if (root.dragId !== "")
+            const busy = root.dragId !== "" || root.cardPreview !== null;
+            if (busy || root.items.length === 0 || root.groups.length === 0) {
+                if (busy)
                     sectionReflowTimer.restart();
                 return;
             }
@@ -901,12 +1024,18 @@ Item {
     // behind them. Counted by section, not by box, so a reflow glides the
     // cards instead of rebuilding them. The one a dragged tile would join
     // takes a primary outline.
+    //
+    // Dragging the glass moves the card like a widget: past the widgets'
+    // 4 px threshold, on the 10 px snap, kept on screen, with the widgets'
+    // drag feedback; the members ride along and land on release.
     Repeater {
         model: root.shelf ? root.groups.length : 0
         delegate: Item {
             id: sectionCard
             required property int index
             readonly property var box: root.groupBoxes.find(b => b.index === sectionCard.index) ?? null
+            // Under the pointer: follow it, no glide.
+            readonly property bool live: root.cardPreview !== null && root.cardPreview.index === sectionCard.index
             visible: sectionCard.box !== null
             x: sectionCard.box ? sectionCard.box.card.x : 0
             y: sectionCard.box ? sectionCard.box.card.y : 0
@@ -914,16 +1043,81 @@ Item {
             height: sectionCard.box ? sectionCard.box.card.height : 0
 
             Behavior on x {
+                enabled: !sectionCard.live
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
             Behavior on y {
+                enabled: !sectionCard.live
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
             Behavior on width {
+                enabled: !sectionCard.live
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
             Behavior on height {
+                enabled: !sectionCard.live
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            }
+
+            HoverHandler {
+                onHoveredChanged: {
+                    if (hovered)
+                        root.cardHoverSection = sectionCard.index;
+                    else if (root.cardHoverSection === sectionCard.index)
+                        root.cardHoverSection = -1;
+                }
+            }
+            MouseArea {
+                id: cardMouse
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                enabled: !root.iconsLocked
+                preventStealing: true
+                cursorShape: cardMouse.moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                property point pressAt: Qt.point(0, 0)
+                property rect startRect: Qt.rect(0, 0, 0, 0)
+                property bool moving: false
+                function end() {
+                    if (cardMouse.moving) {
+                        root.cardMoving = false;
+                        root.setCanvasDragging(false);
+                    }
+                    cardMouse.moving = false;
+                }
+                onPressed: mouse => {
+                    cardMouse.pressAt = cardMouse.mapToItem(root, mouse.x, mouse.y);
+                    cardMouse.startRect = sectionCard.box ? sectionCard.box.card : Qt.rect(0, 0, 0, 0);
+                    cardMouse.moving = false;
+                    // A press on the glass is a click-away, as on the bare desktop.
+                    root.clearSelection();
+                }
+                onPositionChanged: mouse => {
+                    const p = cardMouse.mapToItem(root, mouse.x, mouse.y);
+                    const dx = p.x - cardMouse.pressAt.x;
+                    const dy = p.y - cardMouse.pressAt.y;
+                    if (!cardMouse.moving) {
+                        if (dx * dx + dy * dy < 16)
+                            return;
+                        cardMouse.moving = true;
+                        root.cardMoving = true;
+                        root.setCanvasDragging(true);
+                    }
+                    const r = cardMouse.startRect;
+                    const snap = v => Math.round(v / 10) * 10;
+                    root.previewCard(sectionCard.index, Qt.rect(
+                        Math.max(0, Math.min(root.width - r.width, snap(r.x + dx))),
+                        Math.max(0, Math.min(root.height - r.height, snap(r.y + dy))),
+                        r.width, r.height));
+                }
+                onReleased: {
+                    if (cardMouse.moving)
+                        root.commitCard();
+                    cardMouse.end();
+                }
+                onCanceled: {
+                    root.cancelCard();
+                    cardMouse.end();
+                }
             }
 
             StyledRectangularShadow {
@@ -953,6 +1147,7 @@ Item {
             required property int index
             readonly property var modelData: root.groupBoxes.find(b => b.index === caption.index)
                 ?? ({ "title": "", "x": 0, "y": 0, "width": 0, "height": 0 })
+            readonly property bool live: root.cardPreview !== null && root.cardPreview.index === caption.index
             visible: caption.modelData.title !== ""
             x: caption.modelData.x + 10
             y: caption.modelData.y - root.captionBand + 6
@@ -960,9 +1155,11 @@ Item {
             height: root.captionSize + 4
 
             Behavior on x {
+                enabled: !caption.live
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
             Behavior on y {
+                enabled: !caption.live
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
 
@@ -998,6 +1195,59 @@ Item {
             }
         }
     }
+    // Each card's resize grip - the widgets' own (ResizeGrip.qml) - over the
+    // tiles, so the last row cannot cover it. Free width and height: the
+    // columns follow the width, the height never drops below the rows. A
+    // double-click puts the card back to its first size.
+    Repeater {
+        model: root.shelf ? root.groups.length : 0
+        delegate: Item {
+            id: gripHost
+            required property int index
+            readonly property var box: root.groupBoxes.find(b => b.index === gripHost.index) ?? null
+            z: 2
+            visible: gripHost.box !== null
+            x: gripHost.box ? gripHost.box.card.x : 0
+            y: gripHost.box ? gripHost.box.card.y : 0
+            width: gripHost.box ? gripHost.box.card.width : 0
+            height: gripHost.box ? gripHost.box.card.height : 0
+
+            ResizeGrip {
+                id: cardGrip
+                property point pressAt: Qt.point(0, 0)
+                property rect startRect: Qt.rect(0, 0, 0, 0)
+                shown: !root.iconsLocked && !root.cardMoving && root.dragId === ""
+                    && (root.cardHoverSection === gripHost.index || root.tileHoverSection === gripHost.index
+                        || cardGrip.hovered)
+                onPressed: mouse => {
+                    cardGrip.pressAt = cardGrip.mapToItem(root, mouse.x, mouse.y);
+                    cardGrip.startRect = gripHost.box ? gripHost.box.card : Qt.rect(0, 0, 0, 0);
+                }
+                onPositionChanged: mouse => {
+                    if (!cardGrip.active)
+                        return;
+                    const p = cardGrip.mapToItem(root, mouse.x, mouse.y);
+                    const r = cardGrip.startRect;
+                    const snap = v => Math.round(v / 10) * 10;
+                    root.previewCard(gripHost.index, Qt.rect(r.x, r.y,
+                        Math.max(root.cardMinWidth, Math.min(root.width - r.x, snap(r.width + p.x - cardGrip.pressAt.x))),
+                        Math.max(0, Math.min(root.height - r.y, snap(r.height + p.y - cardGrip.pressAt.y)))));
+                }
+                onReleased: root.commitCard()
+                onCanceled: root.cancelCard()
+                onDoubleClicked: {
+                    const g = root.groups[gripHost.index];
+                    const count = root.items.filter(e => root.memberOf(g, e)).length;
+                    const r = gripHost.box ? gripHost.box.card : null;
+                    if (!r)
+                        return;
+                    root.previewCard(gripHost.index, Qt.rect(r.x, r.y,
+                        root.shelfPad * 2 + Math.min(count, root.sectionColumns) * root.cellWidth, 0));
+                    root.commitCard();
+                }
+            }
+        }
+    }
 
     Repeater {
         id: iconRepeater
@@ -1021,6 +1271,14 @@ Item {
             readonly property bool groupMember: groupDrag.active && !tile.dragging
                 && entry.id !== groupDrag.leaderId && groupDrag.ids.indexOf(entry.id) !== -1
             readonly property bool hovered: tileHover.hovered
+            // A tile over its card counts as the card for the grip.
+            onHoveredChanged: {
+                const section = root.sectionIndexOf(tile.entry);
+                if (tile.hovered && section >= 0)
+                    root.tileHoverSection = section;
+                else if (!tile.hovered && root.tileHoverSection === section)
+                    root.tileHoverSection = -1;
+            }
             // The hover's lift, with the shadow on: 4 px up, back on leave.
             property real lift: root.iconShadow && tile.hovered && !tile.dragging ? 4 : 0
             Behavior on lift {
@@ -1038,11 +1296,17 @@ Item {
             property point prevSettled: Qt.point(0, 0)
             property bool placed: false
             readonly property bool bumped: root.dragPlan !== null && root.dragPlan.bumpId === tile.entry.id
-            readonly property real restX: tile.bumped ? root.dragPlan.bumpX - tile.settled.x : 0
-            readonly property real restY: tile.bumped ? root.dragPlan.bumpY - tile.settled.y : 0
+            // Its card being moved or resized: the slot it will land in.
+            readonly property var previewSlot: root.sectionPreview[tile.entry.id] ?? null
+            readonly property real restX: tile.previewSlot ? tile.previewSlot.x - tile.settled.x
+                : tile.bumped ? root.dragPlan.bumpX - tile.settled.x : 0
+            readonly property real restY: tile.previewSlot ? tile.previewSlot.y - tile.settled.y
+                : tile.bumped ? root.dragPlan.bumpY - tile.settled.y : 0
             function glide() {
                 glideMotion.stop();
-                if (Appearance.reducedMotion || (tile.offX === tile.restX && tile.offY === tile.restY)) {
+                // A card drag carries its tiles with the pointer, no glide.
+                if (Appearance.reducedMotion || (root.cardMoving && tile.previewSlot)
+                    || (tile.offX === tile.restX && tile.offY === tile.restY)) {
                     tile.offX = tile.restX;
                     tile.offY = tile.restY;
                     return;

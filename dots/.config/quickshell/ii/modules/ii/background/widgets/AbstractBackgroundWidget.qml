@@ -1532,74 +1532,16 @@ AbstractWidget {
     }
 
     // ── Resize grip ──────────────────────────────────────────────────────────
-    Item {
+    // Shared with the launch-pad cards (ResizeGrip.qml).
+    ResizeGrip {
         id: resizeHandle
-        visible: opacity > 0.001
-        // Shown on hover, and throughout the mode: a grip you have to find
-        // by hovering is not an affordance in a layout editor.
-        opacity: root._scaleHandleAvailable && !root.isDragging && (root.containsMouse || resizeDragArea.dragging || root.editModeActive) ? 1 : 0
-        // Grow into place instead of only fading: at this size a pure opacity
-        // ramp reads as a glitch rather than as something arriving.
-        scale: opacity > 0.5 ? 1 : 0.7
-        Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(resizeHandle)
-        }
-        Behavior on scale {
-            animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(resizeHandle)
-        }
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        // The visual grip sits inside the bounds; the hit area around it is
-        // allowed to hang off the corner, which is what makes it grabbable.
-        anchors.rightMargin: -6
-        anchors.bottomMargin: -6
-        width: 40
-        height: 40
-        z: 99
-
-        Rectangle {
-            id: grip
-            anchors.centerIn: parent
-            anchors.horizontalCenterOffset: -3
-            anchors.verticalCenterOffset: -3
-            width: 22
-            height: 22
-            radius: 7
-            color: resizeDragArea.dragging || resizeDragArea.containsMouse
-                ? Appearance.colors.colPrimary
-                : Appearance.colors.colSecondaryContainer
-
-            Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(grip)
-            }
-
-            // Rasterised at the size it is shown at: the glyph is a native-
-            // rendered bitmap, and the widget's own scale only stretched it.
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "open_in_full"
-                iconSize: 13 * root.renderScale
-                scale: 1 / root.renderScale
-                font.variableAxes: ({ "FILL": 0, "wght": 400, "opsz": 20 })
-                color: resizeDragArea.dragging || resizeDragArea.containsMouse
-                    ? Appearance.colors.colOnPrimary
-                    : Appearance.colors.colOnSecondaryContainer
-            }
-        }
-
-        MouseArea {
-            id: resizeDragArea
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.SizeFDiagCursor
-            preventStealing: true
-
-            onPressed: mouse => root.beginResizeGesture(mouse)
-            onPositionChanged: mouse => root.updateResizeGesture(mouse)
-            onReleased: root.endResizeGesture()
-            onCanceled: root.endResizeGesture()
-            onDoubleClicked: root.resetScaleFromHandle()
-        }
+        shown: root._scaleHandleAvailable && !root.isDragging && (root.containsMouse || root.editModeActive)
+        renderScale: root.renderScale
+        onPressed: mouse => root.beginResizeGesture(mouse)
+        onPositionChanged: mouse => root.updateResizeGesture(mouse)
+        onReleased: root.endResizeGesture()
+        onCanceled: root.endResizeGesture()
+        onDoubleClicked: root.resetScaleFromHandle()
     }
 
     // ── Menu grip ────────────────────────────────────────────────────────────
