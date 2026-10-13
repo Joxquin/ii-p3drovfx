@@ -42,6 +42,7 @@ HELPERS=(
     "workspace_compactor:hyprland"
     "workspace_profile_manager:hyprland"
     "sni_watcher:tray"
+    "health_watch:health"
 )
 
 helper_dir() {

@@ -290,6 +290,27 @@
             "label": "AppImage icons",
             "description": "AppImages on the desktop show their own icon.",
             "packages": [{ "name": "squashfs-tools", "bin": "unsquashfs" }]
+        },
+        {
+            "id": "system-health-drives",
+            "tier": "optional",
+            "label": "System Health: drives",
+            "description": "Drive health (SMART) without root, and the self-test button.",
+            "packages": [{ "name": "udisks2", "bin": "udisksctl" }]
+        },
+        {
+            "id": "system-health-firmware",
+            "tier": "optional",
+            "label": "System Health: firmware",
+            "description": "BIOS and device firmware updates, and the platform security level.",
+            "packages": [{ "name": "fwupd", "bin": "fwupdmgr" }]
+        },
+        {
+            "id": "system-health-cleanup",
+            "tier": "optional",
+            "label": "System Health: package cache",
+            "description": "Cleaning old package versions, and merging .pacnew files.",
+            "packages": [{ "arch": "pacman-contrib", "fedora": null, "bin": "paccache" }]
         }
     ]
 }

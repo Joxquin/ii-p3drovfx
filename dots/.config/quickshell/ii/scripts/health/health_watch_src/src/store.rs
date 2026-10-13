@@ -1,0 +1,152 @@
+//! What survives a restart: fingerprints and their boots, mutes, dismissals,
+//! what was already alerted this boot, and the daily summaries.
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct FpRec {
+    #[serde(default)]
+    pub boots: Vec<String>,
+    #[serde(default, rename = "firstSeen")]
+    pub first_seen: u64,
+    #[serde(default, rename = "lastSeen")]
+    pub last_seen: u64,
+    #[serde(default)]
+    pub muted: bool,
+    #[serde(default)]
+    pub known: bool,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct State {
+    #[serde(default)]
+    pub version: u32,
+    #[serde(default)]
+    pub baseline: bool,
+    #[serde(default)]
+    pub fingerprints: HashMap<String, FpRec>,
+    #[serde(default, rename = "mutedPrograms")]
+    pub muted_programs: Vec<String>,
+    #[serde(default)]
+    pub dismissed: HashMap<String, u64>,
+    #[serde(default)]
+    pub alerted: HashMap<String, String>,
+    #[serde(default, rename = "journalCursor")]
+    pub journal_cursor: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+pub struct Day {
+    pub date: String,
+    #[serde(default)]
+    pub failed: u64,
+    #[serde(default)]
+    pub crashes: u64,
+    #[serde(default, rename = "newErrors")]
+    pub new_errors: u64,
+    #[serde(default, rename = "diskPct")]
+    pub disk_pct: f64,
+    #[serde(default, rename = "psiMemPeak")]
+    pub psi_mem_peak: f64,
+}
+
+pub struct Store {
+    dir: PathBuf,
+    pub state: State,
+    pub days: Vec<Day>,
+    pub dirty: bool,
+}
+
+fn read_json<T: for<'d> Deserialize<'d> + Default>(path: &Path) -> T {
+    std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
+}
+
+impl Store {
+    pub fn open(dir: &Path) -> Store {
+        let _ = std::fs::create_dir_all(dir);
+        let state: State = read_json(&dir.join("state.json"));
+        let days: Vec<Day> = read_json(&dir.join("history.json"));
+        Store { dir: dir.to_path_buf(), state, days, dirty: false }
+    }
+
+    pub fn save(&mut self) {
+        if !self.dirty {
+            return;
+        }
+        self.state.version = 1;
+        if let Ok(b) = serde_json::to_vec(&self.state) {
+            let _ = write_atomic(&self.dir.join("state.json"), &b);
+        }
+        if let Ok(b) = serde_json::to_vec(&self.days) {
+            let _ = write_atomic(&self.dir.join("history.json"), &b);
+        }
+        self.dirty = false;
+    }
+
+    /// Today's summary row, created when the day rolls. Returns true on a roll.
+    pub fn today(&mut self, date: &str, keep: usize) -> (bool, &mut Day) {
+        let rolled = self.days.last().map(|d| d.date != date).unwrap_or(true);
+        if rolled {
+            self.days.push(Day { date: date.to_string(), ..Default::default() });
+            if self.days.len() > keep.max(1) {
+                let excess = self.days.len() - keep.max(1);
+                self.days.drain(..excess);
+            }
+            self.dirty = true;
+        }
+        (rolled, self.days.last_mut().unwrap())
+    }
+
+    /// Forgets every mute, known group and dismissal; the baseline is rebuilt.
+    pub fn reset_noise(&mut self) {
+        self.state.fingerprints.clear();
+        self.state.muted_programs.clear();
+        self.state.dismissed.clear();
+        self.state.baseline = false;
+        self.dirty = true;
+    }
+
+    /// Keeps the fingerprint table bounded: drops groups unseen for 60 days that
+    /// carry no user decision.
+    pub fn prune(&mut self, now: u64) {
+        let cutoff = now.saturating_sub(60 * 86_400_000);
+        let before = self.state.fingerprints.len();
+        self.state.fingerprints.retain(|_, r| r.muted || r.last_seen >= cutoff);
+        if self.state.fingerprints.len() != before {
+            self.dirty = true;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn roundtrip_and_roll() {
+        let dir = std::env::temp_dir().join(format!("health_watch_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = Store::open(&dir);
+        s.state.fingerprints.insert("k|x".into(), FpRec { boots: vec!["b1".into()], first_seen: 1, last_seen: 2, muted: true, known: false });
+        let (rolled, day) = s.today("2026-10-13", 30);
+        assert!(rolled);
+        day.failed = 3;
+        let (rolled2, _) = s.today("2026-10-13", 30);
+        assert!(!rolled2);
+        s.dirty = true;
+        s.save();
+        let s2 = Store::open(&dir);
+        assert!(s2.state.fingerprints["k|x"].muted);
+        assert_eq!(s2.days.len(), 1);
+        assert_eq!(s2.days[0].failed, 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
