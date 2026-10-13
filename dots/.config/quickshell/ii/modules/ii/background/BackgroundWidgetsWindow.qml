@@ -330,6 +330,9 @@ PanelWindow {
         updateSurfaceNeed();
         updateWallpaperSize();
         Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, bgWidgetsWindow.widgetSelfBlurShown);
+        // Already blurred at startup: no fade.
+        if (bgWidgetsWindow.windowBlurActive)
+            bgWidgetsWindow.windowBlurProgress = 1;
     }
 
     // ── Edit Mode's wallpaper framing ────────────────────────────────────────
@@ -611,14 +614,30 @@ PanelWindow {
     // the cross-fade's weight, never the radius: the wallpaper fades a fully blurred copy in over
     // the sharp one, so the widgets do the same (see widgetBlurLoader). A growing radius read as
     // a different, stepping animation next to the wallpaper's, and baked a shader per frame.
-    property real windowBlurProgress: windowBlurActive ? 1 : 0
-    Behavior on windowBlurProgress {
-        enabled: bgWidgetsWindow.windowBlurActive && !GlobalStates.presetRecoloring
-        NumberAnimation {
-            duration: 400
-            easing.type: Easing.OutCubic
-        }
+    //
+    // An animation started by hand, not a Behavior gated on windowBlurActive: the gate and
+    // the value both follow that flag, and when the value was re-evaluated first the Behavior
+    // still caught the drop and played it over 400 ms - the blurred widgets lingered over the
+    // already sharp wallpaper and its depth subject (recorded: ~8 frames).
+    property real windowBlurProgress: 0
+    NumberAnimation {
+        id: windowBlurFadeIn
+        target: bgWidgetsWindow
+        property: "windowBlurProgress"
+        to: 1
+        duration: 400
+        easing.type: Easing.OutCubic
     }
+    function syncWindowBlur() {
+        windowBlurFadeIn.stop();
+        if (!bgWidgetsWindow.windowBlurActive)
+            bgWidgetsWindow.windowBlurProgress = 0;
+        else if (GlobalStates.presetRecoloring)
+            bgWidgetsWindow.windowBlurProgress = 1;
+        else
+            windowBlurFadeIn.start();
+    }
+    onWindowBlurActiveChanged: bgWidgetsWindow.syncWindowBlur()
     // A true Gaussian, as in LockBlur: MultiEffect blurs large radii from upsampled mip levels,
     // which on the widgets' transparent edges shows up as blocky, grainy halos. Radius scales
     // like the wallpaper's MultiEffect (blurMax 64), on the same half-resolution texture.
