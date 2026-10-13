@@ -770,15 +770,10 @@ PanelWindow {
         // cross-fade is this item's opacity. The two are parented here by
         // `parent:`, in window coordinates as before. Input is not gated by
         // opacity, so the desktop keeps every click while blurred.
-        // Never quite 0 while blurred: a subtree at opacity 0 is skipped by the
-        // renderer, so the cutout's own textures (the subject, the canvas mask)
-        // stopped refreshing, and the frame the blur dropped drew the sharp
-        // widgets over a stale mask - the widgets flashed in front of the
-        // subject. Under the blurred copy 0.4% is invisible.
         Item {
             id: desktopStack
             anchors.fill: parent
-            opacity: Math.max(0.004, 1 - bgWidgetsWindow.windowBlurProgress)
+            opacity: 1 - bgWidgetsWindow.windowBlurProgress
         }
 
         Loader {
@@ -1034,6 +1029,16 @@ PanelWindow {
         // blurred by the same kernel, is cut out of the blurred widgets: the
         // blurred wallpaper shows through there, its own blurred subject in
         // front, colours and all.
+        //
+        // The whole chain runs on a half-size plane drawn at twice its size:
+        // every pass and buffer is a quarter of the screen's pixels, the
+        // radius and taps half, and a blur scaled up looks the same. At full
+        // size the chain held ~170 MB of GPU memory while blurred.
+        //
+        // The capture is taken once and held through the fade: the subject's
+        // dim (the cutout shader's uniform) moves every frame of it, and a
+        // live capture re-ran both blurs on each one (~0.3 s of GPU time per
+        // fade). It follows the desktop again once the fade has settled.
         Loader {
             id: widgetBlurLoader
             anchors.fill: parent
@@ -1043,51 +1048,58 @@ PanelWindow {
                 id: widgetBlurRoot
                 readonly property Item subject: depthCutoutLoader.item && depthCutoutLoader.item.opacity > 0.01
                     ? depthCutoutLoader.item.subjectItem : null
-                ShaderEffectSource {
-                    id: widgetBlurSource
-                    anchors.fill: parent
-                    sourceItem: desktopStack
-                    textureSize: Qt.size(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
-                    live: true
-                    smooth: true
-                    visible: false
-                }
-                GE.GaussianBlur {
-                    id: widgetBlur
-                    anchors.fill: parent
-                    source: widgetBlurSource
-                    radius: bgWidgetsWindow.windowBlurRadius
-                    samples: Math.max(3, Math.round(bgWidgetsWindow.windowBlurRadius * 2 + 1))
-                    transparentBorder: true
-                    visible: widgetBlurRoot.subject === null
-                }
-                Loader {
-                    anchors.fill: parent
-                    active: widgetBlurRoot.subject !== null
-                    sourceComponent: Item {
-                        ShaderEffectSource {
-                            id: subjectSource
-                            anchors.fill: parent
-                            sourceItem: widgetBlurRoot.subject
-                            textureSize: Qt.size(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
-                            live: true
-                            smooth: true
-                            visible: false
-                        }
-                        GE.GaussianBlur {
-                            id: subjectBlur
-                            anchors.fill: parent
-                            source: subjectSource
-                            radius: bgWidgetsWindow.windowBlurRadius
-                            samples: Math.max(3, Math.round(bgWidgetsWindow.windowBlurRadius * 2 + 1))
-                            transparentBorder: true
-                            visible: false
-                        }
-                        GE.OpacityMask {
-                            anchors.fill: parent
-                            source: widgetBlur
-                            maskSource: subjectBlur
-                            invert: true
+                readonly property bool settled: bgWidgetsWindow.windowBlurProgress >= 1
+                readonly property real radius: bgWidgetsWindow.windowBlurRadius / 2
+                readonly property int samples: Math.max(3, Math.round(widgetBlurRoot.radius * 2 + 1))
+                Item {
+                    width: widgetBlurRoot.width / 2
+                    height: widgetBlurRoot.height / 2
+                    scale: 2
+                    transformOrigin: Item.TopLeft
+                    ShaderEffectSource {
+                        id: widgetBlurSource
+                        anchors.fill: parent
+                        sourceItem: desktopStack
+                        live: widgetBlurRoot.settled
+                        smooth: true
+                        visible: false
+                    }
+                    GE.GaussianBlur {
+                        id: widgetBlur
+                        anchors.fill: parent
+                        source: widgetBlurSource
+                        radius: widgetBlurRoot.radius
+                        samples: widgetBlurRoot.samples
+                        transparentBorder: true
+                        visible: widgetBlurRoot.subject === null
+                    }
+                    Loader {
+                        anchors.fill: parent
+                        active: widgetBlurRoot.subject !== null
+                        sourceComponent: Item {
+                            ShaderEffectSource {
+                                id: subjectSource
+                                anchors.fill: parent
+                                sourceItem: widgetBlurRoot.subject
+                                live: widgetBlurRoot.settled
+                                smooth: true
+                                visible: false
+                            }
+                            GE.GaussianBlur {
+                                id: subjectBlur
+                                anchors.fill: parent
+                                source: subjectSource
+                                radius: widgetBlurRoot.radius
+                                samples: widgetBlurRoot.samples
+                                transparentBorder: true
+                                visible: false
+                            }
+                            GE.OpacityMask {
+                                anchors.fill: parent
+                                source: widgetBlur
+                                maskSource: subjectBlur
+                                invert: true
+                            }
                         }
                     }
                 }
