@@ -158,8 +158,17 @@ PanelWindow {
         bgWidgetsWindow.typingFocusSeed = true;
         typingFocusSeedTimer.restart();
     }
+    // A launch-pad caption renamed in place: the double-click that opened it
+    // came before OnDemand, so it earned no focus either.
+    readonly property bool iconsCaptionEditing: desktopIcons.item?.captionEditing ?? false
+    onIconsCaptionEditingChanged: {
+        if (!bgWidgetsWindow.iconsCaptionEditing)
+            return;
+        bgWidgetsWindow.typingFocusSeed = true;
+        typingFocusSeedTimer.restart();
+    }
     WlrLayershell.keyboardFocus: (bgWidgetsWindow.editFocusSeed || bgWidgetsWindow.typingFocusSeed) ? WlrKeyboardFocus.Exclusive
-        : ((bgWidgetsWindow.widgetTyping || widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld || desktopIcons.item?.dialogOpen || desktopIcons.item?.hasSelection) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
+        : ((bgWidgetsWindow.widgetTyping || widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld || desktopIcons.item?.dialogOpen || desktopIcons.item?.hasSelection || desktopIcons.item?.captionEditing) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
     color: "transparent"
 
     anchors {

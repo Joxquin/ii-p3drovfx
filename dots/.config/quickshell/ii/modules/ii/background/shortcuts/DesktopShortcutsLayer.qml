@@ -128,6 +128,36 @@ Item {
     // shows the card's grip.
     property int cardHoverSection: -1
     property int tileHoverSection: -1
+    // The section whose caption is being renamed in place, -1 when none.
+    // The window takes the keyboard while it is (BackgroundWidgetsWindow).
+    property int editingSection: -1
+    readonly property bool captionEditing: root.editingSection >= 0
+    // Counted with the icon dialogs (GlobalStates.desktopDialogCount): no
+    // window has focus on an empty desktop, so type-to-search would bind
+    // every letter and open the launcher with what was meant for the name.
+    property bool _captionCounted: false
+    onCaptionEditingChanged: {
+        if (root.captionEditing === root._captionCounted)
+            return;
+        root._captionCounted = root.captionEditing;
+        GlobalStates.desktopDialogCount = Math.max(0, GlobalStates.desktopDialogCount + (root.captionEditing ? 1 : -1));
+    }
+    // A press anywhere on the bare desktop ends a rename too (it saves).
+    Connections {
+        target: root.canvas
+        enabled: root.captionEditing
+        function onPressed() {
+            root.forceActiveFocus();
+        }
+    }
+    function finishCaptionEdit(text, save) {
+        const index = root.editingSection;
+        if (index < 0)
+            return;
+        root.editingSection = -1;
+        if (save)
+            root.renameSection(String(root.groups[index]?.title ?? ""), text);
+    }
     function previewCard(index, rect) {
         const g = root.groups[index];
         const title = String(g?.title ?? "");
@@ -565,6 +595,12 @@ Item {
         root.clearSelection();
     }
     Keys.onPressed: event => {
+        // A caption being renamed keeps its keys: what its field leaves
+        // (Backspace at the start) must not reach the icons.
+        if (root.captionEditing) {
+            event.accepted = true;
+            return;
+        }
         // Keys has no Backspace signal, so both delete keys ride the generic
         // one; auto-repeat dropped — a held key is one removal, not a queue.
         if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace)
@@ -850,7 +886,12 @@ Item {
         return out;
     }
     onPlateEntriesChanged: DesktopShortcuts.setPlates(root.screenName, root.plateEntries)
-    Component.onDestruction: DesktopShortcuts.setPlates(root.screenName, [])
+    Component.onDestruction: {
+        DesktopShortcuts.setPlates(root.screenName, []);
+        // A rename cut short by the layer going away gives its count back.
+        if (root._captionCounted)
+            GlobalStates.desktopDialogCount = Math.max(0, GlobalStates.desktopDialogCount - 1);
+    }
 
     // ── Keyboard ───────────────────────────────────────────────────────────
     // The icon the arrows walk from: the last one clicked or reached.
@@ -1073,7 +1114,10 @@ Item {
                 acceptedButtons: Qt.LeftButton
                 enabled: !root.iconsLocked
                 preventStealing: true
-                cursorShape: cardMouse.moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                // The glass reads as a handle: an open hand over it, closed
+                // while the card is carried.
+                hoverEnabled: true
+                cursorShape: cardMouse.moving ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 property point pressAt: Qt.point(0, 0)
                 property rect startRect: Qt.rect(0, 0, 0, 0)
                 property bool moving: false
@@ -1085,6 +1129,10 @@ Item {
                     cardMouse.moving = false;
                 }
                 onPressed: mouse => {
+                    // Clicking the glass ends a rename (the field saves on
+                    // losing focus).
+                    if (root.captionEditing)
+                        root.forceActiveFocus();
                     cardMouse.pressAt = cardMouse.mapToItem(root, mouse.x, mouse.y);
                     cardMouse.startRect = sectionCard.box ? sectionCard.box.card : Qt.rect(0, 0, 0, 0);
                     cardMouse.moving = false;
@@ -1092,6 +1140,10 @@ Item {
                     root.clearSelection();
                 }
                 onPositionChanged: mouse => {
+                    // Hover reports positions too (hoverEnabled, for the
+                    // cursor): only a held button carries the card.
+                    if (!cardMouse.pressed)
+                        return;
                     const p = cardMouse.mapToItem(root, mouse.x, mouse.y);
                     const dx = p.x - cardMouse.pressAt.x;
                     const dy = p.y - cardMouse.pressAt.y;
@@ -1117,6 +1169,12 @@ Item {
                 onCanceled: {
                     root.cancelCard();
                     cardMouse.end();
+                }
+                // A double-click on the caption band renames the section in place.
+                onDoubleClicked: mouse => {
+                    const title = sectionCard.box ? sectionCard.box.title : "";
+                    if (title !== "" && mouse.y < root.shelfPad + root.bandOf(title))
+                        root.editingSection = sectionCard.index;
                 }
             }
 
@@ -1174,6 +1232,7 @@ Item {
                 font.capitalization: Font.AllUppercase
                 font.letterSpacing: root.captionSize * 0.14
                 color: Appearance.colors.colPrimary
+                visible: !caption.editing
                 // Off the shelf, the same halo the labels read by.
                 layer.enabled: !root.shelf
                 layer.effect: GE.DropShadow {
@@ -1186,12 +1245,66 @@ Item {
                 }
             }
             Rectangle {
+                visible: !caption.editing
                 anchors.left: captionText.right
                 anchors.leftMargin: 10
                 anchors.right: parent.right
                 anchors.verticalCenter: captionText.verticalCenter
                 height: 1
                 color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.6)
+            }
+
+            // In-place rename (a double-click on the caption band): the
+            // caption's own type, the whole name selected. Return saves,
+            // Escape keeps the old name, clicking away saves. Return is taken
+            // here, before the field ignores it and the layer's keys see it.
+            readonly property bool editing: root.editingSection === caption.index
+            StyledTextInput {
+                id: captionEdit
+                visible: caption.editing
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                font.family: Appearance.font.family.title
+                font.pixelSize: root.captionSize
+                font.weight: Font.DemiBold
+                font.capitalization: Font.AllUppercase
+                font.letterSpacing: root.captionSize * 0.14
+                color: Appearance.colors.colPrimary
+                selectByMouse: true
+                clip: true
+                onVisibleChanged: {
+                    if (!captionEdit.visible)
+                        return;
+                    captionEdit.text = caption.modelData.title;
+                    captionEdit.forceActiveFocus();
+                    captionEdit.selectAll();
+                }
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                        event.accepted = true;
+                        root.finishCaptionEdit(captionEdit.text, true);
+                    } else if (event.key === Qt.Key_Escape) {
+                        event.accepted = true;
+                        root.finishCaptionEdit("", false);
+                    }
+                }
+                // The item's own focus, not activeFocus: the window drops the
+                // keyboard for a moment when its focus seed hands over to
+                // OnDemand, which cleared activeFocus after the first key.
+                onFocusChanged: {
+                    if (!captionEdit.focus && caption.editing)
+                        root.finishCaptionEdit(captionEdit.text, true);
+                }
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.bottom
+                    anchors.topMargin: 2
+                    height: 2
+                    radius: 1
+                    color: Appearance.colors.colPrimary
+                }
             }
         }
     }
