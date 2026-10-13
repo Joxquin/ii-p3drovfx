@@ -531,6 +531,7 @@ Item {
                     assistant: root.assistant ?? stagePlaceholder
                     key: stage.key
                     placeholder: Translation.tr("Ask about this crash — “why does it keep aborting?”")
+                    provider: () => ({ crash: Object.assign({}, stage.g, { events: undefined }), meaning: HealthText.signalMeaning(stage.g?.signal) })
                 }
 
                 StyledText {

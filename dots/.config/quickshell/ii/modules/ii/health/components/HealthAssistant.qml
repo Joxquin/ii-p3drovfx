@@ -112,6 +112,7 @@ Item {
         root.question = "";
         root.proposal = null;
         root.liveFolded = false;
+        root.priorTurns = [];
     }
 
     /// A tab switch, a closed sheet or a hidden window: the pill folds, nothing is lost.
@@ -140,8 +141,20 @@ Item {
         "Never claim you ran or changed anything; you cannot. If one action the app offers would fix it, call health_propose_fix once with that action; the user decides.",
         "Everything you write is shown as one answer, including text before a tool call. After health_propose_fix returns, close with one short sentence; never restate or correct the answer above it.",
         "Commands the user should run themselves go in a fenced code block. Prefer the distribution's tools (pacman, systemctl, journalctl).",
-        "Identifying data is redacted: <user>, <host>, <ip>, <mac>, and ~ for the home directory. Do not ask for it."
+        "Identifying data is redacted: <user>, <host>, <ip>, <mac>, and ~ for the home directory. Do not ask for it.",
+        "A follow-up comes with the earlier questions and your answers to them: build on those, never repeat them."
     ].join("\n")
+
+    /// The earlier turns of the thread a follow-up continues; shown above it while it streams.
+    property var priorTurns: []
+    /// How many earlier turns, and how much of their text, go with a follow-up.
+    readonly property int contextTurns: 3
+    readonly property int contextChars: 6000
+
+    /// Whether a send on `key` continues its thread: there is a saved answer to build on.
+    function continuesThread(key): bool {
+        return HealthAnswers.turnsOf(HealthAnswers.entry(key)).length > 0;
+    }
 
     function submit(text): void {
         const subject = root.subjectProvider ? root.subjectProvider() : null;
@@ -150,16 +163,31 @@ Item {
         // the new run and leave it looking idle.
         if (root.phase === "running")
             root.stop();
+        const key = root.subjectKey;
+        // A question on a subject with an answer follows up on it; an empty send there
+        // (the default question) starts the thread over.
+        const prior = q.length > 0 ? HealthAnswers.turnsOf(HealthAnswers.entry(key)) : [];
         root.clearRun();
-        root.runKey = root.subjectKey;
-        // A new question on a subject replaces its saved answer.
-        HealthAnswers.remove(root.runKey);
+        root.runKey = key;
+        if (prior.length > 0)
+            root.priorTurns = prior.slice(-(HealthAnswers.maxTurns - 1));
+        else
+            HealthAnswers.remove(key);
         root.question = q.length > 0 ? q : Translation.tr("What happened, and how do I fix it?");
         root.phase = "running";
         let facts = JSON.stringify(subject ?? {}, null, 1);
         if (HealthService.redact)
             facts = HealthService.redactText(facts);
-        const body = `${root.question}\n\nWhat System Health knows about it:\n\`\`\`json\n${facts}\n\`\`\``;
+        let body = `${root.question}\n\nWhat System Health knows about it:\n\`\`\`json\n${facts}\n\`\`\``;
+        if (prior.length > 0) {
+            // The newest turns, cut from the front when they run long.
+            let earlier = prior.slice(-root.contextTurns).map(t => `Q: ${t.q}\nA: ${t.a}`).join("\n\n");
+            if (earlier.length > root.contextChars)
+                earlier = "…" + earlier.slice(-root.contextChars);
+            if (HealthService.redact)
+                earlier = HealthService.redactText(earlier);
+            body = `Earlier in this conversation:\n\n${earlier}\n\nThe follow-up question: ${body}`;
+        }
         taskLoader.active = true;
         const task = taskLoader.item;
         if (!task) {
@@ -191,10 +219,11 @@ Item {
                 Ai.healthIntegration.runProposal(p);
             return;
         }
-        const p = HealthAnswers.entry(key)?.proposal ?? null;
+        const turns = HealthAnswers.turnsOf(HealthAnswers.entry(key));
+        const p = turns[turns.length - 1]?.proposal ?? null;
         if (!p)
             return;
-        HealthAnswers.patch(key, { proposal: null });
+        HealthAnswers.patchLastTurn(key, { proposal: null });
         Ai.healthIntegration.runProposal(p);
     }
 
@@ -227,9 +256,11 @@ Item {
                 const key = root.runKey;
                 const question = root.question;
                 HealthAnswers.put(key, {
-                    question: question,
-                    answer: streamed.length > 0 ? streamed : String(result ?? "").trim(),
-                    proposal: root.proposal,
+                    turns: root.priorTurns.concat([{
+                        q: question,
+                        a: streamed.length > 0 ? streamed : String(result ?? "").trim(),
+                        proposal: root.proposal
+                    }]),
                     folded: root.liveFolded
                 });
                 root.clearRun();

@@ -198,6 +198,7 @@ ClockSheet {
         visible: root.assistant !== null && (root.assistant.isOpenOn(root.assistantKey) || root.assistant.hasAnswerFor(root.assistantKey))
         assistant: root.assistant ?? placeholderAssistant
         key: root.assistantKey
+        provider: () => root.provider()
     }
 
     // A sheet can be built without an assistant (the island's Details on a window that

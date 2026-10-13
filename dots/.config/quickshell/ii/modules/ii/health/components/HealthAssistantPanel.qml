@@ -28,16 +28,79 @@ ColumnLayout {
     /// The answer card's colours; a surface already on primary container passes another pair.
     property color colCard: ClockStyle.colPrimaryContainer
     property color colOnCard: ClockStyle.colOnPrimaryContainer
+    /// The owner's facts about the subject, as its ✦ button passes them: Follow up
+    /// opens the pill with them.
+    property var provider: null
 
     readonly property bool mine: root.assistant.subjectKey === root.key
     readonly property var saved: HealthAnswers.entries[root.key] ?? null
     readonly property bool live: root.assistant.isLive(root.key)
     readonly property bool running: root.live && root.assistant.phase === "running"
-    readonly property string shownQuestion: root.live ? root.assistant.question : String(root.saved?.question ?? "")
-    readonly property string shownAnswer: root.live ? root.assistant.answer : String(root.saved?.answer ?? "")
-    readonly property var shownProposal: root.live ? root.assistant.proposal : (root.saved?.proposal ?? null)
+    /// The thread, oldest first: the saved turns, or while a run lasts, the turns it
+    /// follows up on and the one streaming in.
+    readonly property var turns: root.live
+        ? root.assistant.priorTurns.concat([{ q: root.assistant.question, a: root.assistant.answer, proposal: root.assistant.proposal }])
+        : HealthAnswers.turnsOf(root.saved)
+    readonly property var earlierTurns: root.turns.slice(0, -1)
+    readonly property var lastTurn: root.turns.length > 0 ? root.turns[root.turns.length - 1] : null
+    readonly property string shownQuestion: String(root.lastTurn?.q ?? "")
+    readonly property string shownAnswer: String(root.lastTurn?.a ?? "")
+    readonly property var shownProposal: root.lastTurn?.proposal ?? null
+    /// A send here follows up rather than starting over.
+    readonly property bool hasThread: !root.running && HealthAnswers.turnsOf(root.saved).length > 0
+    /// Earlier turns are folded behind a "2 earlier questions" line until asked for.
+    property bool showEarlier: false
     readonly property bool folded: root.live ? root.assistant.liveFolded : root.saved?.folded === true
     readonly property bool showAnswer: root.live || root.saved !== null
+    /// One answer's text: prose as Markdown, fenced code as blocks with Copy and Run.
+    component AnswerText: ColumnLayout {
+        id: answerText
+        property string answer: ""
+        /// Still streaming: an unclosed fence is code being written, not yet runnable.
+        property bool live: false
+        spacing: ClockStyle.gapSmall
+
+        Repeater {
+            model: root.segmentsOf(answerText.answer)
+
+            Loader {
+                id: segment
+                required property var modelData
+                Layout.fillWidth: true
+                sourceComponent: segment.modelData.code ? codeSegment : textSegment
+
+                Component {
+                    id: textSegment
+                    StyledText {
+                        text: segment.modelData.text
+                        textFormat: Text.MarkdownText
+                        wrapMode: Text.Wrap
+                        font.pixelSize: ClockStyle.textNormal
+                        color: root.colOnCard
+                        onLinkActivated: link => Qt.openUrlExternally(link)
+                    }
+                }
+
+                Component {
+                    id: codeSegment
+                    HealthCodeBlock {
+                        code: segment.modelData.text
+                        lang: segment.modelData.lang
+                        streaming: segment.modelData.open && answerText.live
+                        colOnCard: root.colOnCard
+                    }
+                }
+            }
+        }
+    }
+
+    /// Opens the pill on this subject for a follow-up question.
+    function followUp(): void {
+        if (!root.assistant.isOpenOn(root.key))
+            root.assistant.toggle(root.key, root.provider ?? root.assistant.subjectProvider);
+        Qt.callLater(bar.focusInput);
+    }
+
     /// The saved answer's subject has gone: the unit recovered, the crash group aged
     /// out. Its fix has nothing left to act on.
     readonly property bool gone: !root.live && root.saved !== null && HealthService.synced && !HealthService.subjectExists(root.key)
@@ -49,10 +112,10 @@ ColumnLayout {
             HealthAnswers.patch(root.key, { folded: true, autoFolded: true });
     }
 
-    /// The answer cut at its ``` fences: [{ code, text, lang, open }]. A fence not yet
+    /// An answer cut at its ``` fences: [{ code, text, lang, open }]. A fence not yet
     /// closed (the answer is still streaming into it) is code already, marked open.
-    readonly property var answerSegments: {
-        const text = root.shownAnswer;
+    function segmentsOf(answer): var {
+        const text = String(answer ?? "");
         const out = [];
         const fence = /```([^\n`]*)\n?([\s\S]*?)(```|$)/g;
         let last = 0;
@@ -190,8 +253,10 @@ ColumnLayout {
         // The run's state shows on the pill of the subject it was asked about.
         phase: root.assistant.runKey === root.key ? (root.assistant.phase === "running" ? "running" : root.assistant.phase === "error" ? "error" : "idle") : "idle"
         errorText: root.assistant.errorText
-        placeholder: root.placeholder
-        allowEmpty: true
+        // With an answer to build on, a send follows up on it and needs words; an
+        // empty send asks the default question only on a fresh subject.
+        placeholder: root.hasThread ? Translation.tr("Ask a follow-up…") : root.placeholder
+        allowEmpty: !root.hasThread
         showChatHop: false
         onSubmitted: text => {
             if (root.closing)
@@ -340,38 +405,84 @@ ColumnLayout {
                     }
                     spacing: ClockStyle.gapSmall
 
-                    // Prose as Markdown, fenced code as blocks with Copy and Run.
-                    Repeater {
-                        model: root.answerSegments
+                    // The thread's earlier questions, folded behind one line.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: root.earlierTurns.length > 0
+                        spacing: ClockStyle.gapTiny
 
-                        Loader {
-                            id: segment
+                        HoverHandler {
+                            cursorShape: Qt.PointingHandCursor
+                        }
+                        TapHandler {
+                            onTapped: root.showEarlier = !root.showEarlier
+                        }
+
+                        MaterialSymbol {
+                            text: root.showEarlier ? "expand_less" : "history"
+                            iconSize: ClockStyle.iconSmall
+                            color: root.colOnCard
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.showEarlier ? Translation.tr("Hide the earlier questions")
+                                : HealthText.plural(root.earlierTurns.length, Translation.tr("%1 earlier question"), Translation.tr("%1 earlier questions"))
+                            font.pixelSize: ClockStyle.textSmall
+                            font.weight: Font.Bold
+                            color: root.colOnCard
+                            opacity: 0.8
+                        }
+                    }
+
+                    Repeater {
+                        model: root.showEarlier ? root.earlierTurns : []
+
+                        ColumnLayout {
+                            id: earlier
                             required property var modelData
                             Layout.fillWidth: true
-                            sourceComponent: segment.modelData.code ? codeSegment : textSegment
+                            spacing: ClockStyle.gapTiny
 
-                            Component {
-                                id: textSegment
-                                StyledText {
-                                    text: segment.modelData.text
-                                    textFormat: Text.MarkdownText
-                                    wrapMode: Text.Wrap
-                                    font.pixelSize: ClockStyle.textNormal
-                                    color: root.colOnCard
-                                    onLinkActivated: link => Qt.openUrlExternally(link)
-                                }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: earlier.modelData.q
+                                wrapMode: Text.Wrap
+                                font.pixelSize: ClockStyle.textSmall
+                                font.weight: Font.Bold
+                                color: root.colOnCard
+                                opacity: 0.8
                             }
-
-                            Component {
-                                id: codeSegment
-                                HealthCodeBlock {
-                                    code: segment.modelData.text
-                                    lang: segment.modelData.lang
-                                    streaming: segment.modelData.open && root.running
-                                    colOnCard: root.colOnCard
-                                }
+                            AnswerText {
+                                Layout.fillWidth: true
+                                answer: earlier.modelData.a
+                                opacity: 0.85
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.topMargin: ClockStyle.gapTiny
+                                implicitHeight: 1
+                                color: Qt.rgba(root.colOnCard.r, root.colOnCard.g, root.colOnCard.b, 0.15)
                             }
                         }
+                    }
+
+                    // With the earlier turns open, the newest question is said again above
+                    // its answer; the header line holds it otherwise.
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: root.showEarlier && root.earlierTurns.length > 0
+                        text: root.shownQuestion
+                        wrapMode: Text.Wrap
+                        font.pixelSize: ClockStyle.textSmall
+                        font.weight: Font.Bold
+                        color: root.colOnCard
+                        opacity: 0.8
+                    }
+
+                    AnswerText {
+                        Layout.fillWidth: true
+                        answer: root.shownAnswer
+                        live: root.running
                     }
 
                     ClockButton {
@@ -393,6 +504,15 @@ ColumnLayout {
                         Layout.topMargin: ClockStyle.gapTiny
                         findingId: root.ranFindingId
                         colContent: root.colOnCard
+                    }
+
+                    ClockButton {
+                        visible: !root.running && root.shownAnswer.length > 0 && !(root.mine && root.assistant.expanded)
+                        Layout.leftMargin: -ClockStyle.gap
+                        variant: "text"
+                        symbol: "reply"
+                        label: Translation.tr("Follow up")
+                        onClicked: root.followUp()
                     }
 
                     StyledText {

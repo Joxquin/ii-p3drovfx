@@ -11,10 +11,12 @@ import qs.modules.common.functions
  * The System Health assistant's finished answers, one per subject, kept on disk.
  *
  * An answer outlives its sheet, the tab, the window and a shell restart; only the
- * card's close button removes it, and a new question on the same subject replaces it.
- * Keys are the assistant's subject keys ("overview", "finding:<id>", "crash:<exe>",
- * journal groups). Only finished answers are kept: a run cut off half way has nothing
- * worth reading later.
+ * card's close button removes it. Each subject keeps a short thread: a follow-up adds a
+ * turn, at most `maxTurns`. Keys are the assistant's subject keys ("overview",
+ * "finding:<id>", "crash:<exe>", "journal:<fp>"). Only finished answers are kept: a run
+ * cut off half way has nothing worth reading later.
+ *
+ * Entries saved before threads ({ question, answer, proposal }) read as one turn.
  *
  * One top-level `var` in the adapter, as AppUsage and AiUsage do: a `var` inside a
  * nested JsonObject trips Quickshell's JSON adapter.
@@ -22,11 +24,13 @@ import qs.modules.common.functions
 Singleton {
     id: root
 
-    /// { key: { question, answer, proposal, folded, at, goneAt, autoFolded } }
+    /// { key: { turns: [{ q, a, proposal }], folded, at, goneAt, autoFolded } }
     property var entries: ({})
     property bool ready: false
     /// Old answers make way for new ones past this many subjects.
     readonly property int maxEntries: 40
+    /// A thread keeps its last this many questions.
+    readonly property int maxTurns: 6
 
     readonly property string path: FileUtils.trimFileProtocol(`${Directories.state}/user/health/answers.json`)
 
@@ -34,14 +38,27 @@ Singleton {
         return root.entries[key] ?? null;
     }
 
+    /// An entry's turns, oldest first; [] for none.
+    function turnsOf(e: var): var {
+        if (!e)
+            return [];
+        if (Array.isArray(e.turns))
+            return e.turns;
+        return e.answer ? [{ q: String(e.question ?? ""), a: String(e.answer), proposal: e.proposal ?? null }] : [];
+    }
+
+    /// Saves a thread: `value` is { turns, folded }.
     function put(key: string, value: var): void {
         if (key.length === 0)
             return;
+        const turns = Array.from(value?.turns ?? []).slice(-root.maxTurns).map(t => ({
+            q: String(t?.q ?? ""),
+            a: String(t?.a ?? ""),
+            proposal: t?.proposal ?? null
+        }));
         const next = Object.assign({}, root.entries);
         next[key] = {
-            question: String(value?.question ?? ""),
-            answer: String(value?.answer ?? ""),
-            proposal: value?.proposal ?? null,
+            turns: turns,
             folded: value?.folded === true,
             at: Date.now(),
             goneAt: 0
@@ -61,6 +78,15 @@ Singleton {
         next[key] = Object.assign({}, current, fields);
         root.entries = next;
         saveTimer.restart();
+    }
+
+    /// Changes the newest turn of a thread (its proposal, once used).
+    function patchLastTurn(key: string, fields: var): void {
+        const turns = root.turnsOf(root.entries[key]).slice();
+        if (turns.length === 0)
+            return;
+        turns[turns.length - 1] = Object.assign({}, turns[turns.length - 1], fields);
+        root.patch(key, { turns: turns, question: undefined, answer: undefined, proposal: undefined });
     }
 
     /// How long an answer outlives its subject: a finding fixed, a crash group gone.

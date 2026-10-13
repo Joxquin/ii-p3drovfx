@@ -53,6 +53,7 @@ ClockSheet {
         assistant: root.assistant ?? placeholderAssistant
         key: root.key
         placeholder: Translation.tr("Ask about this message — “is it harmful?”")
+        provider: () => ({ group: root.group, recentLines: root.lines.slice(-15) })
     }
 
     StyledText {

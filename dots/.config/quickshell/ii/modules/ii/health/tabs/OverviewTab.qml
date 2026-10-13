@@ -33,6 +33,14 @@ Item {
 
     readonly property bool sideBySide: root.layoutWidth >= HealthStyle.sideBySideMin
     readonly property var attention: HealthService.attention
+
+    /// What the assistant is told about everything at once, at send time.
+    function facts(): var {
+        return {
+            needAttention: root.attention.map(f => ({ id: f.id, kind: f.kind, title: HealthText.title(f), detail: HealthText.detail(f, Date.now()), data: f.data })),
+            alsoKnown: root.info.slice(0, 8).map(f => HealthText.title(f))
+        };
+    }
     readonly property int count: HealthService.attentionCount
     readonly property var info: HealthService.findings.filter(f => !root.attention.includes(f))
     readonly property bool clear: root.count === 0
@@ -292,10 +300,7 @@ Item {
                     key: "overview"
                     label: Translation.tr("Explain everything with the assistant")
                     colIcon: hero.colContent
-                    provider: () => ({
-                        needAttention: root.attention.map(f => ({ id: f.id, kind: f.kind, title: HealthText.title(f), detail: HealthText.detail(f, Date.now()), data: f.data })),
-                        alsoKnown: root.info.slice(0, 8).map(f => HealthText.title(f))
-                    })
+                    provider: () => root.facts()
                 }
             }
 
@@ -306,6 +311,7 @@ Item {
                 placeholder: Translation.tr("Ask about what needs attention")
                 colCard: ClockStyle.colSecondaryContainer
                 colOnCard: ClockStyle.colOnSecondaryContainer
+                provider: () => root.facts()
             }
 
             RowLayout {
