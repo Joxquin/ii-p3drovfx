@@ -1568,6 +1568,42 @@ plan_helper_rebuild() {
     return 0
 }
 
+# offer_qt_hook <target_dir> — offer the pacman hook that says, during the update
+# itself, when a Qt update leaves Quickshell needing a rebuild: the running shell
+# keeps working until it restarts, so that is the moment to rebuild. Default yes
+# (it only reads and warns), asked once: a "no" is remembered, and Settings can
+# install it later. An installed hook from an older ii is updated after asking.
+offer_qt_hook() {
+    local script="$1/scripts/quickshell-guard/install-hook.sh" status
+    local declined="$SETUP_STATE_DIR/qt-hook-declined"
+    [[ -f "$script" ]] || return 0
+    status="$(bash "$script" status 2>/dev/null)"
+    case "$status" in
+    installed | unsupported | "") return 0 ;;
+    missing) [[ -f "$declined" ]] && return 0 ;;
+    esac
+    [[ "$OPT_ASSUME_YES" == true || ! -t 0 ]] && {
+        ui_note "Settings > System Health can install a pacman hook that warns when Quickshell needs a rebuild for a new Qt."
+        return 0
+    }
+    if [[ "$status" == outdated ]]; then
+        ui_confirm "Update the pacman hook that checks Quickshell after Qt updates?" yes || return 0
+    else
+        ui_note "After a Qt update, Quickshell needs a rebuild or the shell may not start."
+        ui_note "A pacman hook can say so during the update itself, while the shell still runs."
+        if ! ui_confirm "Install it? (Settings can remove it)" yes; then
+            mkdir -p "$SETUP_STATE_DIR" && : >"$declined"
+            return 0
+        fi
+    fi
+    if sudo_prime && sudo bash "$script" install >>"$LOG_FILE" 2>&1; then
+        ui_ok "pacman hook" "checks Quickshell after Qt updates"
+    else
+        ui_warn "Not installed — see $(tilde "$LOG_FILE")"
+    fi
+    return 0
+}
+
 # offer_crash_access <health_dir> — once System Health's helper is built, offer
 # the one privileged extra it has: read access for this account to the crash
 # dumps of system programs (root-owned files in /var/lib/systemd/coredump).
@@ -2263,13 +2299,27 @@ start_quickshell() {
         ui_ok "Started" "tray watcher"
     fi
 
+    # A Quickshell built for another Qt may not start at all; said here, where the
+    # user is reading, as well as by the guard below once it fails.
+    local guard="$TARGET_DIR/scripts/quickshell-guard/qs-guard.sh"
+    if ! "$bin" --private-check-compat >/dev/null 2>&1; then
+        ui_warn "Quickshell was built for another Qt and may not start. Rebuild it: $(tilde "$TARGET_DIR")/scripts/quickshell-guard/qs-rebuild.sh"
+    fi
+
     # MALLOC_CONF: the allocator setting the session start uses (hyprland/execs.lua);
     # without it a shell restarted from here runs ~100 MB heavier until the next login.
-    if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
-        MALLOC_CONF=narenas:1 nohup "$bin" -c ii >/dev/null 2>&1 &
+    # Through the guard when there is one, as at login: it says so when the shell
+    # cannot start, since the shell is the notification daemon.
+    local args=(-c ii)
+    [[ "$TARGET_DIR" == "$QS_DIR/ii" ]] || args=(--path "$TARGET_DIR")
+    if [[ -x "$guard" ]]; then
+        MALLOC_CONF=narenas:1 nohup setsid -f "$guard" "${args[@]}" >/dev/null 2>&1
+    else
+        MALLOC_CONF=narenas:1 nohup "$bin" "${args[@]}" >/dev/null 2>&1 &
+    fi
+    if [[ "${args[0]}" == -c ]]; then
         ui_ok "Started" "$bin -c ii"
     else
-        MALLOC_CONF=narenas:1 nohup "$bin" --path "$TARGET_DIR" >/dev/null 2>&1 &
         ui_ok "Started" "$bin --path $(tilde "$TARGET_DIR")"
     fi
     return 0
@@ -2725,6 +2775,7 @@ apply_config() {
     # shell spends none of it down: the running helpers keep going on their old
     # binaries, and each rebuild installs through a rename that the shell notices.
     run_helper_rebuild "$TARGET_DIR"
+    offer_qt_hook "$TARGET_DIR"
 
     # Applying again is still an installation experience, and switching a fork
     # introduces a potentially different shell. Only an in-place update should

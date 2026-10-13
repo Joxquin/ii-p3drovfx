@@ -6607,6 +6607,15 @@ Singleton {
                     property bool redact: true
                 }
                 property int historyDays: 30
+                // scripts/quickshell-guard/qs-guard.sh, which starts the shell: read
+                // from config.json at the next start, since the shell is not up yet.
+                property JsonObject guard: JsonObject {
+                    // Hyprland notifications when the shell cannot start or crashes,
+                    // and a restart after a crash. Off: the guard just runs qs.
+                    property bool enable: true
+                    // A terminal on the rebuild script when a Qt update is why.
+                    property bool openTerminal: true
+                }
             }
 
             property JsonObject overlay: JsonObject {
