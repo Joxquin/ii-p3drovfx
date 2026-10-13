@@ -206,10 +206,33 @@ Singleton {
         root.syncPinnedFileOrder()
     }
 
-    // Bumped once by IconThemes after DynamicTheme generation completes.
-    // Keep color changes independent from icon invalidation so a palette update
-    // cannot repeatedly recreate icon textures while the theme is still being built.
+    // Bumped once after DynamicTheme generation completes. Keep color changes independent
+    // from icon invalidation so a palette update cannot repeatedly recreate icon textures
+    // while the theme is still being built.
     property int iconThemeRevision: 0
+    /// Set by IconThemes while it applies a pack: that sequence redraws once, at its end.
+    property bool iconPackApplying: false
+
+    // The recolor script writes this hash last, after DynamicTheme has been swapped in and the
+    // icon loader told about it. It is watched here rather than in IconThemes: that service
+    // only loads with the settings page, so a wallpaper change redrew nothing and icons that
+    // stay on screen (the dock) kept the old colours until they were recreated.
+    FileView {
+        path: Quickshell.env("HOME") + "/.local/share/icons/DynamicTheme.colhash"
+        watchChanges: true
+        onFileChanged: {
+            if (!root.iconPackApplying)
+                iconRedrawTimer.restart()
+        }
+    }
+
+    // A single bounded toggle invalidates the icon bindings without making sourceSize grow
+    // after every theme change. The delay lets the loader finish rebuilding the theme first.
+    Timer {
+        id: iconRedrawTimer
+        interval: 250
+        onTriggered: root.iconThemeRevision = 1 - root.iconThemeRevision
+    }
 
     // ── XDG user directories ──────────────────────────────────────────────
     property var xdgUserDirs: ({})

@@ -60,6 +60,19 @@ report_matugen_failure() {
     fi
 }
 
+# Rebuild the recolored icon theme without holding up the rest of the theming. The recolor
+# runs at idle priority, debounces and drops superseded runs itself, so a burst of wallpaper
+# changes ends in one rebuild that never takes CPU from the desktop. It is detached from this
+# script's process group so the caller finishing (or being killed) does not stop it.
+recolor_icons_in_background() {
+    local script="$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
+    if command -v setsid >/dev/null 2>&1; then
+        setsid -f python3 "$script" >/dev/null 2>&1 </dev/null
+    else
+        nohup python3 "$script" >/dev/null 2>&1 </dev/null &
+    fi
+}
+
 handle_kde_material_you_colors() {
     # Check if Qt app theming is enabled in config
     if [ -f "$SHELL_CONFIG_FILE" ]; then
@@ -856,7 +869,7 @@ done"
         rm -f "$STATE_DIR/matugen_error_notified"
         apply_color_overrides_flat "$mode_flag"
         echo "[switchwall.sh] Applied theme: $type_flag"
-        if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
+        if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then recolor_icons_in_background; fi
         "$SCRIPT_DIR"/applycolor.sh
     else
         matugen_exit_code=0
@@ -893,7 +906,7 @@ done"
             # The boost rewrites the surfaces; a picked surface still wins.
             apply_color_overrides_flat "$mode_flag"
         fi
-        if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
+        if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then recolor_icons_in_background; fi
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
         preview_args=()
         if [[ -z "$colors_only_flag" ]]; then

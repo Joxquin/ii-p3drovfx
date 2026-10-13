@@ -39,19 +39,41 @@ import glob
 import hashlib
 import fcntl
 import uuid
-from concurrent.futures import ProcessPoolExecutor
+import time
+import collections
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, FIRST_COMPLETED, wait
 
 # --force skips the "nothing changed" early-exit and always regenerates
 FORCE = "--force" in sys.argv
+# --base NAME overrides the configured base pack (the caller's config write is debounced)
+BASE_OVERRIDE = sys.argv[sys.argv.index("--base") + 1] if "--base" in sys.argv[:-1] else ""
 
 # Bump when the colour mapping changes so an unchanged scheme still regenerates once.
 ALGORITHM_VERSION = 2
+# Bump when what the analysis cache stores (ToneMaps measured off the base icons) changes.
+ANALYSIS_VERSION = 1
+
+# A wallpaper change fires this from switchwall; a burst of changes (scrolling through the
+# picker, a preset applying in steps) used to start one full rebuild per change. A run waits
+# this long after asking, so only the last request of a burst does the work.
+DEBOUNCE_SECONDS = 1.0
+# A quarter of the machine, at most 4 workers. Idle priority alone does not keep the desktop
+# smooth: busy hyperthread siblings, lower boost clocks with more cores awake and shared memory
+# bandwidth still slow the shell down. Measured on 16 threads: 4 workers finish in 4.2 s,
+# 8 in 3.4 s for 20% more CPU, so the extra cores buy little.
+MAX_WORKERS = max(1, min(4, (os.cpu_count() or 4) // 4))
+# Superseded runs that someone waits on (--force from the pack picker) wait at most this long
+# for the run that replaced them.
+SUPERSEDED_WAIT_SECONDS = 600
 
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 CONFIG_JSON = os.path.expanduser("~/.config/illogical-impulse/config.json")
 COLORS_JSON = os.path.expanduser("~/.local/state/quickshell/user/generated/colors.json")
 TARGET_THEME_PATH = os.path.expanduser("~/.local/share/icons/DynamicTheme")
+ANALYSIS_CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+                              "quickshell", "recolor_icons_analysis.json")
 
 
 def _xdg_data_dirs():
@@ -242,6 +264,15 @@ class ToneMap:
         self.ys = list(ys)
         self.anchor = anchor  # the (post-flip) source tone of the plate
 
+    def to_json(self):
+        return [self.kind, self.invert, [float(x) for x in self.xs], [float(y) for y in self.ys],
+                None if self.anchor is None else float(self.anchor)]
+
+    @classmethod
+    def from_json(cls, data):
+        kind, invert, xs, ys, anchor = data
+        return cls(kind, invert, xs, ys, anchor)
+
     def apply(self, tone, chroma, alpha_hint=None):
         """Map source tone/chroma arrays to (output tone, primary weight)."""
         src = 100.0 - tone if self.invert else tone
@@ -344,11 +375,19 @@ def recolor_raster_image(img, tone_map, palette):
     """Recolor a PIL image through `tone_map`, preserving alpha."""
     from PIL import Image
     out = np.array(img.convert("RGBA"), dtype=np.uint8)
-    visible = out[..., 3] > 0
+    # The mapping is per colour, and an icon repeats few colours over many pixels: map each
+    # distinct RGBA word once and gather the results back over the whole image (a boolean
+    # mask over the pixels costs as much as the mapping itself). Transparent ones are kept.
+    flat = out.reshape(-1, 4)
+    unique, inverse = np.unique(flat.view(np.uint32).ravel(), return_inverse=True)
+    colours = unique.view(np.uint8).reshape(-1, 4)
+    visible = colours[:, 3] > 0
     if visible.any():
-        tone, chroma = lab_tone_chroma(out[..., :3][visible])
+        tone, chroma = lab_tone_chroma(np.ascontiguousarray(colours[visible, :3]))
         out_tone, weight = tone_map.apply(tone, chroma)
-        out[..., :3][visible] = palette.sample(out_tone, weight)
+        mapped = colours.copy()
+        mapped[visible, :3] = palette.sample(out_tone, weight)
+        flat[:] = mapped[inverse.ravel()]
     return Image.fromarray(out, "RGBA")
 
 
@@ -486,16 +525,28 @@ def recolor_svg(content, tone_map, palette, contextual=False):
     return new_content
 
 
-def recolor_embedded_images(svg_content, palette, contextual):
+def recolor_embedded_images(svg_content, palette, contextual, maps=None):
     """Recolor base64-embedded rasters inside an SVG. macOS-style icon packs
-    ship PNGs wrapped in SVG, which the colour text pass can't touch."""
+    ship PNGs wrapped in SVG, which the colour text pass can't touch.
+    `maps`, when given, is the list of measured ToneMaps (in image order): entries already
+    there are reused, missing ones are measured and appended."""
     from PIL import Image
+    index = [0]
 
     def repl(match):
+        i = index[0]
+        index[0] += 1
         try:
             img = Image.open(io.BytesIO(base64.b64decode(match.group(1), validate=False)))
             img.load()
-            tone_map = analyze_image(img) if contextual else ToneMap()
+            if not contextual:
+                tone_map = ToneMap()
+            elif maps is not None and i < len(maps):
+                tone_map = maps[i]
+            else:
+                tone_map = analyze_image(img)
+                if maps is not None and i == len(maps):
+                    maps.append(tone_map)
             out = io.BytesIO()
             recolor_raster_image(img, tone_map, palette).save(out, "PNG")
             return "data:image/png;base64," + base64.b64encode(out.getvalue()).decode('ascii')
@@ -505,17 +556,25 @@ def recolor_embedded_images(svg_content, palette, contextual):
     return DATA_IMAGE_RE.sub(repl, svg_content)
 
 
-def recolor_svg_file(source, palette, contextual):
-    """Recolored SVG text for the file at `source`."""
+def recolor_svg_file(source, palette, contextual, analysis=None):
+    """Recolored SVG text for the file at `source`.
+    `analysis` is the icon's measurements ({"svg": ToneMap|None, "img": [ToneMap]}), reused
+    when present and filled in when not: none of it depends on the palette."""
     with open(source, 'r', errors='ignore') as f:
         content = f.read()
-    # A wrapper around an embedded PNG (macOS-style packs) has no vector paint to map;
-    # its image is measured on its own below, so skip rendering the whole thing.
-    has_paint = any(_parse_color(m.group('val')) for m in _PAINT_RE.finditer(content))
-    tone_map = svg_tone_map(source, content, contextual and has_paint)
+    if analysis is not None and analysis.get("svg") is not None:
+        tone_map = analysis["svg"]
+    else:
+        # A wrapper around an embedded PNG (macOS-style packs) has no vector paint to map;
+        # its image is measured on its own below, so skip rendering the whole thing.
+        has_paint = any(_parse_color(m.group('val')) for m in _PAINT_RE.finditer(content))
+        tone_map = svg_tone_map(source, content, contextual and has_paint)
+        if analysis is not None:
+            analysis["svg"] = tone_map
     new_content = recolor_svg(content, tone_map, palette, contextual)
     if "base64," in new_content:
-        new_content = recolor_embedded_images(new_content, palette, contextual)
+        maps = analysis.setdefault("img", []) if analysis is not None else None
+        new_content = recolor_embedded_images(new_content, palette, contextual, maps)
     return new_content
 
 
@@ -527,11 +586,94 @@ def is_contextual(rel_path, filename):
     return any(p.split("@")[0] in APP_CONTEXTS for p in parts)
 
 
+def _stat_tag(path):
+    try:
+        st = os.stat(path)
+        return f"{st.st_size}|{st.st_mtime_ns}"
+    except OSError:
+        return ""
+
+
+def analysis_key(path):
+    """Cache key of a base icon: its path plus what changes when the file does."""
+    tag = _stat_tag(path)
+    if not tag:
+        raise OSError(path)
+    return f"{path}|{tag}"
+
+
+def _analysis_from_json(data):
+    return {"svg": ToneMap.from_json(data["svg"]) if data.get("svg") else None,
+            "img": [ToneMap.from_json(m) for m in data.get("img", [])]}
+
+
+def _analysis_to_json(analysis):
+    return {"svg": analysis["svg"].to_json() if analysis.get("svg") else None,
+            "img": [m.to_json() for m in analysis.get("img", [])]}
+
+
+def load_analysis_cache():
+    try:
+        with open(ANALYSIS_CACHE) as f:
+            data = json.load(f)
+        if data.get("version") == [ALGORITHM_VERSION, ANALYSIS_VERSION]:
+            return data.get("entries", {})
+    except Exception:
+        pass
+    return {}
+
+
+def save_analysis_cache(entries):
+    try:
+        os.makedirs(os.path.dirname(ANALYSIS_CACHE), exist_ok=True)
+        tmp = ANALYSIS_CACHE + ".tmp"
+        with open(tmp, 'w') as f:
+            json.dump({"version": [ALGORITHM_VERSION, ANALYSIS_VERSION], "entries": entries}, f,
+                      separators=(',', ':'))
+        os.replace(tmp, ANALYSIS_CACHE)
+    except Exception as e:
+        print(f"  Could not save the analysis cache: {e}")
+
+
+_WORKER_PALETTE = None
+
+
+def _init_worker(palette):
+    # One palette per worker rather than one pickled copy per icon, so its lookup table is
+    # built once per worker.
+    global _WORKER_PALETTE
+    _WORKER_PALETTE = palette
+
+
+def _scavenged_job(kind, item, palette, target):
+    """One scavenged icon, recolored in a worker. Returns how many were injected (0 or 1)."""
+    global TARGET_THEME_PATH
+    TARGET_THEME_PATH = target
+    if kind == "svg":
+        return len(inject_scavenged_svgs([item], palette, target))
+    return len(recolor_raster_icons([item], palette, target))
+
+
+def process_batch(batch):
+    return [process_file(task) for task in batch]
+
+
 def process_file(args):
-    src_file, dst_file, palette, contextual = args
+    """Recolor one base icon. Returns (ok, cache key, analysis JSON) — the key is None for
+    icons that are not measured (only contextual app art is)."""
+    src_file, dst_file, contextual, cached = args[:4]
+    palette = args[4] if len(args) > 4 else _WORKER_PALETTE
+    key = None
+    analysis = None
+    if contextual:
+        try:
+            key = analysis_key(src_file)
+            analysis = _analysis_from_json(cached) if cached else {"svg": None, "img": []}
+        except Exception:
+            key = None
     try:
         if src_file.endswith(".svg"):
-            new_content = recolor_svg_file(src_file, palette, contextual)
+            new_content = recolor_svg_file(src_file, palette, contextual, analysis)
             with open(dst_file, 'w') as f:
                 f.write(new_content)
         elif src_file.endswith(".png"):
@@ -539,15 +681,24 @@ def process_file(args):
                 from PIL import Image
                 img = Image.open(src_file)
                 img.load()
-                tone_map = analyze_image(img) if contextual else ToneMap()
+                if not contextual:
+                    tone_map = ToneMap()
+                elif analysis is not None and analysis["img"]:
+                    tone_map = analysis["img"][0]
+                else:
+                    tone_map = analyze_image(img)
+                    if analysis is not None:
+                        analysis["img"] = [tone_map]
                 recolor_raster_image(img, tone_map, palette).save(dst_file, "PNG")
             except Exception:
                 shutil.copy2(src_file, dst_file)
         else:
             shutil.copy2(src_file, dst_file)
-        return True
+        if key is None or analysis is None:
+            return True, None, None
+        return True, key, (cached or _analysis_to_json(analysis))
     except Exception:
-        return False
+        return False, None, None
 
 
 # ── Icon Scavenging (Phase 2) ───────────────────────────────────────────────
@@ -683,15 +834,6 @@ def sniff_image_kind(path):
             or head[:2] == b'BM' or head[:4] in (b'GIF8', b'RIFF'):
         return "raster"
     return None
-
-
-def get_existing_tema_icons():
-    """Get set of icon names (lowercase, no ext) already in DynamicTheme."""
-    icons = set()
-    for root, dirs, files in os.walk(TARGET_THEME_PATH):
-        for f in files:
-            icons.add(os.path.splitext(f)[0].lower())
-    return icons
 
 
 IMAGE_EXTENSIONS = {".png", ".svg", ".jpg", ".jpeg", ".xpm", ".gif", ".bmp"}
@@ -890,34 +1032,110 @@ def get_theme_fingerprint(theme_path):
 
 
 # ── Main Generation ─────────────────────────────────────────────────────────
-def generate():
-    # Rapid wallpaper switching spawns overlapping recolor processes that race
-    # on the shared .new staging dir and on the final rename, so an older
-    # palette can land after a newer one. Serialize runs with a lock and let
-    # only the newest queued run do the work: each process stamps the pending
-    # token; one that finds a newer stamp after acquiring the lock exits, and
-    # the stamping run regenerates with the colors current at its turn.
-    token = uuid.uuid4().hex
-    token_path = TARGET_THEME_PATH + ".pending"
+class Superseded(Exception):
+    """A newer run was requested while this one was working; it leaves the work to it."""
+
+
+PENDING_PATH = TARGET_THEME_PATH + ".pending"
+LOCK_PATH = TARGET_THEME_PATH + ".lock"
+
+
+def _read_pending():
     try:
-        with open(token_path, 'w') as f:
-            f.write(token)
+        with open(PENDING_PATH) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _check_current(token):
+    pending = _read_pending()
+    if pending is not None and pending.get("token") != token:
+        raise Superseded()
+
+
+def _lower_priority():
+    """Run at idle CPU and I/O priority, workers and resvg included (they inherit it): the
+    rebuild is background work and must never take frames from the desktop, a game or a
+    screen recording. On an idle machine it still gets every free cycle."""
+    try:
+        os.nice(19)
+    except Exception:
+        pass
+    try:
+        os.sched_setscheduler(0, os.SCHED_IDLE, os.sched_param(0))
+    except Exception:
+        pass
+    if shutil.which("ionice"):
+        subprocess.run(["ionice", "-c", "3", "-p", str(os.getpid())], capture_output=True)
+
+
+def _wait_for_successor(token):
+    """A superseded --force run is awaited by the pack picker, which repoints the desktop at
+    DynamicTheme when it exits: exiting before the run that replaced it has swapped the theme in
+    would repoint it at a directory mid-swap. So it waits for the pending request to finish."""
+    deadline = time.monotonic() + SUPERSEDED_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        pending = _read_pending()
+        if pending is None or pending.get("token") == token or not _pid_alive(pending.get("pid")):
+            return
+        time.sleep(0.5)
+
+
+def generate():
+    # Every wallpaper or scheme change starts this script, and a burst of changes used to
+    # leave several full rebuilds fighting for the CPU. Now each run records itself as the
+    # pending request, waits out a short debounce, and only the newest request does the work;
+    # a run that is already working checks between batches and stops as soon as a newer one
+    # is pending. A stopped run hands over what it was asked for (--force, --base) so that
+    # nothing requested is lost, and the newest run regenerates with the colours current then.
+    global FORCE, BASE_OVERRIDE
+    _lower_priority()
+    token = uuid.uuid4().hex
+    previous = _read_pending()
+    if previous and _pid_alive(previous.get("pid")):
+        FORCE = FORCE or bool(previous.get("force"))
+        BASE_OVERRIDE = BASE_OVERRIDE or previous.get("base") or ""
+    try:
+        tmp = f"{PENDING_PATH}.{token}"
+        with open(tmp, 'w') as f:
+            json.dump({"token": token, "pid": os.getpid(), "force": FORCE, "base": BASE_OVERRIDE}, f)
+        os.replace(tmp, PENDING_PATH)
     except Exception:
         pass
 
-    with open(TARGET_THEME_PATH + ".lock", 'w') as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        try:
-            with open(token_path) as f:
-                if f.read().strip() != token:
-                    print("A newer recolor run is queued; leaving the work to it.")
-                    return
-        except Exception:
-            pass
-        _generate_locked()
+    try:
+        if not FORCE:
+            time.sleep(DEBOUNCE_SECONDS)
+            _check_current(token)
+        with open(LOCK_PATH, 'w') as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            _check_current(token)
+            try:
+                _generate_locked(token)
+            finally:
+                pending = _read_pending()
+                if pending is not None and pending.get("token") == token:
+                    try:
+                        os.remove(PENDING_PATH)
+                    except OSError:
+                        pass
+    except Superseded:
+        print("A newer recolor run is queued; leaving the work to it.")
+        if "--force" in sys.argv:
+            _wait_for_successor(token)
 
 
-def _generate_locked():
+def _generate_locked(token):
     global TARGET_THEME_PATH
     config = get_config()
     colors = get_colors()
@@ -932,10 +1150,8 @@ def _generate_locked():
     icon_theme_name = config.get("appearance", {}).get("iconTheme", "Papirus-Base")
     # A caller that just changed the config passes the base explicitly: the config write is
     # debounced, so reading it back from disk here would race with it.
-    if "--base" in sys.argv:
-        at = sys.argv.index("--base")
-        if at + 1 < len(sys.argv):
-            icon_theme_name = sys.argv[at + 1]
+    if BASE_OVERRIDE:
+        icon_theme_name = BASE_OVERRIDE
     print(f"Configured icon theme: {icon_theme_name}")
 
     # Locate base theme
@@ -1076,15 +1292,87 @@ def _generate_locked():
                     continue
                 if not os.path.exists(src):
                     continue
-            tasks.append((src, os.path.join(dst_folder, filename), palette,
+            tasks.append((src, os.path.join(dst_folder, filename),
                           contextual and is_contextual(rel_path, filename)))
 
-    print(f"[Phase 1] Processing {len(tasks)} base theme icons from {len(processed_folders)} folders...")
+    # Measuring an app icon (a resvg render plus the plate/glyph analysis) does not depend on
+    # the palette, so it is cached across runs keyed by the file; a wallpaper change then only
+    # pays for the colour mapping itself.
+    analysis_cache = load_analysis_cache()
+    tasks = [(src, dst, ctx, analysis_cache.get(f"{src}|{_stat_tag(src)}") if ctx else None)
+             for src, dst, ctx in tasks]
+    hits = sum(1 for t in tasks if t[3])
+    print(f"[Phase 1] Processing {len(tasks)} base theme icons from {len(processed_folders)} folders "
+          f"({hits} measurements cached, {MAX_WORKERS} workers)...")
+
+    # The names Phase 1 is about to write, so Phase 2 can look for what the pack lacks while
+    # the workers are still busy instead of after them. Symlinked folders are left out, as a
+    # walk of the finished directory would.
+    existing = {"index"}
+    existing.update(os.path.splitext(os.path.basename(t[1]))[0].lower() for t in tasks)
+    existing.update(os.path.splitext(os.path.basename(rel))[0].lower() for rel, _ in links
+                    if not os.path.isdir(os.path.join(base_theme_path, rel)))
 
     # Processes, not threads: the per-icon work is mostly Python and NumPy on small arrays,
-    # which threads serialise on the GIL.
-    with ProcessPoolExecutor(max_workers=os.cpu_count() or 8) as executor:
-        results = list(executor.map(process_file, tasks, chunksize=64))
+    # which threads serialise on the GIL. Forked rather than started fresh, so a worker does
+    # not import NumPy and the colour libraries again. Jobs are submitted a few at a time so a
+    # newer request is noticed within one batch and the rest is never started.
+    jobs = collections.deque(("base", tasks[i:i + 64]) for i in range(0, len(tasks), 64))
+    results = []
+    new_cache = {}
+    svg_count = raster_count = 0
+    scavenged = False
+    try:
+        context = multiprocessing.get_context("fork")
+    except ValueError:
+        context = None
+    try:
+        with ProcessPoolExecutor(max_workers=MAX_WORKERS, mp_context=context,
+                                 initializer=_init_worker, initargs=(palette,)) as executor:
+            running = {}
+            try:
+                while True:
+                    while len(running) < MAX_WORKERS * 2 and jobs:
+                        kind, payload = jobs.popleft()
+                        if kind == "base":
+                            future = executor.submit(process_batch, payload)
+                        else:
+                            future = executor.submit(_scavenged_job, kind, payload, palette, TARGET_THEME_PATH)
+                        running[future] = kind
+                    if not scavenged:
+                        # ── Phase 2: Scavenge & recolor missing icons (alongside Phase 1)
+                        scavenged = True
+                        print("[Phase 2] Scavenging missing icons from .desktop files...")
+                        missing_svg, missing_raster = scavenge_missing_icons(existing)
+                        print(f"  Found {len(missing_svg)} SVG + {len(missing_raster)} raster icons to scavenge")
+                        jobs.extend(("svg", item) for item in missing_svg)
+                        jobs.extend(("raster", item) for item in missing_raster)
+                        continue
+                    if not running:
+                        break
+                    done, _ = wait(running, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        kind = running.pop(future)
+                        if kind == "svg":
+                            svg_count += future.result()
+                        elif kind == "raster":
+                            raster_count += future.result()
+                        else:
+                            for ok, key, entry in future.result():
+                                results.append(ok)
+                                if key is not None:
+                                    new_cache[key] = entry
+                    _check_current(token)
+            except Superseded:
+                executor.shutdown(wait=True, cancel_futures=True)
+                raise
+    finally:
+        # Measurements made before a stop are kept: the run that replaces this one reuses them.
+        if new_cache:
+            if len(results) < len(tasks):
+                analysis_cache.update(new_cache)
+                new_cache = analysis_cache
+            save_analysis_cache(new_cache)
 
     link_count = 0
     for rel_link, rel_target in links:
@@ -1101,27 +1389,7 @@ def _generate_locked():
 
     base_count = sum(1 for r in results if r)
     print(f"[Phase 1] Done! {base_count} base icons recolored.")
-
-    # ── Phase 2: Scavenge & recolor missing icons ────────────────────────
-    print("[Phase 2] Scavenging missing icons from .desktop files...")
-    existing = get_existing_tema_icons()
-    missing_svg, missing_raster = scavenge_missing_icons(existing)
-    print(f"  Found {len(missing_svg)} SVG + {len(missing_raster)} raster icons to scavenge")
-
-    svg_count = 0
-    raster_count = 0
-
-    # 2a: SVGs — direct recolor
-    if missing_svg:
-        successful_svgs = inject_scavenged_svgs(missing_svg, palette, TARGET_THEME_PATH)
-        svg_count = len(successful_svgs)
-        print(f"  Injected {svg_count} scavenged SVG icons")
-
-    # 2b: Raster — Pillow pixel-perfect brightness mapping recolor
-    if missing_raster:
-        successful_rasters = recolor_raster_icons(missing_raster, palette, TARGET_THEME_PATH)
-        raster_count = len(successful_rasters)
-        print(f"  Injected {raster_count} Pillow-recolored raster icons")
+    print(f"[Phase 2] Injected {svg_count} scavenged SVG + {raster_count} Pillow-recolored raster icons")
 
     # ── Phase 3: Finalize ────────────────────────────────────────────────
     # Create lowercase symlinks for case-insensitive lookup
@@ -1131,6 +1399,7 @@ def _generate_locked():
     _ensure_directories_in_index(dst_index)
 
     # ── Atomic swap: replace old DynamicTheme with new one ───────────────
+    _check_current(token)
     # Restores TARGET_THEME_PATH global to original value before swapping
     TARGET_THEME_PATH = OLD_TARGET
     # The caches are built on the staging copy, before the swap: rewriting them inside the
