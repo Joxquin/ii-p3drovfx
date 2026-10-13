@@ -11,9 +11,10 @@ import qs.modules.common
  * The assistant behind every ✦ button in System Health.
  *
  * One per window: only one sheet, crash stage or hero is open at a time, so one run is
- * enough, and a tab switch or a closing sheet simply resets it. Nothing of the AI graph
- * exists until the first send — the text task sits in a Loader that turns on then and
- * off again on reset, the budget the Modes agent keeps too.
+ * enough. A tab switch or a closing sheet folds the pill but lets a run finish, and
+ * finished answers are kept in HealthAnswers until their close button. Nothing of the
+ * AI graph exists until the first send — the text task sits in a Loader that turns on
+ * then and off again on a reset with nothing running, the budget Modes keeps too.
  *
  * The answer is shown in place, under the prompt pill, rather than in the chat. The run
  * is a one-off text task narrowed to the read-only `health` tools; what it sends about
@@ -33,6 +34,13 @@ Item {
     /// Called at send time for the facts about the subject, so they are current.
     property var subjectProvider: null
     property bool expanded: false
+
+    // ── The run ─────────────────────────────────────────────────────────
+    // A run belongs to the subject it was asked about, not to whichever pill is open:
+    // it goes on through a tab switch or a closed sheet, and its answer lands in
+    // HealthAnswers under that subject when it finishes. Until then it lives here.
+    /// The subject of the run in progress (or the one that just failed).
+    property string runKey: ""
     /// "idle" | "running" | "error"
     property string phase: "idle"
     property string errorText: ""
@@ -40,60 +48,78 @@ Item {
     property string question: ""
     /// The one fix the model proposed, as a button: { findingId, verb, label, args }.
     property var proposal: null
+    /// Folded while it streams; carried into the saved answer.
+    property bool liveFolded: false
 
     function isOpenOn(key): bool {
         return root.expanded && root.subjectKey === key;
     }
 
+    /// Whether `key`'s answer is the one streaming in right now.
+    function isLive(key): bool {
+        return root.runKey === key && (root.phase === "running" || root.answer.length > 0);
+    }
+
     function hasAnswerFor(key): bool {
-        return root.subjectKey === key && (root.answer.length > 0 || root.phase !== "idle");
+        return root.isLive(key) || (root.runKey === key && root.phase === "error") || HealthAnswers.entry(key) !== null;
     }
 
     function toggle(key, provider): void {
         if (root.subjectKey === key && root.expanded) {
-            if (root.phase === "running")
-                return;
             root.dismiss();
             return;
         }
-        if (root.subjectKey !== key)
-            root.reset();
         root.subjectKey = key;
         root.subjectProvider = provider;
         root.expanded = true;
     }
 
+    /// Folds the pill away. A run keeps going; its answer stays under the pill's place.
     function dismiss(): void {
-        if (root.phase === "running")
-            root.stop();
         root.expanded = false;
-        root.phase = "idle";
-        root.errorText = "";
+        if (root.phase === "error") {
+            root.phase = "idle";
+            root.errorText = "";
+        }
     }
 
-    /// Closes the answer card; the pill stays as it is, so another question can follow.
-    function clearAnswer(): void {
-        if (root.phase === "running")
-            root.stop();
+    /// The card's close button: the only thing that throws an answer away.
+    function clearAnswer(key): void {
+        if (root.runKey === key) {
+            if (root.phase === "running")
+                root.stop();
+            root.clearRun();
+        }
+        HealthAnswers.remove(key);
+    }
+
+    function setFolded(key, folded): void {
+        if (root.isLive(key))
+            root.liveFolded = folded;
+        else
+            HealthAnswers.patch(key, { folded: folded });
+    }
+
+    function clearRun(): void {
+        root.runKey = "";
         root.phase = "idle";
         root.errorText = "";
         root.answer = "";
         root.question = "";
         root.proposal = null;
+        root.liveFolded = false;
     }
 
+    /// A tab switch, a closed sheet or a hidden window: the pill folds, nothing is lost.
     function reset(): void {
-        if (root.phase === "running")
-            root.stop();
         root.expanded = false;
-        root.phase = "idle";
-        root.errorText = "";
-        root.answer = "";
-        root.question = "";
-        root.proposal = null;
         root.subjectKey = "";
         root.subjectProvider = null;
-        taskLoader.active = false;
+        if (root.phase === "error")
+            root.clearRun();
+        // Nothing of the AI graph stays loaded once nothing is running.
+        if (root.phase !== "running")
+            taskLoader.active = false;
     }
 
     function stop(): void {
@@ -116,10 +142,15 @@ Item {
     function submit(text): void {
         const subject = root.subjectProvider ? root.subjectProvider() : null;
         const q = String(text ?? "").trim();
+        // Stopped first: the stop reports "aborted", which would otherwise land on
+        // the new run and leave it looking idle.
+        if (root.phase === "running")
+            root.stop();
+        root.clearRun();
+        root.runKey = root.subjectKey;
+        // A new question on a subject replaces its saved answer.
+        HealthAnswers.remove(root.runKey);
         root.question = q.length > 0 ? q : Translation.tr("What happened, and how do I fix it?");
-        root.answer = "";
-        root.proposal = null;
-        root.errorText = "";
         root.phase = "running";
         let facts = JSON.stringify(subject ?? {}, null, 1);
         if (HealthService.redact)
@@ -134,7 +165,7 @@ Item {
         }
         // A model without tool support still gets the facts; it just cannot dig further.
         task.toolMode = task.model?.tools === true ? "functions" : "none";
-        Ai.healthIntegration.activeKey = root.subjectKey;
+        Ai.healthIntegration.activeKey = root.runKey;
         task.start(root.systemPrompt, body);
     }
 
@@ -146,13 +177,21 @@ Item {
         }
     }
 
-    /// Runs the proposed fix. Only ever called from the user's click on its button.
-    function runProposal(): void {
-        const p = root.proposal;
+    /// Runs the fix proposed for `key`. Only ever called from the user's click on its
+    /// button. A saved one is checked again on the way: its finding may be gone.
+    function runProposal(key): void {
+        if (root.isLive(key)) {
+            const p = root.proposal;
+            root.proposal = null;
+            if (p)
+                Ai.healthIntegration.runProposal(p);
+            return;
+        }
+        const p = HealthAnswers.entry(key)?.proposal ?? null;
         if (!p)
             return;
+        HealthAnswers.patch(key, { proposal: null });
         Ai.healthIntegration.runProposal(p);
-        root.proposal = null;
     }
 
     Loader {
@@ -177,10 +216,17 @@ Item {
             }
             // The result is the last round only; what came before the tool call
             // is part of the answer too, so the streamed text is kept.
+            // Saved, then let go: from here on the card reads it from HealthAnswers,
+            // where it outlives the window.
             onFinished: result => {
                 const streamed = root.answer.trim();
-                root.answer = streamed.length > 0 ? streamed : String(result ?? "").trim();
-                root.phase = "idle";
+                HealthAnswers.put(root.runKey, {
+                    question: root.question,
+                    answer: streamed.length > 0 ? streamed : String(result ?? "").trim(),
+                    proposal: root.proposal,
+                    folded: root.liveFolded
+                });
+                root.clearRun();
                 Ai.healthIntegration.activeKey = "";
             }
             onFailed: error => {

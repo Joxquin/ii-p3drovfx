@@ -14,6 +14,10 @@ import qs.modules.ii.clock.components
  * The pill is Modes' bar (AssistantPromptBar) with two differences: an empty send asks
  * the default question, and the answer is printed here instead of in the chat. A fix
  * the model proposed is a button under the answer; it runs only when clicked.
+ *
+ * The answer shown is the one streaming in while its run lasts, and the saved one from
+ * HealthAnswers after: it stays through tab switches, closed windows and restarts until
+ * the card's close button. The fold button shrinks the card to its question.
  */
 ColumnLayout {
     id: root
@@ -26,7 +30,14 @@ ColumnLayout {
     property color colOnCard: ClockStyle.colOnPrimaryContainer
 
     readonly property bool mine: root.assistant.subjectKey === root.key
-    readonly property bool showAnswer: root.mine && (root.assistant.answer.length > 0 || root.assistant.phase === "running")
+    readonly property var saved: HealthAnswers.entries[root.key] ?? null
+    readonly property bool live: root.assistant.isLive(root.key)
+    readonly property bool running: root.live && root.assistant.phase === "running"
+    readonly property string shownQuestion: root.live ? root.assistant.question : String(root.saved?.question ?? "")
+    readonly property string shownAnswer: root.live ? root.assistant.answer : String(root.saved?.answer ?? "")
+    readonly property var shownProposal: root.live ? root.assistant.proposal : (root.saved?.proposal ?? null)
+    readonly property bool folded: root.live ? root.assistant.liveFolded : root.saved?.folded === true
+    readonly property bool showAnswer: root.live || root.saved !== null
 
     /// The card is folding away; the answer is cleared only once it is gone, so its text
     /// does not vanish first and leave a header-sized card to snap out.
@@ -49,17 +60,35 @@ ColumnLayout {
         }
     }
 
+    /// 1 with the answer showing, 0 folded to the question line.
+    property real bodyShown: root.folded ? 0 : 1
+
+    // Standard, not emphasized: emphasized covers most of its distance in a tenth of its
+    // time and then creeps, which on a tall card read as a snap followed by a crawl.
+    Behavior on bodyShown {
+        enabled: !ClockStyle.reducedMotion
+        NumberAnimation {
+            duration: ClockStyle.motionDefault.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.standard
+        }
+    }
+
     visible: root.wanted || opennessAnim.running
     Layout.topMargin: -(root.parent?.spacing ?? 0) * (1 - root.openness)
     spacing: ClockStyle.gapSmall
 
+    function toggleFold(): void {
+        root.assistant.setFolded(root.key, !root.folded);
+    }
+
     function closeAnswer(): void {
         if (root.closing)
             return;
-        if (root.assistant.phase === "running")
+        if (root.running)
             root.assistant.stop();
         if (ClockStyle.reducedMotion) {
-            root.assistant.clearAnswer();
+            root.assistant.clearAnswer(root.key);
             return;
         }
         card.foldHeight = card.height;
@@ -69,26 +98,17 @@ ColumnLayout {
 
     function endClose(clear): void {
         closeAnim.stop();
-        if (clear && root.mine)
-            root.assistant.clearAnswer();
+        if (clear)
+            root.assistant.clearAnswer(root.key);
         card.foldHeight = -1;
         card.foldMargin = 0;
         card.opacity = 1;
         root.closing = false;
     }
 
-    // A question sent or a subject switched mid-fold must not be wiped when the fold ends.
-    Connections {
-        target: root.assistant
-        enabled: root.closing
-        function onSubjectKeyChanged() {
-            root.endClose(false);
-        }
-    }
-
     Component.onDestruction: {
-        if (root.closing && root.mine)
-            root.assistant.clearAnswer();
+        if (root.closing)
+            root.assistant.clearAnswer(root.key);
     }
 
     SequentialAnimation {
@@ -104,22 +124,23 @@ ColumnLayout {
                 easing.bezierCurve: ClockStyle.motionExit.bezierCurve
             }
             // Height and the gap above fold together, so nothing below jumps at the end.
-            // Emphasized, not the spatial spring: an overshoot would drive the height negative.
+            // Standard, not the spatial spring (an overshoot would drive the height
+            // negative) nor emphasized (a snap, then a crawl).
             NumberAnimation {
                 target: card
                 property: "foldHeight"
                 to: 0
-                duration: ClockStyle.motionEnter.duration
+                duration: ClockStyle.motionDefault.duration
                 easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animationCurves.emphasized
+                easing.bezierCurve: Appearance.animationCurves.standard
             }
             NumberAnimation {
                 target: card
                 property: "foldMargin"
                 to: -root.spacing
-                duration: ClockStyle.motionEnter.duration
+                duration: ClockStyle.motionDefault.duration
                 easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animationCurves.emphasized
+                easing.bezierCurve: Appearance.animationCurves.standard
             }
         }
 
@@ -132,7 +153,8 @@ ColumnLayout {
         id: bar
         Layout.fillWidth: true
         expanded: root.mine && root.assistant.expanded
-        phase: root.mine ? (root.assistant.phase === "running" ? "running" : root.assistant.phase === "error" ? "error" : "idle") : "idle"
+        // The run's state shows on the pill of the subject it was asked about.
+        phase: root.assistant.runKey === root.key ? (root.assistant.phase === "running" ? "running" : root.assistant.phase === "error" ? "error" : "idle") : "idle"
         errorText: root.assistant.errorText
         placeholder: root.placeholder
         allowEmpty: true
@@ -189,22 +211,39 @@ ColumnLayout {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: root.assistant.question
+                    text: root.shownQuestion
                     elide: Text.ElideRight
                     font.pixelSize: ClockStyle.textSmall
                     font.weight: Font.Bold
                     color: root.colOnCard
                     opacity: 0.8
+
+                    // The question line is the folded card's handle too.
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.toggleFold()
+                    }
                 }
 
                 ClockIconButton {
-                    visible: root.assistant.answer.length > 0 && root.assistant.phase !== "running"
+                    visible: root.shownAnswer.length > 0 && !root.running && !root.folded
                     symbol: "content_copy"
                     size: 30
                     iconSize: ClockStyle.iconSmall
                     colIcon: root.colOnCard
                     tooltip: Translation.tr("Copy the answer")
-                    onClicked: Quickshell.clipboardText = root.assistant.answer
+                    onClicked: Quickshell.clipboardText = root.shownAnswer
+                }
+
+                ClockIconButton {
+                    symbol: root.folded ? "expand_more" : "expand_less"
+                    size: 30
+                    iconSize: ClockStyle.iconSmall
+                    colIcon: root.colOnCard
+                    enabled: !root.closing
+                    tooltip: root.folded ? Translation.tr("Show the answer") : Translation.tr("Fold the answer")
+                    onClicked: root.toggleFold()
                 }
 
                 ClockIconButton {
@@ -213,39 +252,63 @@ ColumnLayout {
                     iconSize: ClockStyle.iconSmall
                     colIcon: root.colOnCard
                     enabled: !root.closing
-                    tooltip: root.assistant.phase === "running" ? Translation.tr("Stop and close the answer") : Translation.tr("Close the answer")
+                    tooltip: root.running ? Translation.tr("Stop and close the answer") : Translation.tr("Close the answer")
                     onClicked: root.closeAnswer()
                 }
             }
 
-            StyledText {
+            // Folds under the question: height, the gap above it and opacity together,
+            // so the card shrinks smoothly instead of dropping its text in one frame.
+            Item {
+                id: body
                 Layout.fillWidth: true
-                visible: root.assistant.answer.length > 0
-                text: root.assistant.answer
-                textFormat: Text.MarkdownText
-                wrapMode: Text.Wrap
-                font.pixelSize: ClockStyle.textNormal
-                color: root.colOnCard
-                onLinkActivated: link => Qt.openUrlExternally(link)
-            }
+                Layout.preferredHeight: bodyColumn.implicitHeight * root.bodyShown
+                Layout.topMargin: -answerColumn.spacing * (1 - root.bodyShown)
+                visible: root.bodyShown > 0.001
+                // The text is gone before the card is half folded, and comes back only
+                // once there is room for it, so it never slides about half-clipped.
+                opacity: Math.max(0, root.bodyShown * 1.6 - 0.6)
+                clip: root.bodyShown < 1
 
-            ClockButton {
-                visible: root.assistant.proposal !== null && root.assistant.phase !== "running"
-                Layout.topMargin: ClockStyle.gapTiny
-                variant: "filled"
-                symbol: "touch_app"
-                label: root.assistant.proposal?.label ?? ""
-                onClicked: root.assistant.runProposal()
-            }
+                ColumnLayout {
+                    id: bodyColumn
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        top: parent.top
+                    }
+                    spacing: ClockStyle.gapSmall
 
-            StyledText {
-                Layout.fillWidth: true
-                visible: HealthService.redact
-                text: Translation.tr("Sent with your user, host and home path redacted. Crash dumps are never sent.")
-                wrapMode: Text.Wrap
-                font.pixelSize: ClockStyle.textSmall
-                color: root.colOnCard
-                opacity: 0.7
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: root.shownAnswer.length > 0
+                        text: root.shownAnswer
+                        textFormat: Text.MarkdownText
+                        wrapMode: Text.Wrap
+                        font.pixelSize: ClockStyle.textNormal
+                        color: root.colOnCard
+                        onLinkActivated: link => Qt.openUrlExternally(link)
+                    }
+
+                    ClockButton {
+                        visible: root.shownProposal !== null && !root.running
+                        Layout.topMargin: ClockStyle.gapTiny
+                        variant: "filled"
+                        symbol: "touch_app"
+                        label: root.shownProposal?.label ?? ""
+                        onClicked: root.assistant.runProposal(root.key)
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: HealthService.redact
+                        text: Translation.tr("Sent with your user, host and home path redacted. Crash dumps are never sent.")
+                        wrapMode: Text.Wrap
+                        font.pixelSize: ClockStyle.textSmall
+                        color: root.colOnCard
+                        opacity: 0.7
+                    }
+                }
             }
         }
     }
