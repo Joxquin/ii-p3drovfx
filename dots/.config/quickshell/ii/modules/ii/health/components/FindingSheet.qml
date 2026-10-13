@@ -214,6 +214,12 @@ ClockSheet {
     readonly property bool snoozed: HealthService.isSnoozed(root.finding)
     readonly property bool canSnooze: root.finding !== null && root.kind !== "config"
 
+    /// The ✦ button's work, for the keyboard's a.
+    function askAssistant(): void {
+        if (root.assistant && root.assistant.allowed && !root.resolved)
+            root.assistant.toggle(root.assistantKey, () => root.provider());
+    }
+
     function snoozeFor(ms): void {
         HealthService.snooze(root.findingId, ms === "boot" ? "boot" : Date.now() + ms);
         root.snoozeOpen = false;

@@ -109,6 +109,10 @@ FocusScope {
         id: assistant
     }
 
+    function copyReport(): void {
+        HealthService.copyReport(path => snackbar.show(Translation.tr("Report copied, and saved as %1").arg(String(path).split("/").pop()), "", null, false));
+    }
+
     // An answer that arrived for a sheet or stage closed while it was being written.
     Connections {
         target: assistant
@@ -274,6 +278,15 @@ FocusScope {
         } else if (ctrl && event.key === Qt.Key_R) {
             HealthService.rescan();
             event.accepted = true;
+        } else if (ctrl && (event.modifiers & Qt.ShiftModifier) && event.key === Qt.Key_C) {
+            root.copyReport();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Question) {
+            snackbar.show(Translation.tr("↑ ↓ or j k move · Enter opens · a asks the assistant · s snoozes · Ctrl+1–6 pages · Ctrl+R checks · Ctrl+Shift+C copies a report · Esc closes"), "", null, false);
+            event.accepted = true;
+        } else if (!root.settingsOpen && typeof pageLoader.item?.handleNavKey === "function" && pageLoader.item.handleNavKey(event)) {
+            // The page's list moved, opened or acted on its focused row.
+            event.accepted = true;
         } else if (event.key === Qt.Key_Escape && assistant.expanded) {
             assistant.dismiss();
             event.accepted = true;
@@ -348,6 +361,12 @@ FocusScope {
             onRailToggled: root.appState.railExpanded = !root.appState.railExpanded
             onCloseRequested: root.closeRequested()
 
+            ClockIconButton {
+                visible: root.helperReady && !root.settingsOpen
+                symbol: "summarize"
+                tooltip: Translation.tr("Copy a report for a bug report (Ctrl+Shift+C)")
+                onClicked: root.copyReport()
+            }
             ClockIconButton {
                 visible: root.helperReady && !root.settingsOpen
                 symbol: "refresh"

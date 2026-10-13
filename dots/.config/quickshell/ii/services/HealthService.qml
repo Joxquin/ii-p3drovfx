@@ -724,6 +724,103 @@ Singleton {
         printErrors: false
     }
 
+    // ── The system report ───────────────────────────────────────────────
+    FileView {
+        id: osReleaseFile
+        path: "/etc/os-release"
+        printErrors: false
+    }
+    FileView {
+        id: forkCommitFile
+        // Written by setup: the commit of ii this config was installed from.
+        path: FileUtils.trimFileProtocol(Quickshell.shellPath(".active-commit"))
+        printErrors: false
+    }
+
+    /// Everything System Health knows, as Markdown ready for a bug report: the
+    /// system, every open finding, crashes with their top frames, what got fixed,
+    /// vitals and hardware. Always redacted, whatever the assistant setting.
+    function buildReport(): string {
+        const now = Date.now();
+        const L = [];
+        const os = (osReleaseFile.text().match(/^PRETTY_NAME="?([^"\n]*)"?/m) ?? [])[1] ?? "";
+        L.push(`# System Health report, ${Qt.formatDateTime(new Date(now), "yyyy-MM-dd hh:mm")}`);
+        L.push("");
+        L.push("## System");
+        L.push(`- OS: ${os || "unknown"}`);
+        L.push(`- Kernel: ${root.system?.kernel?.running ?? "unknown"}`);
+        L.push(`- ii: ${forkCommitFile.text().trim().slice(0, 12) || "unknown"}`);
+        const qs = Array.from(root.finding("rebuild")?.data?.packages ?? []).find(p => p.reason === "quickshell");
+        L.push(`- Quickshell: ${qs ? `built for Qt ${qs.built}, Qt ${qs.installed} installed (needs a rebuild)` : "matches the installed Qt"}`);
+        L.push(`- Helper: ${root.running ? "running" : "stopped"}${root.synced ? "" : ", not synced yet"}`);
+        L.push("");
+        const open = root.findings.filter(f => !root.isSnoozed(f));
+        L.push(`## Open findings (${open.length})`);
+        if (open.length === 0)
+            L.push("None.");
+        for (const f of open) {
+            const detail = HealthText.detail(f, now);
+            L.push(`- **${f.sev}** ${HealthText.title(f)}${detail ? ` — ${detail}` : ""} (for ${HealthText.age(f.since, now) || "now"})`);
+        }
+        const snoozed = root.snoozedFindings;
+        if (snoozed.length > 0) {
+            L.push("");
+            L.push(`Snoozed: ${snoozed.map(f => HealthText.title(f)).join("; ")}`);
+        }
+        const crashes = root.crashGroups.filter(g => !g.muted).slice(0, 8);
+        if (crashes.length > 0) {
+            L.push("");
+            L.push("## Crashes, last 7 days");
+            for (const g of crashes) {
+                L.push(`- ${g.name} ×${g.count}: ${HealthText.signalName(g.signal, g.signalName)}${g.package ? `, ${g.package} ${g.version ?? ""}` : ""}${g.afterUpdate ? `, first after updating ${g.afterUpdate.name}` : ""}`);
+                for (const fr of Array.from(g.trace ?? []).slice(0, 3))
+                    L.push(`  - \`${fr.fn ?? "?"}\` (${fr.module ?? "?"})`);
+            }
+        }
+        const fixed = root.resolved.slice(-10).reverse();
+        if (fixed.length > 0) {
+            L.push("");
+            L.push("## Fixed recently");
+            for (const r of fixed)
+                L.push(`- ${HealthText.title(r)}: ${HealthText.age(r.resolvedAt, now)} ago, ${r.by === "self" ? "on its own" : `after ${HealthText.verbLabel(r.by)}`}`);
+        }
+        L.push("");
+        L.push("## Vitals");
+        const v = root.vitals;
+        const rootFs = Array.from(v?.fs ?? []).find(f => f.mount === "/");
+        if (v?.psi?.memory)
+            L.push(`- Memory pressure: ${Number(v.psi.memory.some60 ?? 0).toFixed(2)} % (60 s)`);
+        if (v?.memory)
+            L.push(`- Memory available: ${HealthText.bytes(v.memory.available)} of ${HealthText.bytes(v.memory.total)}`);
+        if (rootFs)
+            L.push(`- Root disk: ${Math.round(rootFs.usedPct)} % used, ${HealthText.bytes(rootFs.avail)} free`);
+        if (v?.cpuTempC)
+            L.push(`- CPU: ${Math.round(v.cpuTempC)} °C, throttled ${v.throttle?.total ?? 0} times since boot`);
+        if (v?.shellRss)
+            L.push(`- Shell memory: ${HealthText.bytes(v.shellRss)}`);
+        const boot = root.boots[root.boots.length - 1];
+        if (boot)
+            L.push(`- Last boot: ${HealthText.seconds(boot.total)} (slowest: ${Array.from(boot.top ?? []).slice(0, 3).map(u => `${u.unit} ${HealthText.seconds(u.ms)}`).join(", ")})`);
+        for (const b of Array.from(root.hardware?.batteries ?? []))
+            L.push(`- Battery ${b.name}: ${b.healthPct ?? "?"} % of design, ${b.cycles ?? "?"} cycles`);
+        for (const g of Array.from(root.hardware?.gpus ?? []))
+            L.push(`- GPU: ${g.model || g.vendor} (${g.driver ?? "?"})`);
+        L.push("");
+        L.push("_User, host and home names, IP and MAC addresses are redacted. No crash dump is included._");
+        return root.redactText(L.join("\n"));
+    }
+
+    /// Copies the report and saves it to the Downloads folder; `callback(path)`.
+    function copyReport(callback): void {
+        const text = root.buildReport();
+        Quickshell.clipboardText = text;
+        const dir = Directories.downloads ? FileUtils.trimFileProtocol(Directories.downloads) : `${Quickshell.env("HOME")}/Downloads`;
+        const path = `${dir}/system-health-${Qt.formatDateTime(new Date(), "yyyy-MM-dd-hhmm")}.md`;
+        Quickshell.execDetached(["bash", "-c", 'mkdir -p "$(dirname "$2")" && printf "%s\\n" "$1" > "$2"', "ii-health-report", text, path]);
+        if (callback)
+            callback(path);
+    }
+
     function crashGroup(exe): var {
         return root.crashGroups.find(g => g.exe === exe) ?? null;
     }

@@ -81,6 +81,45 @@ Item {
             root.open(f);
     }
 
+    /// Keyboard, from the app: as on Services — ↑ ↓ (k j) open the previous or next
+    /// card's sheet, Enter opens or closes it, a asks, s snoozes. Crash cards are
+    /// skipped: they open on their own page.
+    function handleNavKey(event): bool {
+        const list = root.attention.concat(root.info.slice(0, 6)).filter(f => f.kind !== "crash");
+        if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier) || list.length === 0)
+            return false;
+        const sheet = root.panels?.open ? root.panels.current : null;
+        const cur = list.findIndex(f => f.id === String(sheet?.findingId ?? ""));
+        switch (event.key) {
+        case Qt.Key_Down:
+        case Qt.Key_J:
+            root.open(list[Math.min(list.length - 1, cur + 1)]);
+            return true;
+        case Qt.Key_Up:
+        case Qt.Key_K:
+            root.open(list[Math.max(0, cur - 1)]);
+            return true;
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+            if (cur >= 0)
+                root.panels.close();
+            else
+                root.open(list[0]);
+            return true;
+        case Qt.Key_A:
+            if (cur < 0 || typeof sheet?.askAssistant !== "function")
+                return false;
+            sheet.askAssistant();
+            return true;
+        case Qt.Key_S:
+            if (cur < 0 || !sheet)
+                return false;
+            sheet.snoozeOpen = !sheet.snoozeOpen;
+            return true;
+        }
+        return false;
+    }
+
     Component {
         id: findingSheet
         FindingSheet {}

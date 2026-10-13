@@ -79,6 +79,44 @@ Item {
             root.open(id);
     }
 
+    /// Keyboard, from the app: ↑ ↓ (k j) open the previous or next row's sheet, so
+    /// the open row's pill is the focus; Enter opens or closes it; a asks the
+    /// assistant about it, s shows its snooze choices.
+    function handleNavKey(event): bool {
+        if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier) || root.rows.length === 0)
+            return false;
+        const cur = root.rows.findIndex(f => f.id === root.openId);
+        const sheet = root.panels?.open ? root.panels.current : null;
+        switch (event.key) {
+        case Qt.Key_Down:
+        case Qt.Key_J:
+            root.open(root.rows[Math.min(root.rows.length - 1, cur + 1)].id);
+            return true;
+        case Qt.Key_Up:
+        case Qt.Key_K:
+            root.open(root.rows[Math.max(0, cur - 1)].id);
+            return true;
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+            if (cur >= 0)
+                root.panels.close();
+            else
+                root.open(root.rows[0].id);
+            return true;
+        case Qt.Key_A:
+            if (cur < 0 || typeof sheet?.askAssistant !== "function")
+                return false;
+            sheet.askAssistant();
+            return true;
+        case Qt.Key_S:
+            if (cur < 0 || !sheet)
+                return false;
+            sheet.snoozeOpen = !sheet.snoozeOpen;
+            return true;
+        }
+        return false;
+    }
+
     function run(f, verb): void {
         HealthService.runAction(f.id, verb);
     }
