@@ -110,6 +110,9 @@ Item {
                         Layout.fillWidth: true
                         availableWidth: leftFlick.width
                     }
+                    HealthHistoryChart {
+                        Layout.fillWidth: true
+                    }
                 }
             }
 
@@ -146,6 +149,9 @@ Item {
                 Vitals {
                     Layout.fillWidth: true
                     availableWidth: flick.width
+                }
+                HealthHistoryChart {
+                    Layout.fillWidth: true
                 }
             }
         }
@@ -506,6 +512,12 @@ Item {
                     color: card.colContent
                     opacity: 0.85
                 }
+            }
+
+            HealthAnswerMark {
+                assistant: root.assistant
+                key: HealthService.answerKey(card.finding)
+                color: card.colContent
             }
 
             MaterialSymbol {

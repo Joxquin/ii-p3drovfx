@@ -27,7 +27,10 @@ Item {
     readonly property var finding: root.payload?.finding ?? null
     readonly property int more: Number(root.payload?.more ?? 0)
     readonly property var fix: HealthService.primaryFix(root.finding)
-    property bool working: false
+    readonly property var action: HealthService.action(root.finding?.id ?? "")
+    readonly property bool working: root.action?.state === "running"
+    /// A fix that did not work stays on the strip, said in its second line.
+    readonly property bool failed: root.action?.state === "failed" || root.action?.state === "cancelled"
 
     MouseArea {
         anchors.fill: parent
@@ -73,11 +76,11 @@ Item {
 
             StyledText {
                 Layout.fillWidth: true
-                text: root.finding ? HealthText.detail(root.finding, Date.now()) : ""
+                text: root.failed ? HealthService.actionText(root.action) : root.finding ? HealthText.detail(root.finding, Date.now()) : ""
                 elide: Text.ElideRight
                 maximumLineCount: 1
                 font.pixelSize: Appearance.font.pixelSize.smallest
-                color: Appearance.colors.colSubtext
+                color: root.action?.state === "failed" ? Appearance.colors.colError : Appearance.colors.colSubtext
             }
         }
 
@@ -92,23 +95,19 @@ Item {
             colRipple: Appearance.colors.colErrorContainerActive
             enabled: !root.working
             onClicked: {
-                root.working = true;
-                const id = root.finding.id;
-                HealthService.runPrimaryFix(id, () => {
-                    root.working = false;
-                    root.source?.dismiss();
+                // Gone once the fix is under way; the app shows how it ends. One that
+                // failed or whose password prompt was dismissed stays, saying so.
+                HealthService.runPrimaryFix(root.finding.id, ok => {
+                    if (ok)
+                        root.source?.dismiss();
                 });
-                // A verb with no reply (reboot) or a dismissed polkit prompt must not
-                // leave the strip stuck in "working".
-                if (root.fix?.verb === "reboot")
-                    root.source?.dismiss();
             }
 
             contentItem: StyledText {
                 id: fixLabel
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
-                text: root.working ? Translation.tr("Working…") : (root.fix?.label ?? "")
+                text: root.working ? HealthService.actionText(root.action) : (root.fix?.label ?? "")
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 font.weight: Font.Bold
                 color: Appearance.colors.colOnErrorContainer

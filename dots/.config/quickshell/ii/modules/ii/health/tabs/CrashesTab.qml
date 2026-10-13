@@ -405,6 +405,12 @@ Item {
                 font.variableAxes: ({ "wght": lane.isSelected ? 800 : 600, "wdth": 92 })
                 color: ClockStyle.colOnSurface
             }
+
+            HealthAnswerMark {
+                assistant: root.assistant
+                key: lane.group ? `crash:${lane.group.exe}` : ""
+                color: ClockStyle.colOnSurface
+            }
         }
 
         Rectangle {

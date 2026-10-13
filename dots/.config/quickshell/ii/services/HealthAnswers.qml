@@ -22,7 +22,7 @@ import qs.modules.common.functions
 Singleton {
     id: root
 
-    /// { key: { question, answer, proposal, folded, at } }
+    /// { key: { question, answer, proposal, folded, at, goneAt, autoFolded } }
     property var entries: ({})
     property bool ready: false
     /// Old answers make way for new ones past this many subjects.
@@ -43,7 +43,8 @@ Singleton {
             answer: String(value?.answer ?? ""),
             proposal: value?.proposal ?? null,
             folded: value?.folded === true,
-            at: Date.now()
+            at: Date.now(),
+            goneAt: 0
         };
         const keys = Object.keys(next).sort((a, b) => (next[b].at ?? 0) - (next[a].at ?? 0));
         for (const old of keys.slice(root.maxEntries))
@@ -61,6 +62,45 @@ Singleton {
         root.entries = next;
         saveTimer.restart();
     }
+
+    /// How long an answer outlives its subject: a finding fixed, a crash group gone.
+    readonly property double goneKeepMs: 7 * 24 * 3600 * 1000
+
+    /// Marks answers whose subject is gone (`goneAt`), and drops them a week later.
+    /// Run whenever the helper has finished a scan, so "gone" is not just "not read yet".
+    function sweep(): void {
+        if (!root.ready || !HealthService.synced)
+            return;
+        const now = Date.now();
+        const next = Object.assign({}, root.entries);
+        let changed = false;
+        for (const key of Object.keys(next)) {
+            const e = next[key];
+            const exists = HealthService.subjectExists(key);
+            if (exists && e.goneAt) {
+                next[key] = Object.assign({}, e, { goneAt: 0 });
+                changed = true;
+            } else if (!exists && !e.goneAt) {
+                next[key] = Object.assign({}, e, { goneAt: now });
+                changed = true;
+            } else if (!exists && now - e.goneAt > root.goneKeepMs) {
+                delete next[key];
+                changed = true;
+            }
+        }
+        if (changed) {
+            root.entries = next;
+            saveTimer.restart();
+        }
+    }
+
+    Connections {
+        target: HealthService
+        function onSyncedChanged() {
+            root.sweep();
+        }
+    }
+    onReadyChanged: root.sweep()
 
     function remove(key: string): void {
         if (root.entries[key] === undefined)

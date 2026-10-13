@@ -107,6 +107,35 @@ FocusScope {
         id: assistant
     }
 
+    // An answer that arrived for a sheet or stage closed while it was being written.
+    Connections {
+        target: assistant
+        enabled: root.shown
+        function onAnswerReady(key, question) {
+            if (assistant.subjectKey === key)
+                return;
+            snackbar.show(Translation.tr("Answer ready: %1").arg(question), Translation.tr("Open"),
+                () => HealthService.openSubject(key), false);
+        }
+    }
+
+    // What finished out of sight. A fixed finding's row is gone by the time its
+    // restart settles, so the outcome is said here; a failure stays in its row too.
+    Connections {
+        target: HealthService
+        enabled: root.shown
+        function onActionSettled(id, action) {
+            if (action?.verb === "copyReport")
+                return;
+            const what = action?.title ?? "";
+            const text = HealthService.actionText(action);
+            const bad = action?.state === "failed" || action?.state === "stillFailing";
+            snackbar.show(what.length > 0 ? `${what}: ${text}` : text,
+                bad && HealthService.finding(id) ? Translation.tr("Open") : "",
+                () => HealthService.openFinding(id), bad);
+        }
+    }
+
     onShownChanged: {
         if (root.shown) {
             Qt.callLater(() => root.forceActiveFocus());
@@ -374,6 +403,18 @@ FocusScope {
                             focus: !root.settingsOpen && !sidePanel.open
                             sourceComponent: !root.helperReady ? setupComponent : (root.tabComponents[root.shownTab] ?? null)
                         }
+                    }
+
+                    HealthSnackbar {
+                        id: snackbar
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: ClockStyle.gapLarge
+                        anchors.bottomMargin: ClockStyle.gapLarge
+                        // Clear of the FAB beside it.
+                        anchors.rightMargin: ClockStyle.gapLarge + (pageFab.shown ? pageFab.width + ClockStyle.gap : 0)
+                        z: 6
                     }
 
                     FloatingActionButton {

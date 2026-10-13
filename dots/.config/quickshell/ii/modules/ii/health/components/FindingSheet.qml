@@ -40,8 +40,9 @@ ClockSheet {
 
     property var logLines: []
     property bool logLoading: false
-    property string busyVerb: ""
-    property string actionError: ""
+    /// The verb of the action running on this finding, "" when none.
+    readonly property var action: HealthService.action(root.findingId)
+    readonly property string busyVerb: root.action?.state === "running" || root.action?.state === "waiting" ? root.action.verb : ""
 
     title: root.f ? HealthText.title(root.f) : ""
     subtitle: root.resolved ? Translation.tr("Resolved") : (root.f ? HealthText.severityLabel(root.f.sev) : "")
@@ -68,15 +69,8 @@ ClockSheet {
     }
 
     function run(verb): void {
-        root.busyVerb = verb;
-        root.actionError = "";
-        HealthService.act(verb, { scope: root.d.scope, unit: root.d.unit, drive: root.d.path }, (ok, data, error) => {
-            root.busyVerb = "";
-            if (!ok)
-                root.actionError = error === "auth" || error === "denied"
-                    ? Translation.tr("The password prompt was dismissed.")
-                    : Translation.tr("It did not work: %1").arg(error || "?");
-            else
+        HealthService.runAction(root.findingId, verb, ok => {
+            if (ok)
                 Qt.callLater(root.loadLog);
         });
     }
@@ -251,13 +245,9 @@ ClockSheet {
         loading: root.logLoading
     }
 
-    StyledText {
+    HealthActionStatus {
         Layout.fillWidth: true
-        visible: root.actionError.length > 0
-        text: root.actionError
-        wrapMode: Text.Wrap
-        font.pixelSize: ClockStyle.textSmall
-        color: ClockStyle.colError
+        findingId: root.findingId
     }
 
     actions: [
@@ -275,7 +265,7 @@ ClockSheet {
             primary: true
             danger: fix?.verb === "disable"
             enabled: root.busyVerb.length === 0
-            label: root.busyVerb.length > 0 ? Translation.tr("Working…") : (fix?.label ?? "")
+            label: root.busyVerb.length > 0 ? HealthService.actionText(root.action) : (fix?.label ?? "")
             symbol: fix?.verb === "disable" ? "block" : fix?.verb === "stop" ? "stop" : "restart_alt"
             onClicked: root.run(fix.verb)
         },

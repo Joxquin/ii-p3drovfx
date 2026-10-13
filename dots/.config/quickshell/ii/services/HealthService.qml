@@ -108,6 +108,39 @@ Singleton {
         return root.findingsById[String(id)] ?? null;
     }
 
+    /// Whether the subject of an assistant key ("finding:<id>", "journal:<fp>",
+    /// "crash:<exe>", "overview") is still there. Only meaningful once `synced`.
+    function subjectExists(key): bool {
+        key = String(key ?? "");
+        if (key.startsWith("finding:"))
+            return root.finding(key.slice(8)) !== null;
+        if (key.startsWith("journal:"))
+            return root.journal.groups.some(g => g.fp === key.slice(8));
+        if (key.startsWith("crash:"))
+            return root.crashGroup(key.slice(6)) !== null;
+        return true;
+    }
+
+    /// The assistant key a finding's answer is kept under: crashes and journal groups
+    /// are asked about on their own pages, under keys equal to their finding ids.
+    function answerKey(f): string {
+        if (!f)
+            return "";
+        return f.kind === "crash" || f.kind === "journal" ? String(f.id) : `finding:${f.id}`;
+    }
+
+    /// Opens the app on an assistant key's subject: crash and journal keys are
+    /// finding ids already.
+    function openSubject(key): void {
+        key = String(key ?? "");
+        if (key.startsWith("finding:"))
+            root.openFinding(key.slice(8));
+        else if (key.startsWith("journal:") || key.startsWith("crash:"))
+            root.openFinding(key);
+        else
+            GlobalStates.openHealthApp("overview", "");
+    }
+
     // ── Talking to the helper ───────────────────────────────────────────
     property int _req: 0
     property var _callbacks: ({})
@@ -226,7 +259,7 @@ Singleton {
                 delete next[msg.req];
                 root._callbacks = next;
                 try {
-                    cb(msg.ok === true, msg.data ?? null, String(msg.error ?? ""));
+                    cb(msg.ok === true, msg.data ?? null, String(msg.error ?? ""), String(msg.message ?? ""));
                 } catch (e) {
                     console.warn("[Health] reply handler failed:", e);
                 }
@@ -247,6 +280,7 @@ Singleton {
             delete next[msg.id];
             root.findingsById = next;
             root.dropHeld(String(msg.id));
+            root._actionResolved(String(msg.id));
             return;
         }
         const f = msg.f;
@@ -389,19 +423,142 @@ Singleton {
     }
 
     function runPrimaryFix(id, callback): void {
+        const fix = root.primaryFix(root.finding(id));
+        if (fix)
+            root.runAction(id, fix.verb, callback);
+    }
+
+    // ── Actions and how they went ───────────────────────────────────────
+    // Every button that changes something goes through runAction, so the row, the
+    // sheet, the island strip and the assistant's card all show the same outcome.
+    // A reply only says systemd queued the job; whether a restart fixed anything
+    // shows when the finding resolves, so a restart waits for that.
+    /// finding id → { verb, state, message, at }. state: "running", "waiting" (queued,
+    /// watching the finding), "done", "stillFailing", "cancelled", "failed".
+    property var actions: ({})
+    /// How long a restart may take to clear its finding before it counts as failing.
+    readonly property int actionSettleMs: 15000
+
+    function action(id): var {
+        return root.actions[String(id)] ?? null;
+    }
+
+    /// An action reached its outcome: done, stillFailing, cancelled or failed. The app's
+    /// snackbar says so, since a fixed finding's row is gone by then.
+    signal actionSettled(string id, var action)
+
+    function _setAction(id, fields): void {
+        const next = Object.assign({}, root.actions);
+        if (fields === null)
+            delete next[id];
+        else
+            next[id] = Object.assign({}, next[id] ?? {}, fields, { at: Date.now() });
+        root.actions = next;
+        if (fields && ["done", "stillFailing", "cancelled", "failed"].includes(fields.state))
+            root.actionSettled(id, next[id]);
+    }
+
+    function _actionResolved(id): void {
+        const a = root.actions[id];
+        if (a && (a.state === "running" || a.state === "waiting"))
+            root._setAction(id, { state: "done" });
+    }
+
+    /// Runs `verb` on finding `id`; `callback(ok)` runs once the reply is in.
+    function runAction(id, verb, callback): void {
+        id = String(id);
         const f = root.finding(id);
-        const fix = root.primaryFix(f);
-        if (!fix)
-            return;
-        const d = f.data ?? {};
-        if (fix.verb === "copyReport") {
-            root.copyCrashReport(String(d.exe ?? ""));
+        const d = f?.data ?? {};
+        const finish = ok => {
             if (callback)
-                callback(true, null, "");
-        } else if (fix.verb === "reboot") {
+                callback(ok);
+        };
+        if (verb === "reboot") {
             GlobalStates.sessionOpen = true;
-        } else {
-            root.act(fix.verb, { scope: d.scope, unit: d.unit }, callback);
+            finish(true);
+            return;
+        }
+        // The title is kept: a restart that works takes the finding with it.
+        root._setAction(id, { verb: verb, state: "running", message: "", title: f ? HealthText.title(f) : "" });
+        if (verb === "copyReport") {
+            root.copyCrashReport(String(d.exe ?? ""), () => {
+                root._setAction(id, { state: "done" });
+                finish(true);
+            });
+            return;
+        }
+        root.act(verb, { scope: d.scope, unit: d.unit, drive: d.path }, (ok, data, error, message) => {
+            if (!ok) {
+                // "denied" is polkit: the prompt was dismissed or the password refused.
+                root._setAction(id, { state: error === "denied" ? "cancelled" : "failed", message: message || error });
+                finish(false);
+                return;
+            }
+            if (verb === "disable" && f) {
+                // Disabling leaves the unit in its failed state; clearing it is the
+                // rest of what "stop trying" means.
+                root.act("resetFailed", { scope: d.scope, unit: d.unit });
+            }
+            const watch = (verb === "restart" || verb === "resetFailed" || verb === "disable") && root.finding(id) !== null;
+            root._setAction(id, { state: watch ? "waiting" : "done" });
+            finish(true);
+        });
+    }
+
+    /// One line for an action's state, for every surface that shows it.
+    function actionText(a): string {
+        if (!a)
+            return "";
+        const v = a.verb;
+        switch (a.state) {
+        case "running":
+        case "waiting":
+            return v === "restart" ? Translation.tr("Restarting…") : v === "stop" ? Translation.tr("Stopping…")
+                : v === "disable" ? Translation.tr("Disabling…") : v === "resetFailed" ? Translation.tr("Clearing…")
+                : v === "selftest" ? Translation.tr("Starting a self-test…") : v === "copyReport" ? Translation.tr("Copying…")
+                : Translation.tr("Working…");
+        case "done":
+            return v === "restart" ? Translation.tr("Restarted") : v === "stop" ? Translation.tr("Stopped")
+                : v === "disable" ? Translation.tr("Disabled") : v === "resetFailed" ? Translation.tr("Cleared")
+                : v === "selftest" ? Translation.tr("Self-test started") : v === "copyReport" ? Translation.tr("Report copied")
+                : Translation.tr("Done");
+        case "stillFailing":
+            return v === "restart" ? Translation.tr("Restarted, but it failed again") : Translation.tr("Done, but it is still failing");
+        case "cancelled":
+            return Translation.tr("Cancelled: the password was not given");
+        case "failed":
+            return Translation.tr("It did not work: %1").arg(a.message || "?");
+        default:
+            return "";
+        }
+    }
+
+    // Settles restarts that did not clear their finding, and lets finished states go:
+    // a success after a few seconds, a failure after a minute.
+    Timer {
+        id: actionSweep
+        interval: 1000
+        repeat: true
+        running: Object.keys(root.actions).length > 0
+        onTriggered: {
+            const now = Date.now();
+            let changed = false;
+            const next = Object.assign({}, root.actions);
+            for (const id of Object.keys(next)) {
+                const a = next[id];
+                const age = now - (a.at ?? now);
+                if (a.state === "waiting" && age > root.actionSettleMs) {
+                    next[id] = Object.assign({}, a, { state: root.finding(id) ? "stillFailing" : "done", at: now });
+                    changed = true;
+                    Qt.callLater(() => root.actionSettled(id, next[id]));
+                } else if ((a.state === "done" && age > 4000) || (a.state === "cancelled" && age > 6000)
+                        || ((a.state === "failed" || a.state === "stillFailing") && age > 60000)) {
+                    delete next[id];
+                    changed = true;
+                }
+            }
+            if (changed)
+                root.actions = next;
         }
     }
 
@@ -419,6 +576,20 @@ Singleton {
 
     // ── Crash reports ───────────────────────────────────────────────────
     readonly property bool redact: root.opts?.assistant?.redact ?? true
+
+    /// Puts this machine's names back into a command the assistant wrote with the
+    /// redacted placeholders. "" when one is left that only the user can fill in
+    /// (an address).
+    function unredactCommand(text): string {
+        let s = String(text ?? "");
+        const userName = root.user || String(Quickshell.env("USER") ?? "");
+        const host = hostnameFile.text().trim();
+        if (userName.length > 0)
+            s = s.split("<user>").join(userName);
+        if (host.length > 0)
+            s = s.split("<host>").join(host);
+        return /<(ip|mac|user|host)>/.test(s) ? "" : s;
+    }
 
     /// Replaces what identifies this machine or this person in text that may leave it.
     function redactText(text): string {

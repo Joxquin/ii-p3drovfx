@@ -208,10 +208,10 @@ QtObject {
         case "stop":
         case "disable":
         case "resetFailed":
-            HealthService.act(p.verb, { scope: d.scope, unit: d.unit });
-            break;
+        case "selftest":
         case "copyReport":
-            HealthService.copyCrashReport(String(d.exe ?? ""));
+            // Through runAction, so the card shows how it went.
+            HealthService.runAction(f.id, p.verb);
             break;
         case "muteProgram":
             HealthService.muteProgram(String(d.exe ?? ""));
@@ -221,9 +221,6 @@ QtObject {
             break;
         case "mute":
             HealthService.mute(f.fp);
-            break;
-        case "selftest":
-            HealthService.act("selftest", { drive: d.path });
             break;
         case "cleanJournal":
             HealthService.cleanup("journal");

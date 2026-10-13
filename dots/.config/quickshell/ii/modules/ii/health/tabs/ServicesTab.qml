@@ -80,7 +80,7 @@ Item {
     }
 
     function run(f, verb): void {
-        HealthService.act(verb, { scope: f.data?.scope, unit: f.data?.unit });
+        HealthService.runAction(f.id, verb);
     }
 
     Component {
@@ -244,12 +244,21 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
+                    visible: !rowStatus.visible
                     text: [row.d.unit, row.d.scope === "user" ? Translation.tr("user") : Translation.tr("system"),
                         row.finding?.kind === "restartLoop" ? Translation.tr("%1 restarts in 10 minutes").arg(row.d.nRestarts ?? 0) : HealthText.unitWhy(row.d)].join(" · ")
                     elide: Text.ElideRight
                     font.pixelSize: ClockStyle.textSmall
                     color: row.colContent
                     opacity: 0.75
+                }
+
+                // While an action runs, and after one that did not fix it.
+                HealthActionStatus {
+                    id: rowStatus
+                    Layout.fillWidth: true
+                    findingId: row.finding?.id ?? ""
+                    colContent: row.colContent
                 }
             }
 
@@ -266,6 +275,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: ClockStyle.gapTiny
                     opacity: row.revealProgress
+                    enabled: !rowStatus.busy
 
                     ClockCardAction {
                         visible: row.finding?.kind !== "appLaunch"
@@ -288,6 +298,13 @@ Item {
                         onClicked: root.run(row.finding, "disable")
                     }
                 }
+            }
+
+            HealthAnswerMark {
+                Layout.alignment: Qt.AlignVCenter
+                assistant: root.assistant
+                key: HealthService.answerKey(row.finding)
+                color: row.colContent
             }
 
             StyledText {

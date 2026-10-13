@@ -282,6 +282,13 @@ Item {
                 color: row.isNew ? ClockStyle.colError : ClockStyle.colSubtext
             }
 
+            HealthAnswerMark {
+                Layout.alignment: Qt.AlignVCenter
+                assistant: root.assistant
+                key: row.group ? `journal:${row.group.fp}` : ""
+                color: ClockStyle.colOnSurface
+            }
+
             StyledText {
                 Layout.minimumWidth: 44
                 horizontalAlignment: Text.AlignRight

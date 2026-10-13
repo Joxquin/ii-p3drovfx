@@ -51,6 +51,10 @@ Item {
     /// Folded while it streams; carried into the saved answer.
     property bool liveFolded: false
 
+    /// A run finished and its answer is saved under `key`. The app says so when the
+    /// sheet or stage it was asked from has been closed meanwhile.
+    signal answerReady(string key, string question)
+
     function isOpenOn(key): bool {
         return root.expanded && root.subjectKey === key;
     }
@@ -220,13 +224,16 @@ Item {
             // where it outlives the window.
             onFinished: result => {
                 const streamed = root.answer.trim();
-                HealthAnswers.put(root.runKey, {
-                    question: root.question,
+                const key = root.runKey;
+                const question = root.question;
+                HealthAnswers.put(key, {
+                    question: question,
                     answer: streamed.length > 0 ? streamed : String(result ?? "").trim(),
                     proposal: root.proposal,
                     folded: root.liveFolded
                 });
                 root.clearRun();
+                root.answerReady(key, question);
                 Ai.healthIntegration.activeKey = "";
             }
             onFailed: error => {

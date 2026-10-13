@@ -38,6 +38,40 @@ ColumnLayout {
     readonly property var shownProposal: root.live ? root.assistant.proposal : (root.saved?.proposal ?? null)
     readonly property bool folded: root.live ? root.assistant.liveFolded : root.saved?.folded === true
     readonly property bool showAnswer: root.live || root.saved !== null
+    /// The saved answer's subject has gone: the unit recovered, the crash group aged
+    /// out. Its fix has nothing left to act on.
+    readonly property bool gone: !root.live && root.saved !== null && HealthService.synced && !HealthService.subjectExists(root.key)
+
+    // Folded once when its subject goes, so a fixed problem's answer shrinks out of
+    // the way; unfolding it again sticks.
+    onGoneChanged: {
+        if (root.gone && root.saved?.autoFolded !== true)
+            HealthAnswers.patch(root.key, { folded: true, autoFolded: true });
+    }
+
+    /// The answer cut at its ``` fences: [{ code, text, lang, open }]. A fence not yet
+    /// closed (the answer is still streaming into it) is code already, marked open.
+    readonly property var answerSegments: {
+        const text = root.shownAnswer;
+        const out = [];
+        const fence = /```([^\n`]*)\n?([\s\S]*?)(```|$)/g;
+        let last = 0;
+        let m;
+        while ((m = fence.exec(text)) !== null) {
+            if (m.index > last)
+                out.push({ code: false, text: text.slice(last, m.index), lang: "", open: false });
+            out.push({ code: true, text: m[2].replace(/\n+$/, ""), lang: m[1].trim(), open: m[3] !== "```" });
+            last = fence.lastIndex;
+            if (m[3] !== "```")
+                break;
+        }
+        if (last < text.length)
+            out.push({ code: false, text: text.slice(last), lang: "", open: false });
+        return out.filter(s => s.code ? s.text.length > 0 || s.open : s.text.trim().length > 0);
+    }
+
+    /// The finding whose proposed fix was clicked on this card, for its status line.
+    property string ranFindingId: ""
 
     /// The card is folding away; the answer is cleared only once it is gone, so its text
     /// does not vanish first and leave a header-sized card to snap out.
@@ -226,6 +260,33 @@ ColumnLayout {
                     }
                 }
 
+                // How old a saved answer is, and whether what it was about is fixed.
+                Rectangle {
+                    visible: root.gone
+                    implicitWidth: goneText.implicitWidth + ClockStyle.gap * 2
+                    implicitHeight: goneText.implicitHeight + 4
+                    radius: height / 2
+                    color: Qt.rgba(root.colOnCard.r, root.colOnCard.g, root.colOnCard.b, 0.14)
+
+                    StyledText {
+                        id: goneText
+                        anchors.centerIn: parent
+                        text: Translation.tr("Fixed since")
+                        font.pixelSize: ClockStyle.textSmall
+                        font.weight: Font.Bold
+                        color: root.colOnCard
+                    }
+                }
+
+                StyledText {
+                    visible: !root.live && (root.saved?.at ?? 0) > 0
+                    text: HealthText.age(root.saved?.at, Date.now())
+                    font.pixelSize: ClockStyle.textSmall
+                    font.features: { "tnum": 1 }
+                    color: root.colOnCard
+                    opacity: 0.7
+                }
+
                 ClockIconButton {
                     visible: root.shownAnswer.length > 0 && !root.running && !root.folded
                     symbol: "content_copy"
@@ -279,24 +340,59 @@ ColumnLayout {
                     }
                     spacing: ClockStyle.gapSmall
 
-                    StyledText {
-                        Layout.fillWidth: true
-                        visible: root.shownAnswer.length > 0
-                        text: root.shownAnswer
-                        textFormat: Text.MarkdownText
-                        wrapMode: Text.Wrap
-                        font.pixelSize: ClockStyle.textNormal
-                        color: root.colOnCard
-                        onLinkActivated: link => Qt.openUrlExternally(link)
+                    // Prose as Markdown, fenced code as blocks with Copy and Run.
+                    Repeater {
+                        model: root.answerSegments
+
+                        Loader {
+                            id: segment
+                            required property var modelData
+                            Layout.fillWidth: true
+                            sourceComponent: segment.modelData.code ? codeSegment : textSegment
+
+                            Component {
+                                id: textSegment
+                                StyledText {
+                                    text: segment.modelData.text
+                                    textFormat: Text.MarkdownText
+                                    wrapMode: Text.Wrap
+                                    font.pixelSize: ClockStyle.textNormal
+                                    color: root.colOnCard
+                                    onLinkActivated: link => Qt.openUrlExternally(link)
+                                }
+                            }
+
+                            Component {
+                                id: codeSegment
+                                HealthCodeBlock {
+                                    code: segment.modelData.text
+                                    lang: segment.modelData.lang
+                                    streaming: segment.modelData.open && root.running
+                                    colOnCard: root.colOnCard
+                                }
+                            }
+                        }
                     }
 
                     ClockButton {
                         visible: root.shownProposal !== null && !root.running
                         Layout.topMargin: ClockStyle.gapTiny
                         variant: "filled"
-                        symbol: "touch_app"
-                        label: root.shownProposal?.label ?? ""
-                        onClicked: root.assistant.runProposal(root.key)
+                        symbol: root.gone ? "check" : "touch_app"
+                        enabled: !root.gone
+                        label: root.gone ? Translation.tr("This problem is gone") : (root.shownProposal?.label ?? "")
+                        onClicked: {
+                            root.ranFindingId = String(root.shownProposal?.findingId ?? "");
+                            root.assistant.runProposal(root.key);
+                        }
+                    }
+
+                    // The button is used up once clicked; how its action went shows here.
+                    HealthActionStatus {
+                        Layout.fillWidth: true
+                        Layout.topMargin: ClockStyle.gapTiny
+                        findingId: root.ranFindingId
+                        colContent: root.colOnCard
                     }
 
                     StyledText {
