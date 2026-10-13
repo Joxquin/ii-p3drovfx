@@ -185,6 +185,12 @@ ClockSheet {
                 ["autorenew", S.Cookie7Sided, Translation.tr("Charge cycles"), d.cycles ? String(Math.round(d.cycles)) : "—"],
                 ["battery_full", S.Cookie9Sided, Translation.tr("Model"), d.model ?? "—"]
             ];
+        case "peripheralBattery":
+            return [
+                ["battery_low", S.Sunny, Translation.tr("Charge"), `${Math.round(Number(d.capacity ?? 0))} %`],
+                ["mouse", S.Cookie7Sided, Translation.tr("Device"), d.model || d.name || "—"],
+                ["power", S.Cookie9Sided, Translation.tr("Status"), d.status ?? "—"]
+            ];
         case "gpu":
             return Array.from(d.gpus ?? []).map(g => ["developer_board", S.Cookie12Sided, g.model || g.vendor || g.card, g.driver ?? ""])
                 .concat(Object.entries(d.drivers ?? {}).map(([drv, n]) => ["restart_alt", S.Sunny, Translation.tr("Resets by %1").arg(drv), String(n)]));
@@ -407,6 +413,14 @@ ClockSheet {
             label: fix?.label ?? ""
             symbol: root.kind === "config" ? "settings" : "terminal"
             onClicked: HealthService.runAction(root.findingId, fix.verb)
+        },
+        ClockSheetAction {
+            // Prebuilt packages beside rebuildable ones: their fix is an install.
+            visible: root.kind === "rebuild" && !root.resolved && HealthService.primaryFix(root.f)?.verb === "rebuild"
+                && HealthService.missingPrebuiltLibs(root.d).length > 0
+            label: Translation.tr("Find the missing libraries")
+            symbol: "search"
+            onClicked: HealthService.runAction(root.findingId, "findLibs")
         },
         ClockSheetAction {
             // A missing program's fix is Disable; Restart stays one tap away.

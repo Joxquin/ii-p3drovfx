@@ -270,7 +270,9 @@ Singleton {
             return p.built && p.installed ? Translation.tr("built for Qt %1, Qt %2 is installed").arg(p.built).arg(p.installed)
                 : Translation.tr("built for another Qt");
         case "lib":
-            return Translation.tr("cannot find %1").arg(Array.from(p.libs ?? []).slice(0, 3).join(", "));
+            return p.prebuilt
+                ? Translation.tr("cannot find %1; it ships prebuilt, so install what provides it rather than rebuilding").arg(Array.from(p.libs ?? []).slice(0, 3).join(", "))
+                : Translation.tr("cannot find %1").arg(Array.from(p.libs ?? []).slice(0, 3).join(", "));
         case "qt":
             return Translation.tr("uses Qt internals and was built before Qt %1").arg(p.qt ?? "");
         case "python":

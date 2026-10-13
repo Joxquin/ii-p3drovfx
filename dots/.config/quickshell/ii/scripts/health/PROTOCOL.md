@@ -147,7 +147,10 @@ Kinds and their `data`:
   `lib` (`libs`: libraries a runnable program of the package needs, directly or
   through the package's own libraries, that the loader would not find), `qt` (uses
   `Qt_6_PRIVATE_API` and was installed before the last qt6-base minor change; `qt`),
-  `python` (`python`: its `python3.N` dirs, `current`). Only foreign packages
+  `python` (`python`: its `python3.N` dirs, `current`). `prebuilt`: the package ships
+  ready-made programs (its PKGBUILD in the yay or paru cache has no `build()`, or
+  without one, its name ends in `-bin`), so a rebuild would not fix it; installing
+  what provides the library would. Only foreign packages
   (`pacman -Qm`) and Quickshell are looked at. Programs built for another machine
   type or libc (no interpreter on this system) and plugins nothing runnable links
   are not checked. Scanned 10 s after start, after every package transaction and on

@@ -169,6 +169,28 @@ fn missing_libs(facts: &Facts, system: &[PathBuf]) -> Vec<String> {
     missing
 }
 
+/// Whether the package ships ready-made programs, so a rebuild only downloads the
+/// same files again: its PKGBUILD in the AUR helper's cache has no build(), or,
+/// with no PKGBUILD at hand, its name ends in -bin.
+fn prebuilt(name: &str, key: &str) -> bool {
+    let desc = std::fs::read_to_string(Path::new(LOCAL_DB).join(key).join("desc")).unwrap_or_default();
+    let base = desc.lines().skip_while(|l| *l != "%BASE%").nth(1).unwrap_or(name).to_string();
+    let home = crate::proto::home_dir();
+    for dir in [format!("{home}/.cache/yay/{base}"), format!("{home}/.cache/paru/clone/{base}")] {
+        if let Ok(pkgbuild) = std::fs::read_to_string(Path::new(&dir).join("PKGBUILD")) {
+            return !has_build_step(&pkgbuild);
+        }
+    }
+    name.ends_with("-bin")
+}
+
+fn has_build_step(pkgbuild: &str) -> bool {
+    pkgbuild.lines().any(|l| {
+        let t = l.trim_start();
+        t.starts_with("build()") || t.starts_with("build ()") || t.starts_with("function build")
+    })
+}
+
 fn install_ms(key: &str) -> u64 {
     let desc = std::fs::read_to_string(Path::new(LOCAL_DB).join(key).join("desc")).unwrap_or_default();
     let mut lines = desc.lines();
@@ -257,20 +279,20 @@ pub fn scan(cache: &mut Cache) -> Vec<Value> {
         let facts = cache.entry(key.clone()).or_insert_with(|| inspect(&key));
         let missing = missing_libs(facts, &system);
         if !missing.is_empty() {
-            out.push(json!({"name": name, "reason": "lib", "foreign": true, "libs": missing}));
+            out.push(json!({"name": name, "reason": "lib", "foreign": true, "prebuilt": prebuilt(name, &key), "libs": missing}));
             continue;
         }
         if facts.qt_private {
             let (at, to) = bump.get_or_insert_with(qt_minor_bump).clone();
             if at > 0 && install_ms(&key) < at {
-                out.push(json!({"name": name, "reason": "qt", "foreign": true, "qt": to}));
+                out.push(json!({"name": name, "reason": "qt", "foreign": true, "prebuilt": prebuilt(name, &key), "qt": to}));
                 continue;
             }
         }
         if let Some(py) = &python {
             let stale: Vec<&String> = facts.python.iter().filter(|p| *p != py).collect();
             if !stale.is_empty() {
-                out.push(json!({"name": name, "reason": "python", "foreign": true, "python": stale, "current": py}));
+                out.push(json!({"name": name, "reason": "python", "foreign": true, "prebuilt": prebuilt(name, &key), "python": stale, "current": py}));
             }
         }
     }
@@ -324,6 +346,16 @@ mod tests {
         };
         assert_eq!(missing_libs(&facts, &system_lib_dirs()), vec!["libgone-ii.so.1".to_string()]);
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn build_step_tells_prebuilt_from_source() {
+        assert!(has_build_step("pkgname=x\nbuild() {\n  make\n}\npackage() {\n}\n"));
+        assert!(has_build_step("build () {\n}"));
+        assert!(!has_build_step("pkgname=x-bin\nsource=(x.deb)\npackage() {\n  bsdtar -xf data.tar.zst\n}\n"));
+        // A name with no PKGBUILD in any cache falls back to the -bin convention.
+        assert!(prebuilt("nonexistent-ii-test-bin", "nonexistent-ii-test-bin-1-1"));
+        assert!(!prebuilt("nonexistent-ii-test", "nonexistent-ii-test-1-1"));
     }
 
     #[test]

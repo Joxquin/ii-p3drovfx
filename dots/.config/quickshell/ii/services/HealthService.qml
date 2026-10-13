@@ -486,8 +486,11 @@ Singleton {
             return { label: Translation.tr("Copy report"), verb: "copyReport" };
         case "reboot":
             return { label: Translation.tr("Restart"), verb: "reboot" };
-        case "rebuild":
-            return { label: Translation.tr("Rebuild in a terminal"), verb: "rebuild" };
+        case "rebuild": {
+            const n = root.rebuildable(d).length + (Array.from(d.packages ?? []).some(p => p.reason === "quickshell") ? 1 : 0);
+            return n > 0 ? { label: HealthText.plural(n, Translation.tr("Rebuild %1 in a terminal"), Translation.tr("Rebuild %1 in a terminal")), verb: "rebuild" }
+                : { label: Translation.tr("Find the missing libraries"), verb: "findLibs" };
+        }
         case "shellHelper":
             return { label: Translation.tr("Rebuild"), verb: "rebuildHelper" };
         case "config":
@@ -506,9 +509,32 @@ Singleton {
         const pkgs = Array.from(d?.packages ?? []);
         if (pkgs.some(p => p.reason === "quickshell"))
             return ["bash", `${root.guardDir}/qs-rebuild.sh`];
-        const names = pkgs.filter(p => p.foreign !== false).map(p => String(p.name));
+        const names = root.rebuildable(d).map(p => String(p.name));
         const aur = String(d?.aurHelper ?? "") || "yay";
         return [aur, "-S", "--rebuild", ...names];
+    }
+
+    /// The packages a rebuild can fix: built on this machine. A prebuilt one (no
+    /// build() in its PKGBUILD, or a -bin) would only download the same files again.
+    function rebuildable(d): var {
+        return Array.from(d?.packages ?? []).filter(p => p.reason !== "quickshell" && p.foreign !== false && p.prebuilt !== true);
+    }
+
+    /// Libraries the prebuilt packages miss: installing what provides them is the fix.
+    function missingPrebuiltLibs(d): var {
+        const libs = [];
+        for (const p of Array.from(d?.packages ?? []).filter(p => p.prebuilt === true && p.reason === "lib"))
+            for (const lib of Array.from(p.libs ?? []))
+                if (!libs.includes(lib))
+                    libs.push(lib);
+        return libs;
+    }
+
+    /// pacman's file list knows which package provides a library; it is synced first,
+    /// since it is not by default.
+    function findLibsCommand(d): var {
+        const libs = root.missingPrebuiltLibs(d);
+        return ["bash", "-c", 'echo "Which packages provide these libraries:"; sudo pacman -Fy && pacman -F "$@"; echo; echo "Install the one listed (sudo pacman -S <package>), or its AUR package if none is."', "ii-health", ...libs];
     }
 
     function runPrimaryFix(id, callback): void {
@@ -568,8 +594,10 @@ Singleton {
             return;
         }
         // Handed to a terminal or another window: nothing to wait for here.
-        if (verb === "rebuild" || verb === "rebuildHelper" || verb === "openSettings") {
-            if (verb === "rebuild") {
+        if (verb === "rebuild" || verb === "findLibs" || verb === "rebuildHelper" || verb === "openSettings") {
+            if (verb === "findLibs") {
+                root.runInTerminal(root.findLibsCommand(d));
+            } else if (verb === "rebuild") {
                 const cmd = root.rebuildCommand(d);
                 // qs-rebuild.sh asks and waits for Enter itself.
                 if (cmd[0] === "bash")
