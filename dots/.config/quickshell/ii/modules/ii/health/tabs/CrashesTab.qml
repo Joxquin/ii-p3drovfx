@@ -453,37 +453,45 @@ Item {
             Repeater {
                 model: Array.from(lane.group?.events ?? [])
 
-                Rectangle {
+                // The mark's place, unrotated: the tooltip and the hover sit here, so
+                // the selected lane's diamond (rotated, scaled) does not throw the
+                // tooltip off to one side.
+                Item {
+                    id: mark
                     required property var modelData
-                    readonly property bool system: Number(modelData.uid ?? -1) === 0
+                    readonly property bool system: Number(mark.modelData.uid ?? -1) === 0
                     width: 12
                     height: 12
-                    x: Math.max(4, Math.min(track.width - 16, root.pos(modelData.time) * track.width - 6))
+                    x: Math.max(4, Math.min(track.width - 16, root.pos(mark.modelData.time) * track.width - 6))
                     anchors.verticalCenter: parent.verticalCenter
-                    radius: lane.isSelected ? 2 : 4
-                    rotation: lane.isSelected ? 45 : 0
-                    scale: lane.isSelected ? 1.25 : 1
-                    color: system ? "transparent" : ClockStyle.colError
-                    border.width: system ? 2.5 : 0
-                    border.color: ClockStyle.colError
 
-                    Behavior on rotation {
-                        enabled: !ClockStyle.reducedMotion
-                        animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
-                    }
-                    Behavior on scale {
-                        enabled: !ClockStyle.reducedMotion
-                        animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: lane.isSelected ? 2 : 4
+                        rotation: lane.isSelected ? 45 : 0
+                        scale: lane.isSelected ? 1.25 : 1
+                        color: mark.system ? "transparent" : ClockStyle.colError
+                        border.width: mark.system ? 2.5 : 0
+                        border.color: ClockStyle.colError
+
+                        Behavior on rotation {
+                            enabled: !ClockStyle.reducedMotion
+                            animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
+                        }
+                        Behavior on scale {
+                            enabled: !ClockStyle.reducedMotion
+                            animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
+                        }
                     }
 
                     HoverHandler {
                         id: markHover
                     }
-                    // Only on hover: a Rectangle has no hover of its own, which a
-                    // tooltip reads as always hovered.
+                    // Only on hover: an Item has no hover of its own, which a tooltip
+                    // reads as always hovered.
                     StyledToolTip {
                         extraVisibleCondition: markHover.hovered
-                        text: `${HealthText.dayName(modelData.time, root.now)} ${Qt.formatTime(new Date(Number(modelData.time)), "hh:mm")} · ${HealthText.signalName(modelData.signal)}`
+                        text: `${HealthText.dayName(mark.modelData.time, root.now)} ${Qt.formatTime(new Date(Number(mark.modelData.time)), "hh:mm")} · ${HealthText.signalName(mark.modelData.signal)}`
                     }
                 }
             }
