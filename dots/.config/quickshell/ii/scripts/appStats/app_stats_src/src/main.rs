@@ -212,6 +212,9 @@ impl Tracker {
         );
         let energy = energy::Reader::new(&args.energy_source);
         let battery = battery::Reader::new();
+        // Read now rather than left false until the first tick, or the span before
+        // that tick is credited as time on battery.
+        let bat_on_ac = battery.on_ac();
         let now = store::now_ms();
 
         Tracker {
@@ -225,7 +228,7 @@ impl Tracker {
             locked: false,
             idle: false,
             dpms_off: false,
-            bat_on_ac: false,
+            bat_on_ac,
             bat_charging: false,
             last_accrual_ms: now,
             last_tick_ms: now,
@@ -476,6 +479,12 @@ impl Tracker {
                 b.out_uwh += uwh;
             }
             self.store.set_bat_full(full_mwh);
+        } else {
+            // The pack could not be read, but the mains line still can: crediting the
+            // next span against a state left over from before would put a night on the
+            // charger down as a night on battery.
+            self.bat_on_ac = self.battery.on_ac();
+            self.bat_charging = false;
         }
 
         let clients = self.clients.clone();

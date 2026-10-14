@@ -153,8 +153,10 @@ impl BatBucket {
             off_ac_ms: g(6) * 1000,
             charge_ms: g(7) * 1000,
             ac_ms: g(8) * 1000,
-            // An hour on disk was written from samples, so its opening level stands.
-            seen: true,
+            // An hour on disk with a level was written from samples, so its opening
+            // level stands. One without was written while the pack could not be read,
+            // and the first reading now is its opening level, not a drop from zero.
+            seen: g(3) > 0,
         }
     }
 }

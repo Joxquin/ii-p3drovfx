@@ -226,7 +226,9 @@ Item {
             inMwh: day.inMwh,
             offAc: day.offAc,
             charging: day.charging,
-            onAc: day.onAc
+            onAc: day.onAc,
+            pkgMwh: day.pkgMwh,
+            acPkgMwh: day.acPkgMwh
         }));
     }
 
@@ -272,6 +274,16 @@ Item {
     /// excluded, or a day spent mostly on AC would report a machine that sips.
     readonly property real averageWatts: root.rollup.offAc > 0
         ? root.rollup.outMwh / 1000 / (root.rollup.offAc / 3600) : NaN
+
+    /// Mean draw while plugged in, in watts: the package draw RAPL measured over that
+    /// time plus the rest of the machine as learned on battery. An estimate, and
+    /// labelled one — nothing on this hardware measures the adapter.
+    readonly property real pluggedWatts: {
+        const secs = root.rollup.charging + root.rollup.onAc;
+        if (secs <= 0 || isNaN(AppStats.platformWatts))
+            return NaN;
+        return root.rollup.acPkgMwh * 3.6 / secs + AppStats.platformWatts;
+    }
 
     /// How long a full charge lasts at that draw: this period's own behaviour rather
     /// than the firmware's guess, so it answers "at this rate".
@@ -347,6 +359,14 @@ Item {
             shown: true
         },
         {
+            symbol: "electrical_services",
+            label: Translation.tr("Plugged-in draw"),
+            value: isNaN(root.pluggedWatts) ? "—" : `≈ ${root.pluggedWatts.toFixed(1)} W`,
+            caption: Translation.tr("package measured, %1 W for the rest learned on battery")
+                .arg(AppStats.platformWatts.toFixed(1)),
+            shown: !isNaN(root.pluggedWatts)
+        },
+        {
             symbol: "trending_down",
             label: Translation.tr("Lowest level"),
             value: isNaN(root.rollup.low) ? "—" : `${Math.round(root.rollup.low)} %`,
@@ -384,8 +404,9 @@ Item {
     }
 
     onDatesChanged: AppStats.ensureDates(root.dates)
-    // The shell asks the sampler for a fresh flush once the window has opened.
-    Component.onCompleted: AppStats.ensureDates(root.dates)
+    // The shell asks the sampler for a fresh flush once the window has opened. The
+    // fortnight the plugged-in estimate learns from is loaded whatever is on screen.
+    Component.onCompleted: AppStats.ensureDates(root.dates.concat(AppStats.calibrationDates))
 
     // ── Pieces ──────────────────────────────────────────────────────────
     /// The pack: the level as a filled slab, the facts about it, and the period's chart.
@@ -1027,7 +1048,7 @@ Item {
                 Layout.leftMargin: ClockStyle.gap
                 Layout.bottomMargin: ClockStyle.gapSmall
                 title: root.isSingleDay ? Translation.tr("Hour by hour") : Translation.tr("Day by day")
-                subtitle: Translation.tr("Level at the close · energy out of the pack")
+                subtitle: Translation.tr("Level at the close · mean draw · energy out of the pack")
             }
 
             Repeater {
@@ -1116,7 +1137,11 @@ Item {
                                     const note = bucketRow.kind === "charge" ? Translation.tr("charging")
                                         : bucketRow.kind === "ac" ? Translation.tr("plugged in")
                                         : bucketRow.kind === "off" ? Translation.tr("on battery") : "";
-                                    return note.length > 0 ? `${level} · ${note}` : level;
+                                    // Measured off the pack on battery, estimated plugged in.
+                                    const draw = AppStats.drawWatts(bucketRow.bucket);
+                                    const watts = isNaN(draw.watts) ? ""
+                                        : `${draw.estimated ? "≈ " : ""}${draw.watts.toFixed(1)} W`;
+                                    return [level, note, watts].filter(part => part.length > 0).join(" · ");
                                 }
                                 font.pixelSize: ClockStyle.textSmall
                                 color: bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colSubtext
