@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -161,7 +162,10 @@ Item {
                 visible: root.rows.length > 0
 
                 Repeater {
-                    model: root.rows
+                    model: ScriptModel {
+                        values: root.rows
+                        objectProp: "id"
+                    }
 
                     UnitRow {
                         required property var modelData

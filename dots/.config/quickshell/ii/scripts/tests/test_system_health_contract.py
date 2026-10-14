@@ -252,6 +252,38 @@ class SurfaceTests(unittest.TestCase):
             uses = len(re.findall(rf"\b{name}\s*\{{", everything))
             self.assertGreater(uses, 0, f"{name} is never instantiated")
 
+    def test_tooltips_show_in_the_app(self):
+        # StyledToolTip stays hidden unless a listed overlay is open; testers found
+        # every tooltip in the app missing while it was not on the list.
+        tooltip = read("modules/common/widgets/StyledToolTip.qml")
+        self.assertIn("GlobalStates.healthAppOpen", tooltip.split("readonly property bool sidebarOpen:")[1].split("\n")[0])
+
+    def test_lists_that_refresh_on_their_own_keep_their_rows(self):
+        # A JS array model makes a Repeater rebuild every row, replaying the entrance
+        # animation: the flicker testers saw. These lists change while on screen.
+        for rel, key in (
+            ("modules/ii/health/tabs/SystemTab.qml", "symbol"),
+            ("modules/ii/health/components/HealthHardwareSection.qml", "key"),
+            ("modules/ii/health/tabs/StorageTab.qml", "mount"),
+            ("modules/ii/health/tabs/OverviewTab.qml", "id"),
+            ("modules/ii/health/tabs/ServicesTab.qml", "id"),
+            ("modules/ii/health/tabs/JournalTab.qml", "fp"),
+            ("modules/ii/health/tabs/CrashesTab.qml", "exe"),
+        ):
+            self.assertIn(f'objectProp: "{key}"', read(rel), rel)
+
+    def test_prebuilt_packages_get_their_libraries_installed(self):
+        script = ROOT / "scripts/health/install-missing-libs.sh"
+        self.assertTrue(script.is_file())
+        text = script.read_text(encoding="utf-8")
+        self.assertIn("pacman -Fy", text)
+        self.assertIn("pacman -S --needed", text)
+        self.assertIn("install-missing-libs.sh", SERVICE)
+
+    def test_rebuild_cache_notices_a_rebuild_with_the_same_version(self):
+        rebuild = read("scripts/health/health_watch_src/src/rebuild.rs")
+        self.assertRegex(rebuild, r'cache_key = format!\("\{key\}@\{\}", install_ms\(&key\)\)')
+
 
 if __name__ == "__main__":
     unittest.main()

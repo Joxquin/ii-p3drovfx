@@ -1308,6 +1308,8 @@ impl App {
             return;
         }
         self.rebuild_running = true;
+        // The app says "Checking again…" meanwhile, and when it last looked after.
+        emit(&json!({"t": "rebuildScan", "running": true, "at": now_ms()}));
         let cache = self.rebuild_cache.clone();
         let tx = self.tx.clone();
         std::thread::spawn(move || {
@@ -1321,6 +1323,7 @@ impl App {
 
     fn on_rebuild(&mut self, list: Vec<Value>) {
         self.rebuild_running = false;
+        emit(&json!({"t": "rebuildScan", "running": false, "at": now_ms(), "count": list.len()}));
         let mut fresh = Vec::new();
         if !list.is_empty() {
             let now = now_ms();
@@ -1526,6 +1529,8 @@ impl App {
         self.scan_drives();
         self.scan_fs();
         self.scan_system(true);
+        // "Check now" covers everything the pages show, the hardware cards included.
+        self.scan_hardware();
         self.vitals();
         self.dump_access = self.dump_access_state();
         emit(&json!({"t": "access", "dumpAccess": self.dump_access}));

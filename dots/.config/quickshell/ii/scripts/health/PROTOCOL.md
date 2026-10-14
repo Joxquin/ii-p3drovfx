@@ -309,6 +309,17 @@ and after each. `by` is the verb of the user's own action on that unit in the 2
 minutes before (`restart`, `disable`, …), else `"self"`. Not listed: `crash`,
 `journal` and `appLaunch` findings (ageing out is not a fix), and dismissed ones.
 
+### `rebuildScan`
+```json
+{"t":"rebuildScan","running":true,"at":1791990000000}
+{"t":"rebuildScan","running":false,"at":1791990004000,"count":2}
+```
+When the rebuild scan starts and ends (`count`: packages still listed), so the app can
+say the list is current. It runs 10 s after start, after every package transaction —
+a rebuild done in a terminal clears its own entry — and on `rescan`. Its ELF cache is
+keyed by package version and install date, so a rebuild that keeps the version is
+read again.
+
 ### `boot`
 ```json
 {"t":"boot","boots":[{"boot":"5b92…","at":1791890000000,"firmware":5193,"loader":2989,"kernel":3285,

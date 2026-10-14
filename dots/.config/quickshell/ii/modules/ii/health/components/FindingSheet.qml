@@ -362,7 +362,10 @@ ClockSheet {
     }
 
     Repeater {
-        model: root.rows
+        // Re-made whenever the finding is re-sent: rows update in place.
+        model: ScriptModel {
+            values: root.rows
+        }
 
         ClockFormPicker {
             required property var modelData
@@ -384,6 +387,28 @@ ClockSheet {
     HealthActionStatus {
         Layout.fillWidth: true
         findingId: root.findingId
+    }
+
+    // Whether this list is current: a rebuild done in the terminal is checked again
+    // as soon as pacman finishes, and its package leaves the list.
+    RowLayout {
+        Layout.fillWidth: true
+        visible: root.kind === "rebuild"
+        spacing: ClockStyle.gapSmall
+
+        MaterialLoadingIndicator {
+            visible: HealthService.rebuildScan.running
+            loading: visible
+            implicitSize: ClockStyle.textSmall + 8
+            color: "transparent"
+        }
+        StyledText {
+            Layout.fillWidth: true
+            text: HealthService.rebuildScanText()
+            wrapMode: Text.Wrap
+            font.pixelSize: ClockStyle.textSmall
+            color: ClockStyle.colSubtext
+        }
     }
 
     actions: [
@@ -415,10 +440,17 @@ ClockSheet {
             onClicked: HealthService.runAction(root.findingId, fix.verb)
         },
         ClockSheetAction {
+            visible: root.kind === "rebuild"
+            enabled: !HealthService.rebuildScan.running
+            label: Translation.tr("Check again")
+            symbol: "refresh"
+            onClicked: HealthService.rescan()
+        },
+        ClockSheetAction {
             // Prebuilt packages beside rebuildable ones: their fix is an install.
             visible: root.kind === "rebuild" && !root.resolved && HealthService.primaryFix(root.f)?.verb === "rebuild"
                 && HealthService.missingPrebuiltLibs(root.d).length > 0
-            label: Translation.tr("Find the missing libraries")
+            label: Translation.tr("Install the missing libraries")
             symbol: "search"
             onClicked: HealthService.runAction(root.findingId, "findLibs")
         },

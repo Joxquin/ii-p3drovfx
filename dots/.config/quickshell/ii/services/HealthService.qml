@@ -131,6 +131,18 @@ Singleton {
     /// The latest `hardware` message: batteries, peripherals, gpus, cpu, memory,
     /// fans and this boot's hardware events. Null until the first one.
     property var hardware: null
+    /// The rebuild scan: whether it is running, and when it last started or finished.
+    /// It runs after every package transaction, so a rebuild clears its own entry.
+    property var rebuildScan: ({ running: false, at: 0, count: 0 })
+
+    /// "Checking again…" or "Checked at 14:05": whether the rebuild list is current.
+    function rebuildScanText(): string {
+        if (root.rebuildScan.running)
+            return Translation.tr("Checking again…");
+        if (!(root.rebuildScan.at > 0))
+            return "";
+        return Translation.tr("Checked at %1, and again after every package install.").arg(Qt.formatTime(new Date(root.rebuildScan.at), "hh:mm"));
+    }
 
     /// The last `days` daily values of a history field, oldest first, null for a day
     /// without a row (or, with `zeroIsGap`, a row whose value is 0: "not measured").
@@ -248,9 +260,15 @@ Singleton {
 
     function rescan(): void {
         root.synced = false;
+        root._rescanning = true;
         root.send({ t: "rescan" });
         root.refreshDumpAccess();
     }
+
+    /// A "Check now" finished. Findings that did not change are not re-sent, so a
+    /// list with nothing new looks the same: the app says so instead.
+    signal rescanned()
+    property bool _rescanning: false
 
     /// The app tells the helper when it is on screen, for 2 s vitals instead of 15 s.
     property bool appVisible: false
@@ -280,6 +298,10 @@ Singleton {
             break;
         case "synced":
             root.synced = true;
+            if (root._rescanning) {
+                root._rescanning = false;
+                root.rescanned();
+            }
             break;
         case "access":
             root.dumpAccess = String(msg.dumpAccess ?? root.dumpAccess);
@@ -320,6 +342,9 @@ Singleton {
             break;
         case "hardware":
             root.hardware = msg;
+            break;
+        case "rebuildScan":
+            root.rebuildScan = { running: msg.running === true, at: Number(msg.at ?? 0), count: Number(msg.count ?? 0) };
             break;
         case "reply": {
             const cb = root._callbacks[msg.req];
@@ -489,7 +514,7 @@ Singleton {
         case "rebuild": {
             const n = root.rebuildable(d).length + (Array.from(d.packages ?? []).some(p => p.reason === "quickshell") ? 1 : 0);
             return n > 0 ? { label: HealthText.plural(n, Translation.tr("Rebuild %1 in a terminal"), Translation.tr("Rebuild %1 in a terminal")), verb: "rebuild" }
-                : { label: Translation.tr("Find the missing libraries"), verb: "findLibs" };
+                : { label: Translation.tr("Install the missing libraries"), verb: "findLibs" };
         }
         case "shellHelper":
             return { label: Translation.tr("Rebuild"), verb: "rebuildHelper" };
@@ -530,11 +555,10 @@ Singleton {
         return libs;
     }
 
-    /// pacman's file list knows which package provides a library; it is synced first,
-    /// since it is not by default.
+    /// Finds the packages that provide the missing libraries (pacman's file list,
+    /// synced first) and installs them after asking: scripts/health/install-missing-libs.sh.
     function findLibsCommand(d): var {
-        const libs = root.missingPrebuiltLibs(d);
-        return ["bash", "-c", 'echo "Which packages provide these libraries:"; sudo pacman -Fy && pacman -F "$@"; echo; echo "Install the one listed (sudo pacman -S <package>), or its AUR package if none is."', "ii-health", ...libs];
+        return ["bash", `${root.helperDir}/install-missing-libs.sh`, ...root.missingPrebuiltLibs(d)];
     }
 
     function runPrimaryFix(id, callback): void {

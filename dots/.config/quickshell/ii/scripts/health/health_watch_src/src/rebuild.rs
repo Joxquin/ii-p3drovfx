@@ -12,8 +12,8 @@
 //!   the last qt6-base minor-version change: it breaks across minors.
 //! - Python modules under a `python3.N` that is not the installed one.
 //!
-//! The ELF tables are read once per package version and cached; whether their
-//! libraries still exist is checked again on every scan.
+//! The ELF tables are read once per package version and install and cached;
+//! whether their libraries still exist is checked again on every scan.
 
 use crate::{elf, packages, proto};
 use serde_json::{json, Value};
@@ -275,8 +275,11 @@ pub fn scan(cache: &mut Cache) -> Vec<Value> {
             continue;
         }
         let key = format!("{name}-{version}");
-        present.insert(key.clone());
-        let facts = cache.entry(key.clone()).or_insert_with(|| inspect(&key));
+        // A rebuild often keeps the version (a -git package with no new commit):
+        // the install date tells the new files from the ones cached.
+        let cache_key = format!("{key}@{}", install_ms(&key));
+        present.insert(cache_key.clone());
+        let facts = cache.entry(cache_key).or_insert_with(|| inspect(&key));
         let missing = missing_libs(facts, &system);
         if !missing.is_empty() {
             out.push(json!({"name": name, "reason": "lib", "foreign": true, "prebuilt": prebuilt(name, &key), "libs": missing}));

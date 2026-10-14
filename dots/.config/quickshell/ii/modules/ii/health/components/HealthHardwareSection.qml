@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -47,7 +48,7 @@ ColumnLayout {
             const f = HealthService.finding(`battery:${b.name}`);
             const h = Number(b.healthPct ?? NaN);
             out.push({
-                symbol: "battery_horiz_075", shape: S.Cookie9Sided, finding: f?.id ?? "", attention: !!f,
+                key: `battery:${b.name}`, symbol: "battery_horiz_075", shape: S.Cookie9Sided, finding: f?.id ?? "", attention: !!f,
                 title: Translation.tr("Battery"),
                 big: isNaN(h) ? "—" : `${Math.round(Math.min(100, h))}`, unit: isNaN(h) ? "" : Translation.tr("% of its design capacity"),
                 note: h > 100 ? Translation.tr("Reads %1 %, above its design: normal for a newer pack.").arg(h.toFixed(1))
@@ -64,7 +65,7 @@ ColumnLayout {
         if (peripherals.length > 0) {
             const low = peripherals.map(p => HealthService.finding(`peripheral:${p.name}`)).find(f => f) ?? null;
             out.push({
-                symbol: "mouse", shape: S.Clover4Leaf, finding: low?.id ?? "", attention: !!low,
+                key: "peripherals", symbol: "mouse", shape: S.Clover4Leaf, finding: low?.id ?? "", attention: !!low,
                 title: HealthText.plural(peripherals.length, Translation.tr("%1 wireless device"), Translation.tr("%1 wireless devices")),
                 big: "", unit: "",
                 facts: peripherals.map(p => [p.model || p.name, p.capacity !== null && p.capacity !== undefined ? `${Math.round(p.capacity)} %` : "—"])
@@ -74,7 +75,7 @@ ColumnLayout {
         const mce = HealthService.finding("mce");
         const overheat = HealthService.finding("overheat");
         out.push({
-            symbol: "memory", shape: S.Sunny, finding: (mce ?? overheat)?.id ?? "", attention: !!(mce || overheat),
+            key: "cpu", symbol: "memory", shape: S.Sunny, finding: (mce ?? overheat)?.id ?? "", attention: !!(mce || overheat),
             title: Translation.tr("Processor"),
             big: cpu.tempC !== null && cpu.tempC !== undefined ? `${Math.round(cpu.tempC)}` : "—", unit: "°C",
             note: mce ? HealthText.title(mce) : overheat ? HealthText.title(overheat) : "",
@@ -87,7 +88,7 @@ ColumnLayout {
         const resets = HealthService.finding("gpu:resets");
         for (const g of Array.from(hw.gpus ?? [])) {
             out.push({
-                symbol: "developer_board", shape: S.Cookie12Sided, finding: resets?.id ?? "", attention: !!resets,
+                key: `gpu:${g.card}`, symbol: "developer_board", shape: S.Cookie12Sided, finding: resets?.id ?? "", attention: !!resets,
                 title: g.model || [g.vendor, Translation.tr("graphics")].join(" "),
                 big: String(root.count("gpu")), unit: Translation.tr("resets this boot"),
                 note: resets ? HealthText.detail(resets, Date.now()) : "",
@@ -104,7 +105,7 @@ ColumnLayout {
         const edac = HealthService.finding("edac");
         const swapUsed = Number(mem.swapTotal ?? 0) - Number(mem.swapFree ?? 0);
         out.push({
-            symbol: "memory_alt", shape: S.Puffy, finding: (edac?.sev === "critical" ? edac : oom ?? edac)?.id ?? "", attention: !!(oom || edac?.sev === "critical"),
+            key: "memory", symbol: "memory_alt", shape: S.Puffy, finding: (edac?.sev === "critical" ? edac : oom ?? edac)?.id ?? "", attention: !!(oom || edac?.sev === "critical"),
             title: Translation.tr("Memory"),
             big: String(root.count("oom")), unit: Translation.tr("programs killed for memory this boot"),
             note: oom ? root.detailText("oom") : "",
@@ -119,7 +120,7 @@ ColumnLayout {
         if (fans.length > 0) {
             const stopped = HealthService.finding("fan:stopped");
             out.push({
-                symbol: "mode_fan", shape: S.Cookie7Sided, finding: stopped?.id ?? "", attention: !!stopped,
+                key: "fans", symbol: "mode_fan", shape: S.Cookie7Sided, finding: stopped?.id ?? "", attention: !!stopped,
                 title: Translation.tr("Fans"), big: "", unit: "",
                 note: stopped ? HealthText.title(stopped) : "",
                 facts: fans.map(f => [f.label, Translation.tr("%1 RPM").arg(Math.round(f.rpm))])
@@ -130,7 +131,7 @@ ColumnLayout {
         const pcie = HealthService.findingsOfKind("aer");
         const worst = pcie.find(f => f.sev === "critical") ?? radios[0] ?? usb[0] ?? pcie[0] ?? null;
         out.push({
-            symbol: "cable", shape: S.SoftBurst, finding: worst?.id ?? "", attention: !!worst && worst.sev !== "info",
+            key: "buses", symbol: "cable", shape: S.SoftBurst, finding: worst?.id ?? "", attention: !!worst && worst.sev !== "info",
             title: Translation.tr("Devices and buses"), big: "", unit: "",
             note: worst ? HealthText.title(worst) : Translation.tr("No firmware crashes or bus errors this boot."),
             facts: [
@@ -161,7 +162,12 @@ ColumnLayout {
         spacing: ClockStyle.paneGap
 
         Repeater {
-            model: root.cards
+            // Rebuilt on every hardware message: matched by key, so cards update in
+            // place instead of re-entering.
+            model: ScriptModel {
+                values: root.cards
+                objectProp: "key"
+            }
 
             HwCard {
                 required property var modelData

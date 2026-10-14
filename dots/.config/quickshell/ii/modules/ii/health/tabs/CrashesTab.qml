@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -231,7 +232,10 @@ Item {
                         spacing: ClockStyle.gap
 
                         Repeater {
-                            model: root.groups
+                            model: ScriptModel {
+                                values: root.groups
+                                objectProp: "exe"
+                            }
 
                             Lane {
                                 required property var modelData

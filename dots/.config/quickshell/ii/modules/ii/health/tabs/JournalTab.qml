@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -182,7 +183,10 @@ Item {
                 spacing: ClockStyle.gapTiny
 
                 Repeater {
-                    model: root.shown.slice(0, 150)
+                    model: ScriptModel {
+                        values: root.shown.slice(0, 150)
+                        objectProp: "fp"
+                    }
 
                     GroupRow {
                         required property var modelData

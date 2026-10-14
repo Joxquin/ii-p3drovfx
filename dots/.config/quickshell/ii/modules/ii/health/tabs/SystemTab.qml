@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -44,8 +45,9 @@ Item {
             out.push({
                 symbol: "construction", shape: S.Cookie12Sided, attention: !!rebuild, finding: rebuild?.id ?? "",
                 title: rebuild ? HealthText.title(rebuild) : Translation.tr("No package needs a rebuild"),
-                body: rebuild ? Array.from(rebuild.data?.packages ?? []).map(p => `${p.name}: ${HealthText.rebuildReason(p)}`).join("\n")
-                    : Translation.tr("Programs built on this computer still find their libraries, and Quickshell matches Qt.")
+                body: [rebuild ? Array.from(rebuild.data?.packages ?? []).map(p => `${p.name}: ${HealthText.rebuildReason(p)}`).join("\n")
+                    : Translation.tr("Programs built on this computer still find their libraries, and Quickshell matches Qt."),
+                    HealthService.rebuildScanText()].filter(s => s.length > 0).join("\n\n")
             });
         }
         // The shell itself: its settings file, its helpers, its memory and errors.
@@ -192,7 +194,12 @@ Item {
             }
 
             Repeater {
-                model: root.cards
+                // Rebuilt every vitals tick (the Shell card reads the shell's memory):
+                // matched by symbol, so cards update in place instead of re-entering.
+                model: ScriptModel {
+                    values: root.cards
+                    objectProp: "symbol"
+                }
 
                 CheckCard {
                     required property var modelData

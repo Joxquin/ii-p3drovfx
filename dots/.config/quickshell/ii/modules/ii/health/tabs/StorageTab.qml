@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -87,7 +88,11 @@ Item {
                 spacing: ClockStyle.paneGap
 
                 Repeater {
-                    model: root.filesystems
+                    // A new list on every vitals tick: matched by mount, updated in place.
+                    model: ScriptModel {
+                        values: root.filesystems
+                        objectProp: "mount"
+                    }
 
                     FilesystemPane {
                         required property var modelData
@@ -110,7 +115,10 @@ Item {
                 spacing: ClockStyle.paneGap
 
                 Repeater {
-                    model: root.drives
+                    model: ScriptModel {
+                        values: root.drives
+                        objectProp: "path"
+                    }
 
                     DrivePane {
                         required property var modelData

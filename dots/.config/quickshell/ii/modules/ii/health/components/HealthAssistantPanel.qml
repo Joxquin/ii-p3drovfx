@@ -61,7 +61,11 @@ ColumnLayout {
         spacing: ClockStyle.gapSmall
 
         Repeater {
-            model: root.segmentsOf(answerText.answer)
+            // A new list on every streamed chunk: compared by position and content,
+            // so only the segment that grew updates, and a code block keeps its state.
+            model: ScriptModel {
+                values: root.segmentsOf(answerText.answer)
+            }
 
             Loader {
                 id: segment

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -406,7 +407,10 @@ Item {
                 visible: !root.clear
 
                 Repeater {
-                    model: root.attention.slice(0, 3)
+                    model: ScriptModel {
+                        values: root.attention.slice(0, 3)
+                        objectProp: "id"
+                    }
 
                     // Each opens its finding where the fix lives; nothing runs from here.
                     ClockChip {
@@ -472,7 +476,12 @@ Item {
 
                 Repeater {
                     id: cardRepeater
-                    model: root.attention.concat(root.info.slice(0, 6))
+                    // Any finding's update makes a new list: matched by id, cards update
+                    // in place and only new ones enter.
+                    model: ScriptModel {
+                        values: root.attention.concat(root.info.slice(0, 6))
+                        objectProp: "id"
+                    }
 
                     FindingCard {
                         required property var modelData
@@ -493,7 +502,10 @@ Item {
                     onFoldRequested: root.showSnoozed = !root.showSnoozed
                 }
                 Repeater {
-                    model: root.showSnoozed ? HealthService.snoozedFindings : []
+                    model: ScriptModel {
+                        values: root.showSnoozed ? HealthService.snoozedFindings : []
+                        objectProp: "id"
+                    }
                     FindingCard {
                         required property var modelData
                         width: cards.width

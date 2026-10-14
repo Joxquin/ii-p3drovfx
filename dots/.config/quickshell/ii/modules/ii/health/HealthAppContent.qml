@@ -113,6 +113,17 @@ FocusScope {
         HealthService.copyReport(path => snackbar.show(Translation.tr("Report copied, and saved as %1").arg(String(path).split("/").pop()), "", null, false));
     }
 
+    // "Check now" from any page: say it finished, and what it found.
+    Connections {
+        target: HealthService
+        enabled: root.shown
+        function onRescanned() {
+            const n = HealthService.attentionCount;
+            snackbar.show(Translation.tr("Checked again at %1: %2").arg(Qt.formatTime(new Date(), "hh:mm"))
+                .arg(n > 0 ? HealthText.plural(n, Translation.tr("%1 thing needs attention"), Translation.tr("%1 things need attention")) : Translation.tr("all clear")), "", null, false);
+        }
+    }
+
     // An answer that arrived for a sheet or stage closed while it was being written.
     Connections {
         target: assistant
