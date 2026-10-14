@@ -24,7 +24,13 @@ MaterialSymbol {
     iconSize: ClockStyle.iconSmall
     fill: 1
 
+    HoverHandler {
+        id: markHover
+    }
+    // Only on hover: a symbol has no hover of its own, which a tooltip reads as
+    // always hovered.
     StyledToolTip {
+        extraVisibleCondition: markHover.hovered
         text: root.writing ? Translation.tr("The assistant is answering") : Translation.tr("An assistant answer is waiting")
     }
 

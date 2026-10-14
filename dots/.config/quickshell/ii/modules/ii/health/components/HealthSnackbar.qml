@@ -7,12 +7,14 @@ import qs.modules.common.widgets
 import qs.modules.ii.clock.components
 
 /**
- * The app's one snackbar: an inverse-surface pill at the bottom of the page, for what
- * finished out of sight — an action whose row has already gone, an assistant answer
- * that arrived for a closed sheet. One at a time; a new one replaces the old.
+ * The app's one snackbar: a secondary-container pill at the bottom of the page, for
+ * what finished out of sight — an action whose row has already gone, an assistant
+ * answer that arrived for a closed sheet. One at a time; a new one replaces the old.
+ * It follows the theme rather than Material's inverse surface, which is light on a
+ * dark shell.
  *
- * show(text, actionLabel, onAction): the action is a text button in the inverse
- * primary colour, and keeps the snackbar up a little longer.
+ * show(text, actionLabel, onAction): the action is a text button in the primary
+ * colour, and keeps the snackbar up a little longer.
  */
 Item {
     id: root
@@ -60,7 +62,8 @@ Item {
         implicitHeight: Math.max(48, row.implicitHeight + ClockStyle.gap * 2)
         width: implicitWidth
         radius: ClockStyle.radiusSmall
-        color: Appearance.m3colors.m3inverseSurface
+        // Not Material's inverse surface: light on a dark shell, it glared.
+        color: ClockStyle.colSecondaryContainer
         opacity: root.open ? 1 : 0
 
         transform: Translate {
@@ -94,7 +97,7 @@ Item {
                 text: "error"
                 iconSize: ClockStyle.iconSmall
                 fill: 1
-                color: Appearance.m3colors.m3inverseOnSurface
+                color: ClockStyle.colError
             }
 
             StyledText {
@@ -105,7 +108,7 @@ Item {
                 maximumLineCount: 2
                 elide: Text.ElideRight
                 font.pixelSize: ClockStyle.textSmall + 1
-                color: Appearance.m3colors.m3inverseOnSurface
+                color: ClockStyle.colOnSecondaryContainer
             }
 
             RippleButton {
@@ -114,8 +117,8 @@ Item {
                 implicitWidth: actionText.implicitWidth + ClockStyle.gapLarge * 2
                 buttonRadius: ClockStyle.pill(36)
                 colBackground: "transparent"
-                colBackgroundHover: Qt.rgba(1, 1, 1, 0.08)
-                colRipple: Qt.rgba(1, 1, 1, 0.16)
+                colBackgroundHover: ClockStyle.colSecondaryContainerHover
+                colRipple: ClockStyle.colSecondaryContainerActive
                 onClicked: {
                     const action = root.onAction;
                     root.hide();
@@ -130,7 +133,7 @@ Item {
                     text: root.actionLabel
                     font.pixelSize: ClockStyle.textSmall + 1
                     font.weight: Font.Bold
-                    color: Appearance.m3colors.m3inversePrimary
+                    color: ClockStyle.colPrimary
                 }
             }
         }

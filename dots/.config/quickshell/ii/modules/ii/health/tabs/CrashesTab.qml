@@ -295,7 +295,21 @@ Item {
                                 }
                             }
 
+                            // A 2 px line is too thin to aim at: a wider strip around it
+                            // takes the hover (a handler, so the lanes still get clicks).
+                            Item {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 12
+                                height: parent.height
+                                HoverHandler {
+                                    id: updHover
+                                }
+                            }
+
+                            // Only on hover: an Item has no hover of its own, which a
+                            // tooltip reads as always hovered.
                             StyledToolTip {
+                                extraVisibleCondition: updHover.hovered
                                 text: Translation.tr("%1 packages updated: %2").arg(upd.modelData.count).arg(Array.from(upd.modelData.names ?? []).slice(0, 8).join(", "))
                             }
                         }
@@ -462,7 +476,13 @@ Item {
                         animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
                     }
 
+                    HoverHandler {
+                        id: markHover
+                    }
+                    // Only on hover: a Rectangle has no hover of its own, which a
+                    // tooltip reads as always hovered.
                     StyledToolTip {
+                        extraVisibleCondition: markHover.hovered
                         text: `${HealthText.dayName(modelData.time, root.now)} ${Qt.formatTime(new Date(Number(modelData.time)), "hh:mm")} · ${HealthText.signalName(modelData.signal)}`
                     }
                 }

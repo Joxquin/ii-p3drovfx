@@ -258,6 +258,13 @@ class SurfaceTests(unittest.TestCase):
         tooltip = read("modules/common/widgets/StyledToolTip.qml")
         self.assertIn("GlobalStates.healthAppOpen", tooltip.split("readonly property bool sidebarOpen:")[1].split("\n")[0])
 
+    def test_tooltips_on_plain_items_wait_for_hover(self):
+        # StyledToolTip reads a parent without `hovered`/`containsMouse` as always
+        # hovered: on a mark or a line it stayed on screen for good.
+        for rel in ("modules/ii/health/tabs/CrashesTab.qml", "modules/ii/health/components/HealthAnswerMark.qml"):
+            for block in read(rel).split("StyledToolTip {")[1:]:
+                self.assertIn("extraVisibleCondition:", block.split("}")[0], rel)
+
     def test_lists_that_refresh_on_their_own_keep_their_rows(self):
         # A JS array model makes a Repeater rebuild every row, replaying the entrance
         # animation: the flicker testers saw. These lists change while on screen.
