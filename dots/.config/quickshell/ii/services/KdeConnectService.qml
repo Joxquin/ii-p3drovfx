@@ -63,7 +63,10 @@ Singleton {
     readonly property bool activeReachable: root.activeDevice
         ? (root.activeDevice.reachable === true)
         : false
-    onActiveReachableChanged: SoundService.playEvent("devices", root.activeReachable ? "device-added" : "device-removed")
+    onActiveReachableChanged: {
+        SoundService.playEvent("devices", root.activeReachable ? "device-added" : "device-removed")
+        root._checkWirelessAdbLink()
+    }
     readonly property bool activeHasNotifications: root.activeDeviceId !== ""
         && root._devicePlugins(root.activeDeviceId).indexOf("kdeconnect_notifications") >= 0
     readonly property bool scrcpyAvailable: root._scrcpyAvailable
@@ -1123,6 +1126,16 @@ Singleton {
                 : "IP=''; "
             return ["bash", "-c",
                 "if ! command -v adb >/dev/null 2>&1; then exit 1; fi; " +
+                // With ADB_TCP_KEEPALIVE_INTERVAL=60 (hypr env.lua) the kernel
+                // needs ~10 min to give up on a phone that dropped off Wi-Fi,
+                // and until then `adb devices` keeps listing it and `adb
+                // connect` answers "already connected". One trivial command
+                // per network device finds a dead link within a probe; at two
+                // a minute it still costs a locked phone a fraction of the
+                // ~30 wakes a minute the default 1 s keepalive did.
+                "for S in $(adb devices | awk '$2==\"device\" && index($1, \":\") {print $1}'); do " +
+                "  timeout 3 adb -s \"$S\" shell true >/dev/null 2>&1 || adb disconnect \"$S\" >/dev/null 2>&1; " +
+                "done; " +
                 resolveIp +
                 "if [ -n \"$IP\" ]; then " +
                 "  BASE=${IP%:*}; " +
@@ -1200,6 +1213,20 @@ Singleton {
     }
 
     onAdbReachableChanged: if (root.adbReachable) root._probeAdbDeviceName()
+
+    // When KDE Connect loses or regains the phone, or reaches it on another
+    // address, the adb link most likely changed too: probe now (the probe
+    // drops a dead link) instead of on the next 30 s tick. It is only a
+    // shortcut: over Tailscale KDE Connect can stay up while the phone is
+    // off Wi-Fi, so the probe's own check is what catches that case.
+    readonly property string _activeKdeConnectIp: root._kdeConnectIp(root.activeDeviceId)
+    on_ActiveKdeConnectIpChanged: root._checkWirelessAdbLink()
+
+    function _checkWirelessAdbLink() {
+        if (!root.ready || !root._enabled || !root.adbPresent) return
+        if (root._adbTargetResolving) return
+        root._probeAdb()
+    }
 
     // KDE Connect only ever hands out the marketing model, so the phone's
     // real name has to come from Android itself.
