@@ -229,6 +229,21 @@ class GuardTests(unittest.TestCase):
         self.assertIn(".health.guard.enable", guard)
         self.assertIn(".health.guard.openTerminal", guard)
 
+    def test_hook_is_offered_once_the_app_is_installed(self):
+        # Recommended on the Overview, whichever way the helper was built, and before
+        # the dump access: one offer at a time.
+        self.assertRegex(SERVICE, r"offerQtHook: root\.running\s*&& \(root\.qtHookStatus === \"missing\"")
+        self.assertIn("&& !root.offerQtHook", SERVICE.split("offerDumpAccess:")[1].split("\n\n")[0])
+        self.assertIn("property bool qtHookAsked: false", read("modules/common/Persistent.qml"))
+        overview = read("modules/ii/health/tabs/OverviewTab.qml")
+        self.assertIn("visible: HealthService.offerQtHook", overview)
+        self.assertEqual(overview.count("QtHookOffer {"), 2)
+        self.assertIn('Translation.tr("Recommended")', overview)
+        # Settings shares the service's state rather than probing on its own.
+        settings = read("modules/ii/health/tabs/HealthSettingsPage.qml")
+        self.assertIn("HealthService.setQtHook(", settings)
+        self.assertNotIn("install-hook.sh", settings)
+
 
 class SurfaceTests(unittest.TestCase):
     def test_report_is_always_redacted(self):

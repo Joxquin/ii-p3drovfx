@@ -397,21 +397,22 @@ Rectangle {
                 }
                 ClockSettingsRow {
                     last: true
-                    visible: root.hookStatus !== "" && root.hookStatus !== "unsupported"
+                    visible: HealthService.qtHookStatus !== "" && HealthService.qtHookStatus !== "unsupported"
                     symbol: "package_2"
                     title: Translation.tr("Warn during updates")
-                    description: root.hookBusy ? Translation.tr("Waiting for the password…")
-                        : root.hookError === "cancelled" ? Translation.tr("The password prompt was dismissed; nothing changed.")
-                        : root.hookError.length > 0 ? Translation.tr("It did not work: %1").arg(root.hookError)
-                        : root.hookStatus === "installed" ? Translation.tr("A pacman hook checks Quickshell after every Qt update and says so in the update and on screen.")
-                        : root.hookStatus === "outdated" ? Translation.tr("The pacman hook is from an older version of ii.")
-                        : Translation.tr("A pacman hook would say so during the update itself, while the shell still runs.")
+                    description: HealthService.qtHookBusy ? Translation.tr("Waiting for the password…")
+                        : HealthService.qtHookError === "cancelled" ? Translation.tr("The password prompt was dismissed; nothing changed.")
+                        : HealthService.qtHookError.length > 0 ? Translation.tr("It did not work: %1").arg(HealthService.qtHookError)
+                        : HealthService.qtHookStatus === "installed" ? Translation.tr("A pacman hook checks Quickshell after every Qt update and says so in the update and on screen.")
+                        : HealthService.qtHookStatus === "outdated" ? Translation.tr("The pacman hook is from an older version of ii.")
+                        : Translation.tr("Recommended. A pacman hook would say so during the update itself, while the shell still runs.")
                     ClockButton {
-                        enabled: !root.hookBusy
-                        label: root.hookStatus === "installed" ? Translation.tr("Remove")
-                            : root.hookStatus === "outdated" ? Translation.tr("Update") : Translation.tr("Install")
-                        danger: root.hookStatus === "installed"
-                        onClicked: root.setHook(root.hookStatus !== "installed")
+                        enabled: !HealthService.qtHookBusy
+                        label: HealthService.qtHookStatus === "installed" ? Translation.tr("Remove")
+                            : HealthService.qtHookStatus === "outdated" ? Translation.tr("Update") : Translation.tr("Install")
+                        variant: HealthService.qtHookStatus === "installed" ? "tonal" : "filled"
+                        danger: HealthService.qtHookStatus === "installed"
+                        onClicked: HealthService.setQtHook(HealthService.qtHookStatus !== "installed")
                     }
                 }
             }
@@ -422,14 +423,11 @@ Rectangle {
     readonly property string guardDir: `${Directories.scriptPath}/quickshell-guard`
     /// "" while unknown, "ok", or what Quickshell said about the mismatch.
     property string qtCompat: ""
-    /// installed | outdated | missing | unsupported
-    property string hookStatus: ""
-    property bool hookBusy: false
-    property string hookError: ""
 
+    // The pacman hook's state is HealthService's: the Overview offers it too.
     Component.onCompleted: {
         compatCheck.running = true;
-        hookCheck.running = true;
+        HealthService.checkQtHook();
     }
 
     function openRebuild(): void {
@@ -437,13 +435,6 @@ Rectangle {
         const cmd = terminal.split(" ").filter(part => part.length > 0);
         cmd.push("-e", "bash", `${root.guardDir}/qs-rebuild.sh`);
         Quickshell.execDetached(cmd);
-    }
-
-    function setHook(install): void {
-        root.hookBusy = true;
-        root.hookError = "";
-        hookChange.command = ["pkexec", `${root.guardDir}/install-hook.sh`, install ? "install" : "remove"];
-        hookChange.running = true;
     }
 
     Process {
@@ -454,29 +445,6 @@ Rectangle {
         }
         onExited: code => {
             root.qtCompat = code === 0 ? "ok" : (compatOut.text.replace(/\x1b\[[0-9;]*m/g, "").trim() || Translation.tr("Quickshell does not match the installed Qt."));
-        }
-    }
-
-    Process {
-        id: hookCheck
-        command: ["bash", `${root.guardDir}/install-hook.sh`, "status"]
-        stdout: StdioCollector {
-            id: hookOut
-        }
-        onExited: root.hookStatus = hookOut.text.trim()
-    }
-
-    Process {
-        id: hookChange
-        stderr: StdioCollector {
-            id: hookErr
-        }
-        onExited: code => {
-            root.hookBusy = false;
-            // 126/127: the password prompt was dismissed or pkexec is missing.
-            if (code !== 0)
-                root.hookError = code === 126 || code === 127 ? "cancelled" : (hookErr.text.trim() || `exit ${code}`);
-            hookCheck.running = true;
         }
     }
 }

@@ -152,6 +152,9 @@ Item {
                     width: leftFlick.width
                     spacing: ClockStyle.paneGap
 
+                    QtHookOffer {
+                        Layout.fillWidth: true
+                    }
                     DumpOffer {
                         Layout.fillWidth: true
                     }
@@ -189,6 +192,9 @@ Item {
                 width: flick.width
                 spacing: ClockStyle.paneGap
 
+                QtHookOffer {
+                    Layout.fillWidth: true
+                }
                 DumpOffer {
                     Layout.fillWidth: true
                 }
@@ -204,6 +210,75 @@ Item {
                 }
                 HealthHistoryChart {
                     Layout.fillWidth: true
+                }
+            }
+        }
+    }
+
+    // Once, the first time the helper runs without the pacman hook: recommended, so the
+    // install is the filled button. Said in words before any password prompt.
+    component QtHookOffer: Rectangle {
+        visible: HealthService.offerQtHook
+        implicitHeight: hookColumn.implicitHeight + ClockStyle.cardPadding * 2
+        radius: ClockStyle.radiusLarge
+        color: ClockStyle.colPrimaryContainer
+
+        ColumnLayout {
+            id: hookColumn
+            anchors {
+                left: parent.left
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+                margins: ClockStyle.cardPadding
+            }
+            spacing: ClockStyle.gapSmall
+
+            RowLayout {
+                spacing: ClockStyle.gapSmall
+                StyledText {
+                    text: HealthService.qtHookStatus === "outdated" ? Translation.tr("Update the pacman hook?") : Translation.tr("Install the pacman hook?")
+                    font.family: ClockStyle.fontTitle
+                    font.variableAxes: ClockStyle.axesTitle
+                    font.pixelSize: ClockStyle.textLarge
+                    color: ClockStyle.colOnPrimaryContainer
+                }
+                Rectangle {
+                    implicitWidth: recommendedText.implicitWidth + ClockStyle.gap * 2
+                    implicitHeight: recommendedText.implicitHeight + 4
+                    radius: height / 2
+                    color: ClockStyle.colPrimary
+                    StyledText {
+                        id: recommendedText
+                        anchors.centerIn: parent
+                        text: Translation.tr("Recommended")
+                        font.pixelSize: ClockStyle.textSmall
+                        font.weight: Font.Bold
+                        color: ClockStyle.colOnPrimary
+                    }
+                }
+            }
+            StyledText {
+                Layout.fillWidth: true
+                text: HealthService.qtHookStatus === "outdated"
+                    ? Translation.tr("The installed hook is from an older version of ii. The new one keeps warning when a Qt update leaves Quickshell needing a rebuild.")
+                    : Translation.tr("After a Qt update, Quickshell needs a rebuild or the shell may not start. The hook says so during the update itself, while the shell still runs. It only reads and warns. Settings can remove it.")
+                wrapMode: Text.Wrap
+                font.pixelSize: ClockStyle.textSmall + 1
+                color: ClockStyle.colOnPrimaryContainer
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: ClockStyle.gapSmall
+                ClockButton {
+                    variant: "text"
+                    label: Translation.tr("Not now")
+                    onClicked: HealthService.answerQtHookOffer(false)
+                }
+                ClockButton {
+                    variant: "filled"
+                    symbol: "package_2"
+                    label: HealthService.qtHookStatus === "outdated" ? Translation.tr("Update, ask for my password") : Translation.tr("Install, ask for my password")
+                    onClicked: HealthService.answerQtHookOffer(true)
                 }
             }
         }

@@ -60,8 +60,9 @@ Singleton {
     /// Once the helper exists, the Overview offers crash-dump access one time, the way
     /// the setup script does after its own build — whichever way the helper was built
     /// (the app, the setup script, a terminal). "Not now" is remembered.
+    /// One offer at a time: it waits for the pacman hook's.
     readonly property bool offerDumpAccess: root.running && root.dumpAccess === "denied"
-        && !(Persistent.states?.healthApp?.dumpAccessAsked ?? false)
+        && !(Persistent.states?.healthApp?.dumpAccessAsked ?? false) && !root.offerQtHook
 
     function answerDumpOffer(grant): void {
         if (Persistent.states?.healthApp)
@@ -950,6 +951,65 @@ Singleton {
         }
     }
 
+    // ── The pacman hook (scripts/quickshell-guard/install-hook.sh) ──────
+    /// installed | outdated | missing | unsupported, "" while unknown.
+    property string qtHookStatus: ""
+    property bool qtHookBusy: false
+    /// "" | "cancelled" | what install-hook.sh said.
+    property string qtHookError: ""
+
+    /// The Overview recommends the hook once the helper runs, the way the setup script
+    /// does after its own build — whichever way System Health was installed. Asked
+    /// before the dump access: it only reads and warns, so it is the one to say yes to.
+    readonly property bool offerQtHook: root.running
+        && (root.qtHookStatus === "missing" || root.qtHookStatus === "outdated")
+        && !(Persistent.states?.healthApp?.qtHookAsked ?? false)
+
+    function answerQtHookOffer(install): void {
+        if (Persistent.states?.healthApp)
+            Persistent.states.healthApp.qtHookAsked = true;
+        if (install)
+            root.setQtHook(true);
+    }
+
+    function checkQtHook(): void {
+        qtHookCheck.running = false;
+        qtHookCheck.running = true;
+    }
+
+    /// Installs or removes the hook; pkexec asks for the password, and the status is
+    /// read back afterwards, not assumed.
+    function setQtHook(install): void {
+        if (root.qtHookBusy)
+            return;
+        root.qtHookBusy = true;
+        root.qtHookError = "";
+        qtHookChange.command = ["pkexec", `${root.guardDir}/install-hook.sh`, install ? "install" : "remove"];
+        qtHookChange.running = true;
+    }
+
+    Process {
+        id: qtHookCheck
+        command: ["bash", `${root.guardDir}/install-hook.sh`, "status"]
+        stdout: StdioCollector {
+            onStreamFinished: root.qtHookStatus = this.text.trim()
+        }
+    }
+
+    Process {
+        id: qtHookChange
+        stderr: StdioCollector {
+            id: qtHookChangeErr
+        }
+        onExited: (code, status) => {
+            root.qtHookBusy = false;
+            // 126/127: the password prompt was dismissed or pkexec is missing.
+            if (code !== 0)
+                root.qtHookError = code === 126 || code === 127 ? "cancelled" : (qtHookChangeErr.text.trim() || `exit ${code}`);
+            root.checkQtHook();
+        }
+    }
+
     // ── Cleanup ─────────────────────────────────────────────────────────
     property string cleaning: ""
     signal cleanupFinished(string what, bool ok)
@@ -1014,6 +1074,7 @@ Singleton {
     Component.onCompleted: {
         if (root.enabled)
             root.checkBinary();
+        root.checkQtHook();
     }
     onEnabledChanged: {
         if (root.enabled)

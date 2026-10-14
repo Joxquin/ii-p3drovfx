@@ -400,6 +400,8 @@ Singleton {
                 property bool railExpanded: true
                 /// The crash-dump access offer was answered after an in-app build.
                 property bool dumpAccessAsked: false
+                /// The recommended pacman hook offer was answered.
+                property bool qtHookAsked: false
             }
             property JsonObject notes: JsonObject {
                 property real width: 1500

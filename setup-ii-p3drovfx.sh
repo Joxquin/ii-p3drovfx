@@ -1583,7 +1583,7 @@ offer_qt_hook() {
     missing) [[ -f "$declined" ]] && return 0 ;;
     esac
     [[ "$OPT_ASSUME_YES" == true || ! -t 0 ]] && {
-        ui_note "Settings > System Health can install a pacman hook that warns when Quickshell needs a rebuild for a new Qt."
+        ui_note "Recommended: Settings > System Health can install a pacman hook that warns when Quickshell needs a rebuild for a new Qt."
         return 0
     }
     if [[ "$status" == outdated ]]; then
@@ -1591,7 +1591,7 @@ offer_qt_hook() {
     else
         ui_note "After a Qt update, Quickshell needs a rebuild or the shell may not start."
         ui_note "A pacman hook can say so during the update itself, while the shell still runs."
-        if ! ui_confirm "Install it? (Settings can remove it)" yes; then
+        if ! ui_confirm "Install it? Recommended (Settings can remove it)" yes; then
             mkdir -p "$SETUP_STATE_DIR" && : >"$declined"
             return 0
         fi
