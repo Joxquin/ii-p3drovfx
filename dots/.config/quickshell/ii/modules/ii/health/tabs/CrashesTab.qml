@@ -620,6 +620,11 @@ Item {
                     }
                 }
 
+                HealthExplainCard {
+                    Layout.fillWidth: true
+                    explanation: stage.g ? HealthText.explainCrash(stage.g) : null
+                }
+
                 // The last steps before the crash, as a literal stack: the crash point at
                 // the top, the frame where it broke filled in the error colour.
                 StyledText {

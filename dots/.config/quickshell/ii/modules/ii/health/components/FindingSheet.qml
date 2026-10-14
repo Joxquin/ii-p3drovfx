@@ -342,6 +342,12 @@ ClockSheet {
         id: placeholderAssistant
     }
 
+    // In plain words first; the facts below are for whoever wants them.
+    HealthExplainCard {
+        Layout.fillWidth: true
+        explanation: root.f && !root.resolved ? HealthText.explain(root.f) : null
+    }
+
     StyledText {
         Layout.fillWidth: true
         visible: root.resolved

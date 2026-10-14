@@ -56,6 +56,11 @@ ClockSheet {
         provider: () => ({ group: root.group, recentLines: root.lines.slice(-15) })
     }
 
+    HealthExplainCard {
+        Layout.fillWidth: true
+        explanation: root.group ? HealthText.explainJournal(root.group) : null
+    }
+
     StyledText {
         Layout.fillWidth: true
         text: root.group?.sample ?? ""

@@ -307,5 +307,24 @@ class SurfaceTests(unittest.TestCase):
         self.assertRegex(rebuild, r'cache_key = format!\("\{key\}@\{\}", install_ms\(&key\)\)')
 
 
+class PlainWordsTests(unittest.TestCase):
+    TEXT = read("services/HealthText.qml")
+
+    @staticmethod
+    def cases(body):
+        return set(re.findall(r'case "([A-Za-z]+)":', body))
+
+    def test_every_finding_kind_is_explained(self):
+        titles = self.TEXT.split("function title(f)")[1].split("function verbLabel(")[0]
+        explain = self.TEXT.split("function explain(f)")[1].split("function explainCrash(")[0]
+        missing = self.cases(titles) - self.cases(explain)
+        self.assertFalse(missing, f"kinds with a title but no plain-words explanation: {sorted(missing)}")
+
+    def test_explanations_are_shown_where_findings_open(self):
+        self.assertIn("HealthText.explain(root.f)", read("modules/ii/health/components/FindingSheet.qml"))
+        self.assertIn("HealthText.explainCrash(stage.g)", read("modules/ii/health/tabs/CrashesTab.qml"))
+        self.assertIn("HealthText.explainJournal(root.group)", read("modules/ii/health/tabs/JournalGroupSheet.qml"))
+
+
 if __name__ == "__main__":
     unittest.main()
