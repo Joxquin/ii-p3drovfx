@@ -157,8 +157,15 @@ pub fn swap() -> (u64, u64, bool) {
 
 // ── Fans ────────────────────────────────────────────────────────────────
 
+/// Fan inputs whose read failed with EIO: the firmware's own fan method is
+/// broken there (Samsung's `FAN0._FST` aborts on every evaluation, and the
+/// kernel logs three ACPI errors per read), so it is not asked again until
+/// the daemon restarts.
+static BROKEN_FANS: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
 pub fn fans() -> Vec<Value> {
     let mut out = Vec::new();
+    let mut broken = BROKEN_FANS.lock().unwrap_or_else(|e| e.into_inner());
     let Ok(rd) = std::fs::read_dir("/sys/class/hwmon") else { return out };
     for h in rd.flatten() {
         let p = h.path();
@@ -167,7 +174,20 @@ pub fn fans() -> Vec<Value> {
         for f in files.flatten() {
             let n = f.file_name().to_string_lossy().into_owned();
             let Some(idx) = n.strip_prefix("fan").and_then(|r| r.strip_suffix("_input")) else { continue };
-            let Some(rpm) = num(&f.path()) else { continue };
+            let path = f.path();
+            if broken.contains(&path) {
+                continue;
+            }
+            let rpm = match std::fs::read_to_string(&path) {
+                Ok(s) => s.trim().parse::<f64>().ok(),
+                Err(e) => {
+                    if e.raw_os_error() == Some(5) {
+                        broken.push(path.clone());
+                    }
+                    None
+                }
+            };
+            let Some(rpm) = rpm else { continue };
             let label = read(&p.join(format!("fan{idx}_label"))).unwrap_or_else(|| format!("{chip} {idx}"));
             out.push(json!({"label": label, "rpm": rpm}));
         }
