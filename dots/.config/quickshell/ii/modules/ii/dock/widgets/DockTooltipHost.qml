@@ -36,9 +36,20 @@ PopupWindow {
     readonly property real windowW: host.dockWindow?.width ?? 0
     readonly property real windowH: host.dockWindow?.height ?? 0
 
-    // Room on the dock's inner side for the bubble.
-    readonly property real zone: 72
     readonly property real gap: 8
+    readonly property real labelPadH: 12
+    // The longest label the bubble takes: past it the text ends in an
+    // ellipsis, so the bubble is never drawn wider than the surface.
+    readonly property real maxLabelWidth: 200
+    readonly property real labelRoom: host.vertical
+        ? host.maxLabelWidth
+        : Math.max(0, Math.min(host.maxLabelWidth, host.width - 8 - 2 * host.labelPadH))
+    // Room on the dock's inner side for the bubble. A vertical dock puts the
+    // bubble beside the item, so the zone has to hold the widest label; a
+    // horizontal one only lifts the bubble above the dock.
+    readonly property real zone: host.vertical
+        ? host.maxLabelWidth + 2 * host.labelPadH + 2 * host.gap
+        : 72
 
     // ── Requests ───────────────────────────────────────────────────────────
     property var request: null          // the DockTooltip being shown
@@ -323,11 +334,11 @@ PopupWindow {
     Rectangle {
         id: bubble
         objectName: "tooltipBubble"
-        readonly property real padH: 12
+        readonly property real padH: host.labelPadH
         readonly property real padV: 6
         // Eases from the old label's width to the new one's with the swap.
-        readonly property real targetWidth: Math.ceil(incomingMetrics.advanceWidth) + bubble.padH * 2
-        readonly property real fromWidth: host.outgoing.length > 0 ? Math.ceil(outgoingMetrics.advanceWidth) + bubble.padH * 2 : bubble.targetWidth
+        readonly property real targetWidth: Math.ceil(Math.min(incomingMetrics.advanceWidth, host.labelRoom)) + bubble.padH * 2
+        readonly property real fromWidth: host.outgoing.length > 0 ? Math.ceil(Math.min(outgoingMetrics.advanceWidth, host.labelRoom)) + bubble.padH * 2 : bubble.targetWidth
         width: Math.round(bubble.fromWidth + (bubble.targetWidth - bubble.fromWidth) * Math.min(1, host.swapProgress * 1.25))
         height: Math.ceil(incomingText.implicitHeight) + bubble.padV * 2
         radius: Math.min(height / 2, Appearance.rounding.small)
@@ -337,9 +348,12 @@ PopupWindow {
         readonly property real main: host.pointMain + host.slideOffset
         // Out of the dock edge while it grows in.
         readonly property real lift: (1 - host.grow) * 6
-        x: host.vertical
-            ? (host.pos === "left" ? host.pointCross + host.gap - bubble.lift : host.pointCross - host.gap - bubble.width + bubble.lift)
-            : Math.round(Math.max(4, Math.min(host.width - bubble.width - 4, bubble.main - bubble.width / 2)))
+        // Clamped on both axes: a vertical bubble used to run past the
+        // surface's inner edge and get cut off.
+        x: Math.round(Math.max(4, Math.min(host.width - bubble.width - 4,
+            host.vertical
+                ? (host.pos === "left" ? host.pointCross + host.gap - bubble.lift : host.pointCross - host.gap - bubble.width + bubble.lift)
+                : bubble.main - bubble.width / 2)))
         y: host.vertical
             ? Math.round(Math.max(4, Math.min(host.height - bubble.height - 4, bubble.main - bubble.height / 2)))
             : (host.pos === "bottom" ? host.pointCross - host.gap - bubble.height + bubble.lift : host.pointCross + host.gap - bubble.lift)
@@ -357,6 +371,8 @@ PopupWindow {
             id: incomingText
             anchors.verticalCenter: parent.verticalCenter
             x: bubble.padH + host.swapDirection * 10 * (1 - host.swapProgress)
+            width: host.labelRoom
+            elide: Text.ElideRight
             text: host.label
             color: Appearance.colors.colOnSurface
             font.pixelSize: Appearance.font.pixelSize.small
@@ -367,6 +383,8 @@ PopupWindow {
             anchors.verticalCenter: parent.verticalCenter
             visible: host.outgoing.length > 0
             x: bubble.padH - host.swapDirection * 10 * host.swapProgress
+            width: host.labelRoom
+            elide: Text.ElideRight
             text: host.outgoing
             color: Appearance.colors.colOnSurface
             font.pixelSize: Appearance.font.pixelSize.small
