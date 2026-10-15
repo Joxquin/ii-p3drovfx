@@ -126,6 +126,9 @@ Singleton {
         || GlobalStates.editMode
         // The desktop icon menu and its rename field type into a layer surface too.
         || GlobalStates.desktopDialogOpen
+        // The wallpaper search field takes the keys too, island-hosted or not: an empty
+        // desktop would otherwise arm the binds under it and open the launcher instead.
+        || GlobalStates.wallpaperSelectorOpen
 
     // Not under an open Alt+Tab: its typing submap binds the bare letters, and arming or
     // disarming here (hl.unbind reaches into every submap) would take them away mid-search.
