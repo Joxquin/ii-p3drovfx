@@ -145,6 +145,10 @@ Item {
     property int formEndMinutes: 10 * 60
     property bool formAllDay: false
     property string createKind: "event"
+
+    onFormDateChanged: root.emitCreateSpan()
+    onFormStartMinutesChanged: root.emitCreateSpan()
+    onFormEndMinutesChanged: root.emitCreateSpan()
     property string formUrl: ""
     property string formLocation: ""
     property string formCalendar: ""
@@ -197,6 +201,8 @@ Item {
     signal taskCompletionRequested(var task)
     signal timePickerRequested(string which, int startHour, int startMinute)
     signal datePickerRequested(string purpose, var date)
+    /** The new event's date and span, so the grid can draw its draft block. */
+    signal createSpanChanged(var date, int startMinutes, int endMinutes)
 
     // ─── Entry points ───
     function showDay(date) {
@@ -439,6 +445,21 @@ Item {
         root.formAlarms = [];
         root.setMode("create");
         titleInput.forceActiveFocus();
+    }
+
+    /** Mirrors the editor's span into the grid while a new event is being built. */
+    function emitCreateSpan() {
+        if (root.mode === "create" && root.createKind === "event")
+            root.createSpanChanged(root.formDate, root.formStartMinutes, root.formEndMinutes);
+    }
+
+    /** Takes a span set by dragging the grid's draft; the title and the rest stay. */
+    function setCreateSpan(date, startMinutes, endMinutes) {
+        if (root.mode !== "create" || root.createKind !== "event" || !date)
+            return;
+        root.formDate = H.startOfDay(date);
+        root.formStartMinutes = startMinutes;
+        root.formEndMinutes = endMinutes;
     }
 
     function startEdit(eventData) {

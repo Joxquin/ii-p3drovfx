@@ -39,6 +39,7 @@ Item {
     signal closeRequested
     signal timePickerRequested(string which, int startHour, int startMinute)
     signal datePickerRequested(string purpose, var date)
+    signal createSpanChanged(var date, int startMinutes, int endMinutes)
 
     function ensure() {
         if (!loader.active)
@@ -67,6 +68,7 @@ Item {
 
     // ── Methods only meaningful while already open: no build ──
     function applyPickedTime() { if (loader.item) return loader.item.applyPickedTime.apply(loader.item, arguments); }
+    function setCreateSpan() { if (loader.item) return loader.item.setCreateSpan.apply(loader.item, arguments); }
     function applyPickedDate() { if (loader.item) return loader.item.applyPickedDate.apply(loader.item, arguments); }
     function close() { if (loader.item) return loader.item.close.apply(loader.item, arguments); }
     function handleKey() { if (loader.item && typeof loader.item.handleKey === "function") return loader.item.handleKey.apply(loader.item, arguments); return false; }
@@ -101,6 +103,7 @@ Item {
             onCloseRequested: root.closeRequested()
             onTimePickerRequested: (which, startHour, startMinute) => root.timePickerRequested(which, startHour, startMinute)
             onDatePickerRequested: (purpose, date) => root.datePickerRequested(purpose, date)
+            onCreateSpanChanged: (date, startMinutes, endMinutes) => root.createSpanChanged(date, startMinutes, endMinutes)
         }
     }
 

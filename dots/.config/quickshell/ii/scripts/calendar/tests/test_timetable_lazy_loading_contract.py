@@ -112,7 +112,10 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertIn("readonly property bool initialLoadComplete", week)
         self.assertNotIn("id: dayLoadTimer", week)
         self.assertIn("days: (root.days ?? []).slice(0, Math.max(0, root.loadedDayCount))", week)
-        self.assertIn("model: root.days ?? []", week)
+        # Integer model: the columns keep their identity across calendar refreshes,
+        # so a drop or a reload never rebuilds them (or replays their entrance).
+        self.assertIn("model: root.dayCount", week)
+        self.assertIn("readonly property var dayInfo: root.days[index] ?? null", week)
         self.assertIn("id: dayLoader", week)
         self.assertIn("active: index <= root.loadedDayCount", week)
         self.assertIn("property bool incubateAsync: true", week)
