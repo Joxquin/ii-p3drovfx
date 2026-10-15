@@ -691,24 +691,25 @@ Item {
                             }
                         }
 
+                        ConfigSwitch {
+                            buttonIcon: "visibility_off"
+                            text: Translation.tr("Hide MangoHud's own HUD")
+                            checked: subPageRoot.hud.mangohudHideHud
+                            onCheckedChanged: {
+                                if (Config.options.overlay.perfMonitor.mangohudHideHud === checked)
+                                    return;
+                                subPageRoot.setOption("mangohudHideHud", checked);
+                                if (subPageRoot.mango.configured)
+                                    stats.setMangoHudLogging(true);
+                            }
+                            StyledToolTip {
+                                text: Translation.tr("MangoHud keeps logging but draws nothing, so only this HUD shows.")
+                            }
+                        }
+
                         ConfigRow {
                             uniform: true
 
-                            ConfigSwitch {
-                                buttonIcon: "visibility_off"
-                                text: Translation.tr("Hide MangoHud's own HUD")
-                                checked: subPageRoot.hud.mangohudHideHud
-                                onCheckedChanged: {
-                                    if (Config.options.overlay.perfMonitor.mangohudHideHud === checked)
-                                        return;
-                                    subPageRoot.setOption("mangohudHideHud", checked);
-                                    if (subPageRoot.mango.configured)
-                                        stats.setMangoHudLogging(true);
-                                }
-                                StyledToolTip {
-                                    text: Translation.tr("MangoHud keeps logging but draws nothing, so only this HUD shows.")
-                                }
-                            }
                             ConfigSpinBox {
                                 icon: "local_fire_department"
                                 text: Translation.tr("Hot at (°C)")

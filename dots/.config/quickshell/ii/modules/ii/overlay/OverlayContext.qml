@@ -103,12 +103,8 @@ Singleton {
     property bool perfIdleChecked: false
 
     // -------------------------------------------------------------- auto pin
-    // The Discord overlay and the performance HUD put themselves on screen,
-    // pinned, while their condition holds: a voice call for the former, a
-    // detected game for the latter. The pin follows that condition both ways,
-    // so a missed signal or a shell restart cannot leave one pinned behind.
-    // With the option off the widget is left alone, which is how a HUD the
-    // user keeps pinned on purpose is kept.
+    // Discord overlay and perf HUD pin themselves when the condition holds.
+    // With the option off, the widget is left alone.
 
     function setAutoPin(identifier: string, wanted: bool) {
         if (!Persistent.ready || !root.availableWidgets.some(w => w.identifier === identifier))
@@ -124,7 +120,6 @@ Singleton {
                 Persistent.states.overlay.open = [...open, identifier];
             if (!entry.pinned)
                 entry.pinned = true;
-            // Pinning here too arms the overlay window, which creates the widget.
             root.pin(identifier, true);
         } else {
             if (open.includes(identifier))
@@ -138,7 +133,7 @@ Singleton {
     // Also runs on boot, so a call or a game already up comes back pinned.
     function syncAutoPins() {
         root.setAutoPin("discordVoice", DiscordVoice.inVoice);
-        root.setAutoPin("perfMonitor", GameDetector.gameRunning);
+        root.setAutoPin("perfMonitor", GameDetector.rawRunning);
     }
 
     Component.onCompleted: {
@@ -168,7 +163,7 @@ Singleton {
     Connections {
         target: Config.options?.overlay?.perfMonitor ?? null
         function onAutoPinChanged() {
-            root.setAutoPin("perfMonitor", GameDetector.gameRunning);
+            root.setAutoPin("perfMonitor", GameDetector.rawRunning);
         }
     }
     Connections {
@@ -179,8 +174,8 @@ Singleton {
     }
     Connections {
         target: GameDetector
-        function onGameRunningChanged() {
-            root.setAutoPin("perfMonitor", GameDetector.gameRunning);
+        function onRawRunningChanged() {
+            root.setAutoPin("perfMonitor", GameDetector.rawRunning);
         }
     }
 
