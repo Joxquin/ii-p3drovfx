@@ -80,10 +80,12 @@ Scope {
     PanelUrlLoader {
         extraCondition: !BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
         panelUrl: Qt.resolvedUrl("../modules/ii/bar/Bar.qml")
+        priority: 4 // First paint: bar, background, island, dock (see PanelSchedule)
     }
     PanelUrlLoader {
         extraCondition: Config.options.background.enable
         panelUrl: Qt.resolvedUrl("../modules/ii/background/Background.qml")
+        priority: 3
     }
     PanelUrlLoader {
         // The desktop layout editor's chrome; nothing to edit without the background.
@@ -133,6 +135,7 @@ Scope {
     PanelUrlLoader {
         extraCondition: Config.options.dock.enable
         panelUrl: Qt.resolvedUrl("../modules/ii/dock/Dock.qml")
+        priority: 1
     }
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/ii/lock/Lock.qml")
@@ -277,6 +280,7 @@ Scope {
     PanelUrlLoader {
         extraCondition: BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
         panelUrl: Qt.resolvedUrl("../modules/ii/verticalBar/VerticalBar.qml")
+        priority: 4
     }
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/ii/wallpaperSelector/WallpaperSelector.qml")
@@ -332,6 +336,7 @@ Scope {
     PanelUrlLoader {
         extraCondition: IslandPolicy.enabled
         panelUrl: Qt.resolvedUrl("../modules/ii/dynamicIsland/DynamicIsland.qml")
+        priority: 2
     }
     PanelUrlLoader {
         extraCondition: Config.ready && Boolean(Config.options && Config.options.interactions && Config.options.interactions.touchGestures && Config.options.interactions.touchGestures.enable)
