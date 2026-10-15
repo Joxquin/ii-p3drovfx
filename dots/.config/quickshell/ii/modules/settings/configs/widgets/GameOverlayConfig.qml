@@ -96,6 +96,18 @@ ContentPage {
             Layout.fillWidth: true
             spacing: 4
 
+            ConfigSwitch {
+                buttonIcon: "push_pin"
+                text: Translation.tr("Pin while a game is running")
+                checked: Config.options.crosshair.autoPin
+                onCheckedChanged: {
+                    Config.options.crosshair.autoPin = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("The crosshair pins itself when a game is detected and goes away when it closes. Turn this off to keep it pinned yourself.")
+                }
+            }
+
             MaterialTextArea {
                 Layout.fillWidth: true
                 placeholderText: Translation.tr("Crosshair code (in Valorant's format)")

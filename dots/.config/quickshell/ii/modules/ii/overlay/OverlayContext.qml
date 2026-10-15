@@ -103,13 +103,13 @@ Singleton {
     property bool perfIdleChecked: false
 
     // -------------------------------------------------------------- auto pin
-    // Discord overlay and perf HUD pin themselves when the condition holds.
-    // With the option off, the widget is left alone.
 
     function setAutoPin(identifier: string, wanted: bool) {
         if (!Persistent.ready || !root.availableWidgets.some(w => w.identifier === identifier))
             return;
-        if (Config.options.overlay?.[identifier]?.autoPin === false)
+        // The crosshair keeps its own options.
+        const options = identifier === "crosshair" ? Config.options.crosshair : Config.options.overlay?.[identifier];
+        if (options?.autoPin === false)
             return;
         const entry = Persistent.states.overlay[identifier];
         if (!entry)
@@ -122,7 +122,8 @@ Singleton {
                 entry.pinned = true;
             root.pin(identifier, true);
         } else {
-            if (open.includes(identifier))
+            // Leave the crosshair in the widget list, only its pin goes.
+            if (identifier !== "crosshair" && open.includes(identifier))
                 Persistent.states.overlay.open = open.filter(id => id !== identifier);
             if (entry.pinned)
                 entry.pinned = false;
@@ -130,10 +131,11 @@ Singleton {
         }
     }
 
-    // Also runs on boot, so a call or a game already up comes back pinned.
+    // Also runs on boot.
     function syncAutoPins() {
         root.setAutoPin("discordVoice", DiscordVoice.inVoice);
         root.setAutoPin("perfMonitor", GameDetector.rawRunning);
+        root.setAutoPin("crosshair", GameDetector.rawRunning);
     }
 
     Component.onCompleted: {
@@ -153,7 +155,7 @@ Singleton {
             root.syncAutoPins();
         }
     }
-    // Flipping the option on while a call or a game is already up pins at once.
+    // Flipping the option on pins at once.
     Connections {
         target: Config.options?.overlay?.discordVoice ?? null
         function onAutoPinChanged() {
@@ -167,6 +169,12 @@ Singleton {
         }
     }
     Connections {
+        target: Config.options?.crosshair ?? null
+        function onAutoPinChanged() {
+            root.setAutoPin("crosshair", GameDetector.rawRunning);
+        }
+    }
+    Connections {
         target: DiscordVoice
         function onInVoiceChanged() {
             root.setAutoPin("discordVoice", DiscordVoice.inVoice);
@@ -176,6 +184,7 @@ Singleton {
         target: GameDetector
         function onRawRunningChanged() {
             root.setAutoPin("perfMonitor", GameDetector.rawRunning);
+            root.setAutoPin("crosshair", GameDetector.rawRunning);
         }
     }
 

@@ -5710,6 +5710,8 @@ Singleton {
             property JsonObject crosshair: JsonObject {
                 // Valorant crosshair format. Use https://www.vcrdb.net/builder
                 property string code: "0;P;d;1;0l;10;0o;2;1b;0"
+                // Pin it over the game while one is running
+                property bool autoPin: true
             }
 
             // Speech typed into the focused window, through voxtype. Off by
