@@ -329,6 +329,14 @@ ContentPage {
                     Config.options.overlay.discordVoice.speakingPulseContinuous = checked;
                 }
             }
+            ConfigSwitch {
+                buttonIcon: "push_pin"
+                text: Translation.tr("Pin while a call is running")
+                checked: Config.options.overlay.discordVoice.autoPin
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.autoPin = checked;
+                }
+            }
         }
     }
 }

@@ -6574,9 +6574,13 @@ Singleton {
                     property bool blurEnabled: true
                     property bool autoResize: true
                     property bool speakingPulseContinuous: true
+                    // Pin the overlay on screen while the bridge sees a call
+                    property bool autoPin: true
                 }
                 // Performance HUD (RivaTuner style). Frame rate comes from MangoHud's logger.
                 property JsonObject perfMonitor: JsonObject {
+                    // Pin the HUD on screen while a game is detected
+                    property bool autoPin: true
                     property string style: "bars" // bars | graph | text
                     property string palette: "accent" // accent | container | mono
                     property bool fpsOnly: false

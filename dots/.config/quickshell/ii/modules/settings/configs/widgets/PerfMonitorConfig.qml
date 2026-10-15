@@ -762,6 +762,17 @@ Item {
                             textField.onEditingFinished: subPageRoot.setOption("pingTarget", textField.text.trim())
                         }
 
+                        ConfigSwitch {
+                            Layout.fillWidth: true
+                            buttonIcon: "push_pin"
+                            text: Translation.tr("Pin while a game is running")
+                            checked: subPageRoot.hud.autoPin
+                            onCheckedChanged: subPageRoot.setOption("autoPin", checked)
+                            StyledToolTip {
+                                text: Translation.tr("The HUD pins itself when a game is detected and goes away when it closes. Turn this off to keep it pinned yourself.")
+                            }
+                        }
+
                         NoticeBox {
                             Layout.fillWidth: true
                             materialIcon: "keyboard"

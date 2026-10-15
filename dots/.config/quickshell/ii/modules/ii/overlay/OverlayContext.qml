@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import qs.modules.common
+import qs.services
 import "./discordVoice" as DiscordPackage
 
 Singleton {
@@ -100,11 +101,86 @@ Singleton {
         }
     }
     property bool perfIdleChecked: false
-    Component.onCompleted: restorePinnedPerfMonitor()
+
+    // -------------------------------------------------------------- auto pin
+    // The Discord overlay and the performance HUD put themselves on screen,
+    // pinned, while their condition holds: a voice call for the former, a
+    // detected game for the latter. The pin follows that condition both ways,
+    // so a missed signal or a shell restart cannot leave one pinned behind.
+    // With the option off the widget is left alone, which is how a HUD the
+    // user keeps pinned on purpose is kept.
+
+    function setAutoPin(identifier: string, wanted: bool) {
+        if (!Persistent.ready || !root.availableWidgets.some(w => w.identifier === identifier))
+            return;
+        if (Config.options.overlay?.[identifier]?.autoPin === false)
+            return;
+        const entry = Persistent.states.overlay[identifier];
+        if (!entry)
+            return;
+        const open = Persistent.states.overlay.open;
+        if (wanted) {
+            if (!open.includes(identifier))
+                Persistent.states.overlay.open = [...open, identifier];
+            if (!entry.pinned)
+                entry.pinned = true;
+            // Pinning here too arms the overlay window, which creates the widget.
+            root.pin(identifier, true);
+        } else {
+            if (open.includes(identifier))
+                Persistent.states.overlay.open = open.filter(id => id !== identifier);
+            if (entry.pinned)
+                entry.pinned = false;
+            root.pin(identifier, false);
+        }
+    }
+
+    // Also runs on boot, so a call or a game already up comes back pinned.
+    function syncAutoPins() {
+        root.setAutoPin("discordVoice", DiscordVoice.inVoice);
+        root.setAutoPin("perfMonitor", GameDetector.gameRunning);
+    }
+
+    Component.onCompleted: {
+        root.restorePinnedPerfMonitor();
+        root.syncAutoPins();
+    }
     Connections {
         target: Persistent
         function onReadyChanged() {
             root.restorePinnedPerfMonitor();
+            root.syncAutoPins();
+        }
+    }
+    Connections {
+        target: Config
+        function onReadyChanged() {
+            root.syncAutoPins();
+        }
+    }
+    // Flipping the option on while a call or a game is already up pins at once.
+    Connections {
+        target: Config.options?.overlay?.discordVoice ?? null
+        function onAutoPinChanged() {
+            root.setAutoPin("discordVoice", DiscordVoice.inVoice);
+        }
+    }
+    Connections {
+        target: Config.options?.overlay?.perfMonitor ?? null
+        function onAutoPinChanged() {
+            root.setAutoPin("perfMonitor", GameDetector.gameRunning);
+        }
+    }
+    Connections {
+        target: DiscordVoice
+        function onInVoiceChanged() {
+            root.setAutoPin("discordVoice", DiscordVoice.inVoice);
+        }
+    }
+    Connections {
+        target: GameDetector
+        function onGameRunningChanged() {
+            root.setAutoPin("perfMonitor", GameDetector.gameRunning);
         }
     }
 
