@@ -269,46 +269,70 @@ ColumnLayout {
     }
 
     ContentSection {
-        title: Translation.tr("Workspace Compactor")
-        icon: "compress"
+        title: Translation.tr("Workspace Arranger")
+        icon: "reorder"
 
         HelperCodeBox {
             Layout.fillWidth: true
             icon: "terminal"
             title: Translation.tr("Build it once")
-            text: Translation.tr("Pulls the focused monitor's occupied workspaces down to 1..N with no gaps. The workspaces themselves are renumbered, so every window keeps its exact place. Rust is the only requirement.")
-            codeSnippet: `${Directories.rustHelpersScriptPath.replace(FileUtils.trimFileProtocol(Directories.home), "~")} build workspace_compactor`
+            text: Translation.tr("Renumbers the focused monitor's workspaces in place: it closes the gaps so the occupied ones run 1..N, and opens an empty workspace wherever you ask by shifting the ones after it up. Every window keeps its exact place. Rust is the only requirement.")
+            codeSnippet: `${Directories.rustHelpersScriptPath.replace(FileUtils.trimFileProtocol(Directories.home), "~")} build workspace_arranger`
             snippetWrapMode: Text.Wrap
         }
 
         KeyboardShortcutBox {
             Layout.fillWidth: true
-            text: Translation.tr("Compact workspaces into 1..N")
+            text: Translation.tr("Close gaps, so workspaces run 1..N")
             keys: ["Ctrl", "Super", "C"]
+        }
+
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            text: Translation.tr("Insert an empty workspace after this one")
+            keys: ["Ctrl", "Super", "I"]
+        }
+
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            text: Translation.tr("Insert an empty workspace before this one")
+            keys: ["Ctrl", "Super", "Shift", "I"]
+        }
+
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            text: Translation.tr("Insert an empty workspace first")
+            keys: ["Ctrl", "Super", "Home"]
+        }
+
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            text: Translation.tr("Same, taking the focused window along (Shift: before, Home: first)")
+            keys: ["Super", "Alt", "I"]
         }
 
         ConfigSwitch {
             buttonIcon: "autorenew"
-            text: Translation.tr("Auto-Compact")
-            checked: Config.options.bar.workspaces.autoCompact
+            text: Translation.tr("Close gaps automatically")
+            checked: Config.options.bar.workspaces.arranger.autoCloseGaps
             onCheckedChanged: {
-                Config.options.bar.workspaces.autoCompact = checked;
+                Config.options.bar.workspaces.arranger.autoCloseGaps = checked;
             }
             StyledToolTip {
-                text: Translation.tr("Compact automatically whenever closing or moving a window leaves a gap on the focused monitor. The keybind above keeps working either way.")
+                text: Translation.tr("Close gaps automatically whenever closing or moving a window leaves one on the focused monitor. The shortcuts above keep working either way.")
             }
         }
 
         ConfigSpinBox {
-            enabled: Config.options.bar.workspaces.autoCompact
+            enabled: Config.options.bar.workspaces.arranger.autoCloseGaps
             icon: "timer"
-            text: Translation.tr("Auto-Compact delay (ms)")
-            value: Config.options.bar.workspaces.autoCompactDelay
+            text: Translation.tr("Delay before closing a gap (ms)")
+            value: Config.options.bar.workspaces.arranger.delay
             from: 100
             to: 5000
             stepSize: 100
             onValueChanged: {
-                Config.options.bar.workspaces.autoCompactDelay = value;
+                Config.options.bar.workspaces.arranger.delay = value;
             }
         }
 
@@ -316,15 +340,15 @@ ColumnLayout {
             title: Translation.tr("When the gap is the current workspace")
             icon: "conditions"
             Layout.fillWidth: true
-            visible: Config.options.bar.workspaces.autoCompact
+            visible: Config.options.bar.workspaces.arranger.autoCloseGaps
 
             ConfigSelectionArray {
-                currentValue: Config.options.bar.workspaces.autoCompactCurrentGap
+                currentValue: Config.options.bar.workspaces.arranger.currentGap
                 onSelected: (newValue) => {
-                    Config.options.bar.workspaces.autoCompactCurrentGap = newValue;
+                    Config.options.bar.workspaces.arranger.currentGap = newValue;
                 }
                 options: [{
-                    "displayName": Translation.tr("Compact on switch"),
+                    "displayName": Translation.tr("Close on switch"),
                     "icon": "move_group",
                     "value": "onswitch"
                 }, {

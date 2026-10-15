@@ -1185,7 +1185,7 @@ Scope {
         // The same check the bar and the screen corners use, for the same reasons:
         // it counts a fullscreen window on the special workspace - a scratchpad
         // pulled over the monitor - and it reads the client list rather than a
-        // workspace's own toplevels, which the compactor's renumbering leaves
+        // workspace's own toplevels, which the arranger's renumbering leaves
         // stale. The old local scan of `Hyprland.workspaces` saw neither, so a
         // fullscreen video in the scratchpad left the island sitting on top of it.
         return HyprlandData.monitorHasFullscreenWindow(win.screen.name);

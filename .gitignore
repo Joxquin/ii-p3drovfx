@@ -33,10 +33,10 @@ __pycache__/
 /dots/.config/quickshell/ii/.cortexkit
 /dots/.config/quickshell/ii/user_widgets
 
-# Compiled binary — build it from workspace_compactor_src/ instead (see scripts/hyprland/README.md)
-/dots/.config/quickshell/ii/scripts/hyprland/workspace_compactor
-/dots/.config/quickshell/ii/scripts/hyprland/workspace_compactor_src/target/
-/dots/.config/quickshell/ii/scripts/hyprland/workspace_compactor_src/Cargo.lock
+# Compiled binary — build it from workspace_arranger_src/ instead (see scripts/hyprland/README.md)
+/dots/.config/quickshell/ii/scripts/hyprland/workspace_arranger
+/dots/.config/quickshell/ii/scripts/hyprland/workspace_arranger_src/target/
+/dots/.config/quickshell/ii/scripts/hyprland/workspace_arranger_src/Cargo.lock
 
 # Compiled binary — build it from workspace_profile_manager_src/ instead (see scripts/hyprland/README.md)
 /dots/.config/quickshell/ii/scripts/hyprland/workspace_profile_manager

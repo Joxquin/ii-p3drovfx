@@ -39,7 +39,7 @@ HELPERS=(
     "osk_autoshow:osk"
     "touch_gestures:touchGestures"
     "app_stats:appStats"
-    "workspace_compactor:hyprland"
+    "workspace_arranger:hyprland"
     "workspace_profile_manager:hyprland"
     "sni_watcher:tray"
 )

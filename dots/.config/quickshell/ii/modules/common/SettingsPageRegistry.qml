@@ -140,7 +140,7 @@ Singleton {
             "subPages": ["widgets/DockWorkspaceConfig.qml"],
             "searchComponent": false,
             "searchSources": ["sections/WorkspacesOptionsSection.qml"],
-            "aliases": ["Tint workspaces icons", "Active indicator", "Numerals", "Workspace compactor"]
+            "aliases": ["Tint workspaces icons", "Active indicator", "Numerals", "Workspace arranger", "Workspace compactor", "Insert workspace", "Close workspace gaps"]
         },
         {
             "id": "overview",

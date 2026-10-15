@@ -12,7 +12,7 @@ import qs.services
  * Leads with the bar's own workspace widget, live. Under it: its style and colour (cards
  * that try themselves on it), the numerals and the active indicator (with a track that
  * plays the indicator's behaviour), what each workspace shows as tiles, the numbers
- * as cards, the icon shape and the compactor. Search indexes sections/WorkspacesOptionsSection.qml
+ * as cards, the icon shape and the arranger. Search indexes sections/WorkspacesOptionsSection.qml
  * for everything the panes and tiles draw.
  */
 Item {
@@ -260,7 +260,7 @@ Item {
             }
         }
 
-        WorkspacesCompactPane {
+        WorkspacesArrangerPane {
             Layout.fillWidth: true
             Layout.topMargin: workspacesRoot.sectionGap
         }

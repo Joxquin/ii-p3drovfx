@@ -10,4 +10,4 @@ WorkspacesNumeralPane 1.0 WorkspacesNumeralPane.qml
 WorkspacesCountCard 1.0 WorkspacesCountCard.qml
 WorkspacesIconShapePane 1.0 WorkspacesIconShapePane.qml
 WorkspacesReveal 1.0 WorkspacesReveal.qml
-WorkspacesCompactPane 1.0 WorkspacesCompactPane.qml
+WorkspacesArrangerPane 1.0 WorkspacesArrangerPane.qml

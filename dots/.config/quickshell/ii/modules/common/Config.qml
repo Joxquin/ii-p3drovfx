@@ -1110,7 +1110,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 29
+    readonly property int currentConfigVersion: 30
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1830,6 +1830,27 @@ Singleton {
         if (from < 29 && Array.isArray(raw.overlay?.buttons) && !raw.overlay.buttons.includes("perfMonitor")) {
             raw.overlay.buttons.push("perfMonitor");
             console.log("[Config] Migrated overlay buttons: added perfMonitor");
+        }
+
+        // v29 -> v30: the workspace compactor became the workspace arranger (it opens
+        // workspaces too), and its auto-compact keys moved into bar.workspaces.arranger.
+        const ws = raw.bar?.workspaces;
+        if (from < 30 && ws && typeof ws === "object") {
+            const legacy = {
+                "autoCompact": "autoCloseGaps",
+                "autoCompactCurrentGap": "currentGap",
+                "autoCompactDelay": "delay"
+            };
+            if (Object.keys(legacy).some(k => k in ws)) {
+                if (!ws.arranger || typeof ws.arranger !== "object")
+                    ws.arranger = {};
+                for (const k in legacy) {
+                    if (k in ws && !(legacy[k] in ws.arranger))
+                        ws.arranger[legacy[k]] = ws[k];
+                    delete ws[k];
+                }
+                console.log("[Config] Migrated workspace compactor keys into bar.workspaces.arranger");
+            }
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -5407,9 +5428,13 @@ Singleton {
                     property bool dockHoverEffect: true
                     property bool dockShowAppIcons: true
 
-                    property bool autoCompact: false // Run the workspace compactor automatically when a gap appears
-                    property string autoCompactCurrentGap: "onswitch" // Gap on the current workspace: "onswitch" | "immediate" | "never"
-                    property int autoCompactDelay: 600 // ms of quiet before an automatic compaction fires
+                    // The workspace arranger (scripts/hyprland/workspace_arranger): closes gaps in the
+                    // numbering and opens empty workspaces in between.
+                    property JsonObject arranger: JsonObject {
+                        property bool autoCloseGaps: false // Close a gap as soon as one appears
+                        property string currentGap: "onswitch" // Gap on the current workspace: "onswitch" | "immediate" | "never"
+                        property int delay: 600 // ms of quiet before an automatic close fires
+                    }
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false

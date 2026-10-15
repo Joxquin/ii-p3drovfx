@@ -1,4 +1,5 @@
-// Compacts the focused monitor's workspaces so occupied ones become 1..N with no gaps.
+// Arranges the focused monitor's workspace numbering. With no mode it closes the gaps, so the
+// occupied workspaces become 1..N.
 //
 // Nothing is moved between workspaces: the workspaces themselves are renumbered, so every window
 // keeps its exact place — dwindle's split tree and ratios, floating geometry, fullscreen state and
@@ -15,7 +16,7 @@ use std::env;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
-/// Must match `lockWorkspaceMin` in `services/WorkspaceCompactor.qml`.
+/// Must match `lockWorkspaceMin` in `services/WorkspaceArranger.qml`.
 const LOCK_WORKSPACE_MIN: i64 = 10000;
 
 /// Where empty workspaces are parked while the occupied ones are renumbered onto their ids. Far
@@ -25,7 +26,7 @@ const LOCK_WORKSPACE_MIN: i64 = 10000;
 const PARK_BASE: i64 = 9000;
 
 /// Exit status of an --auto run that left the user's own empty workspace alone (see
-/// `--current-gap`). Must match `currentGapExit` in `services/WorkspaceCompactor.qml`.
+/// `--current-gap`). Must match `currentGapExit` in `services/WorkspaceArranger.qml`.
 const CURRENT_GAP_EXIT: i32 = 3;
 
 /// Speaks the Hyprland IPC protocol directly — no `hyprctl` subprocess.
@@ -64,7 +65,7 @@ fn change_id(from: i64, to: i64) -> String {
 }
 
 /// Mirrors `Config.options.bar.workspaces` (`~/.config/illogical-impulse/config.json`) — the
-/// same per-monitor ranges the bar itself uses, so the compactor lands windows where the bar
+/// same per-monitor ranges the bar itself uses, so the arranger lands windows where the bar
 /// already expects them.
 struct WorkspaceMapConfig {
     use_map: bool,
@@ -145,8 +146,8 @@ struct Block {
     span: i64,
 }
 
-/// Which workspaces this compaction is allowed to touch. When the bar's own workspace-map
-/// isolation is on, defer to it entirely so the compactor and the bar always agree: a monitor owns
+/// Which workspaces a run is allowed to touch. When the bar's own workspace-map
+/// isolation is on, defer to it entirely so the arranger and the bar always agree: a monitor owns
 /// the ids above its `workspaceMap` entry, paged into groups of `shown`. Otherwise fall back to
 /// the Hyprland-lua `workspace_in_group()` convention (fixed-size blocks of `group_size`) that
 /// actually places windows when `SUPER+digit` is pressed.
@@ -263,7 +264,7 @@ fn insert_run(slot: i64, last: i64, taken: impl Fn(i64) -> bool) -> Option<Vec<i
 
 /// `--insert` is pressed on purpose, so a refusal has to be seen, not just logged.
 fn insert_refused(msg: &str) {
-    eprintln!("workspace_compactor: {}", msg);
+    eprintln!("workspace_arranger: {}", msg);
     let _ = std::process::Command::new("notify-send")
         .args(["-a", "Workspaces", "Can't insert a workspace", msg])
         .status();
@@ -275,7 +276,7 @@ fn insert_workspace(mode: &str, take: bool, active_ws: i64, mon_id: i64, block: 
         "after" => active_ws + 1,
         "first" => block.base + 1,
         _ => {
-            eprintln!("workspace_compactor: --insert takes before, after or first");
+            eprintln!("workspace_arranger: --insert takes before, after or first");
             std::process::exit(2);
         }
     };
@@ -316,14 +317,14 @@ fn insert_workspace(mode: &str, take: bool, active_ws: i64, mon_id: i64, block: 
 
 fn main() {
     let Some(monitors) = query("monitors all") else {
-        eprintln!("workspace_compactor: cannot reach the Hyprland socket");
+        eprintln!("workspace_arranger: cannot reach the Hyprland socket");
         std::process::exit(1);
     };
     let Some(focused) = monitors
         .as_array()
         .and_then(|a| a.iter().find(|m| m.get("focused").and_then(|v| v.as_bool()) == Some(true)))
     else {
-        eprintln!("workspace_compactor: no focused monitor");
+        eprintln!("workspace_arranger: no focused monitor");
         std::process::exit(1);
     };
 
@@ -335,8 +336,8 @@ fn main() {
         .and_then(|v| v.as_i64())
         .unwrap_or(1);
 
-    // --auto marks a background invocation (Quickshell's Auto-Compact service): the user did
-    // not ask for this compaction, so the view must never be moved on their behalf.
+    // --auto marks a background invocation (WorkspaceArranger.qml closing gaps on its own): the
+    // user did not ask for this compaction, so the view must never be moved on their behalf.
     let mut auto = false;
     // What an --auto run does when the active workspace itself is the gap: "immediate" compacts
     // it like any other, anything else leaves it alone and exits with CURRENT_GAP_EXIT. Decided
@@ -419,14 +420,14 @@ fn main() {
             continue; // it is one of ours and moves out of the way on its own
         }
         if !blocker.parkable(mon_id) {
-            eprintln!("workspace_compactor: workspace {} is in the way, not compacting", dst);
+            eprintln!("workspace_arranger: workspace {} is in the way, not compacting", dst);
             return;
         }
         while existing.contains_key(&park_next) {
             park_next += 1;
         }
         if park_next >= LOCK_WORKSPACE_MIN {
-            eprintln!("workspace_compactor: no free workspace id to park {} on", dst);
+            eprintln!("workspace_arranger: no free workspace id to park {} on", dst);
             return;
         }
         parked.push((dst, park_next));
