@@ -3,6 +3,11 @@
 // Nothing is moved between workspaces: the workspaces themselves are renumbered, so every window
 // keeps its exact place — dwindle's split tree and ratios, floating geometry, fullscreen state and
 // groups all survive untouched. Special and named workspaces are left alone.
+//
+// `--insert=before|after|first` runs the same renumbering the other way: it opens an empty
+// workspace before or after the active one, or at the start of its block, by shifting the
+// workspaces in the way up by one, and takes the view there. `--take` brings the focused window
+// along into it.
 
 use serde_json::Value;
 use std::collections::HashMap;
@@ -184,6 +189,11 @@ impl Existing {
     fn parkable(&self, mon_id: i64) -> bool {
         self.regular && !self.persistent && self.windows == 0 && self.monitor_id == mon_id
     }
+
+    /// Can `--insert` move this workspace up one id? Same rules as parking, minus the emptiness.
+    fn shiftable(&self, mon_id: i64) -> bool {
+        self.regular && !self.persistent && self.monitor_id == mon_id
+    }
 }
 
 fn existing_workspaces() -> HashMap<i64, Existing> {
@@ -238,6 +248,72 @@ fn occupied_workspaces(mon_id: i64) -> Vec<i64> {
     ids
 }
 
+/// The workspaces `--insert` has to move up one id to free `slot`: every taken id from `slot` up
+/// to the first free one, ascending. `None` when that free id falls past `last`, the end of the
+/// block — there is no room left to open a workspace in.
+fn insert_run(slot: i64, last: i64, taken: impl Fn(i64) -> bool) -> Option<Vec<i64>> {
+    let mut run = Vec::new();
+    let mut id = slot;
+    while taken(id) {
+        run.push(id);
+        id += 1;
+    }
+    (id <= last).then_some(run)
+}
+
+/// `--insert` is pressed on purpose, so a refusal has to be seen, not just logged.
+fn insert_refused(msg: &str) {
+    eprintln!("workspace_compactor: {}", msg);
+    let _ = std::process::Command::new("notify-send")
+        .args(["-a", "Workspaces", "Can't insert a workspace", msg])
+        .status();
+}
+
+fn insert_workspace(mode: &str, take: bool, active_ws: i64, mon_id: i64, block: &Block) {
+    let slot = match mode {
+        "before" => active_ws,
+        "after" => active_ws + 1,
+        "first" => block.base + 1,
+        _ => {
+            eprintln!("workspace_compactor: --insert takes before, after or first");
+            std::process::exit(2);
+        }
+    };
+    let existing = existing_workspaces();
+    let Some(active) = existing.get(&active_ws).filter(|ws| ws.regular) else {
+        insert_refused("The active workspace isn't a numbered one");
+        return;
+    };
+    // Taking a workspace's only window into a new slot right next to it would just leave a blank
+    // workspace where it was — the same layout with an extra gap.
+    if take && mode != "first" && active.windows <= 1 {
+        return;
+    }
+
+    let last = block.base + block.span;
+    let Some(run) = insert_run(slot, last, |id| existing.contains_key(&id)) else {
+        insert_refused(&format!("Workspaces {}–{} are all taken", block.base + 1, last));
+        return;
+    };
+    // Half a shift is worse than none, so anything in the run that is not ours to renumber
+    // cancels the whole insert.
+    if let Some(id) = run.iter().find(|id| !existing[*id].shiftable(mon_id)) {
+        insert_refused(&format!("Workspace {} is named, persistent or on another monitor", id));
+        return;
+    }
+
+    // Top down, so every target id has been vacated by the step before it. The active workspace
+    // keeps the monitor's focus through its own renumbering; the view then always moves to the
+    // freed slot, which Hyprland creates on the focused monitor — with the window when taking.
+    let mut cmds: Vec<String> = run.iter().rev().map(|&id| change_id(id, id + 1)).collect();
+    cmds.push(if take {
+        format!("hl.dsp.window.move({{ workspace = {}, follow = true }})", slot)
+    } else {
+        format!("hl.dsp.focus({{ workspace = {} }})", slot)
+    });
+    dispatch_batch(&cmds);
+}
+
 fn main() {
     let Some(monitors) = query("monitors all") else {
         eprintln!("workspace_compactor: cannot reach the Hyprland socket");
@@ -270,9 +346,15 @@ fn main() {
     // Only used when the bar's own workspace-map isolation (below) is off. An explicit argument
     // beats the value read out of the Hyprland config.
     let mut group_size: Option<i64> = None;
+    let mut insert: Option<String> = None;
+    let mut take = false;
     for arg in env::args().skip(1) {
         if arg == "--auto" {
             auto = true;
+        } else if arg == "--take" {
+            take = true;
+        } else if let Some(mode) = arg.strip_prefix("--insert=") {
+            insert = Some(mode.to_string());
         } else if let Some(mode) = arg.strip_prefix("--current-gap=") {
             current_gap = mode.to_string();
         } else if let Some(n) = arg.parse::<i64>().ok().filter(|&n| n > 0) {
@@ -288,6 +370,11 @@ fn main() {
     }
     let ws_map_cfg = read_workspace_map_config();
     let block = active_block(&ws_map_cfg, monitor_index(&monitors, mon_name), active_ws, group_size);
+
+    if let Some(mode) = insert {
+        insert_workspace(&mode, take, active_ws, mon_id, &block);
+        return;
+    }
 
     // Only the active block takes part. A monitor can hold several blocks at once (workspaces
     // 11-20 are the second page of a single monitor), and compacting across them would renumber
@@ -425,5 +512,21 @@ mod tests {
         // named workspaces never take part
         assert!(!is_current_gap(2, Some(&ws(0, false)), &[1, 3]));
         assert!(!is_current_gap(2, None, &[1, 3]));
+    }
+
+    #[test]
+    fn insert_runs() {
+        let taken = |ids: &'static [i64]| move |id: i64| ids.contains(&id);
+        // before 2 with 1-4 taken: 2, 3, 4 move up
+        assert_eq!(insert_run(2, 10, taken(&[1, 2, 3, 4])), Some(vec![2, 3, 4]));
+        // the shift stops at the first gap: 6 stays put
+        assert_eq!(insert_run(1, 10, taken(&[1, 2, 6])), Some(vec![1, 2]));
+        // the slot is already free
+        assert_eq!(insert_run(5, 10, taken(&[1, 2, 3, 4])), Some(vec![]));
+        // block full, or the run would spill into the next page
+        assert_eq!(insert_run(1, 3, taken(&[1, 2, 3])), None);
+        assert_eq!(insert_run(19, 20, taken(&[19, 20, 21])), None);
+        // after the last slot of the block
+        assert_eq!(insert_run(11, 10, taken(&[10])), None);
     }
 }

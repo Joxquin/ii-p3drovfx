@@ -109,6 +109,15 @@ per monitor, 10 by default), reading `workspaceGroupSize` out of
 size is picked up on its own. Passing a block size as the first argument to the binary still
 overrides it (see keybind below).
 
+**Inserting a workspace:** `--insert=before|after|first` does the reverse. It opens an empty
+workspace before or after the active one, or at the start of the block, by shifting the occupied
+workspaces in the way up by one, and takes you there. `--take` brings the focused window with it.
+The shift stops at the first free id, so later gaps are kept. When the block has no free id left,
+the binary refuses and sends a notification. Bound to `CTRL + SUPER + I` (after),
+`CTRL + SUPER + SHIFT + I` (before) and `CTRL + SUPER + Home` (first); `SUPER + ALT` instead of
+`CTRL + SUPER` takes the window along. With Auto-Compact on, an inserted workspace you leave empty
+is compacted away again as usual.
+
 **Source:** `~/.config/quickshell/ii/scripts/hyprland/workspace_compactor_src/`
 
 ### Building from Source

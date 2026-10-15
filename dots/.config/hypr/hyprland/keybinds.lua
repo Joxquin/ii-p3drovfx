@@ -286,6 +286,20 @@ end
 
 hl.bind("CTRL + SUPER + C", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor"),
     { description = "Workspaces: Compact into 1..N (remove empty gaps)" })
+--# Insert an empty workspace and go to it, shifting the ones in the way up by one; SUPER+ALT also
+--# takes the focused window along
+hl.bind("CTRL + SUPER + I", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor --insert=after"),
+    { description = "Workspaces: Insert empty workspace after current" })
+hl.bind("CTRL + SUPER + SHIFT + I", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor --insert=before"),
+    { description = "Workspaces: Insert empty workspace before current" })
+hl.bind("CTRL + SUPER + Home", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor --insert=first"),
+    { description = "Workspaces: Insert empty workspace first" })
+hl.bind("SUPER + ALT + I", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor --insert=after --take"),
+    { description = "Window: Send to new workspace after current" })
+hl.bind("SUPER + ALT + SHIFT + I", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor --insert=before --take"),
+    { description = "Window: Send to new workspace before current" })
+hl.bind("SUPER + ALT + Home", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor --insert=first --take"),
+    { description = "Window: Send to new workspace first" })
 
 --##! Window
 hl.bind("SUPER + ALT + S", function()
