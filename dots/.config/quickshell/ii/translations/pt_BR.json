@@ -14741,5 +14741,17 @@
     "The day as an arc: the sun travels it from sunrise to sunset and a moon the night arc below it. The temperature and the next sunrise or sunset beside it.": "O dia como um arco: o sol o percorre do nascer ao pôr, e uma lua percorre o arco da noite abaixo dele. A temperatura e o próximo nascer ou pôr do sol ao lado.",
     "The sky as one display word on a card, stamped with the temperature inside a shape that is the weather itself: a sunburst, a puff of cloud, a spiky storm.": "O céu como uma palavra display num cartão, carimbado com a temperatura dentro de uma forma que é o próprio clima: um sol, uma nuvem, uma tempestade pontiaguda.",
     "The temperature as a poster numeral whose weight is the warmth: hairline when it is freezing, black when it is hot. The condition beside it in a slanted voice, the city in capitals.": "A temperatura como um numeral de pôster cujo peso é o calor: fininho quando está congelando, preto quando está quente. A condição ao lado em itálico, a cidade em maiúsculas.",
-    "Trace": "Rastro"
+    "Trace": "Rastro",
+    "matches": "resultados",
+    "Edit in Cheatsheet": "Editar na Cheatsheet",
+    "From “%1”": "De “%1”",
+    "Copy keys": "Copiar teclas",
+    "Show in Cheatsheet": "Mostrar na Cheatsheet",
+    "Nothing is bound to that": "Nada está ligado a isso",
+    "No shortcuts here yet": "Nenhum atalho aqui ainda",
+    "Add a page of shortcuts in the Cheatsheet and it shows up here.": "Adicione uma página de atalhos na Cheatsheet e ela aparece aqui.",
+    "%1 matches in other sources.": "%1 resultados em outras fontes.",
+    "Search by what a shortcut does — close, workspace, screenshot.": "Busque pelo que o atalho faz — fechar, workspace, captura de tela.",
+    "Search all sources": "Buscar em todas as fontes",
+    "Add in Cheatsheet": "Adicionar na Cheatsheet"
 }
