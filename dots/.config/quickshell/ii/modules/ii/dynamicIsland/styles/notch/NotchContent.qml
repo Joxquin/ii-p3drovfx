@@ -1002,10 +1002,16 @@ Item {
         // ── OSD ──────────────────────────────────────────────────────────────────
         Loader {
             id: osdLoader
+            // Built as soon as the island pages to the OSD, not when the face swap lands:
+            // the island sizes itself from the indicator (osdTargetWidth), and until then
+            // it morphed toward the registry's 380 px, so a narrow Tuner face (a switch,
+            // a notice) grew to slider width and shrank back. Hidden until it is shown.
+            readonly property bool wanted: content.isOsd || content.activityId === "osd"
             anchors.fill: parent
-            active: content.isOsd
+            active: osdLoader.wanted
+            visible: content.isOsd
             source: {
-                if (!content.isOsd)
+                if (!osdLoader.wanted)
                     return "";
                 // The Tuner style has one face for every indicator.
                 if (Config.ready && Config.options.osd.style === "tuner")
