@@ -20,7 +20,7 @@ import "modes/ModeSchema.js" as ModeSchema
  *  2. desktop entry category "Game" — instant
  *  3. user list Config.options.modes.game.extraClasses — instant
  *  4. focused window fullscreen with GPU above `gpuThreshold` % for `holdSec`
- *  5. MangoHud log while a game is running — instant
+ *  5. MangoHud log while a game is running (opt-in, useMangoHudLog) — instant
  *
  * `reason` says which one fired ("Steam app", "fullscreen + GPU 62 %") so a
  * false positive can be diagnosed from the trigger chip.
@@ -80,7 +80,8 @@ Singleton {
     property Process mangoHudWatch: Process {
         command: ["python3", `${Directories.scriptPath}/perfOverlay/perf_monitor.py`,
             "watch", "--mangohud-dir", FileUtils.trimFileProtocol(`${Directories.cache}/perf-overlay/mangohud`)]
-        running: true
+        running: root.settings?.useMangoHudLog ?? false
+        onRunningChanged: if (!running) root.mangoHudGame = ""
         onExited: root.mangoHudGame = ""
         stdout: SplitParser {
             onRead: line => {
@@ -203,7 +204,7 @@ Singleton {
                 reason: `fullscreen + GPU ${root.gpuGamePercent} %`
             });
         }
-        if (root.mangoHudGame.length > 0)
+        if (root.mangoHudGame.length > 0 && (root.settings?.useMangoHudLog ?? false))
             list.push({ address: "", cls: root.mangoHudGame, reason: "MangoHud log" });
         return list;
     }
