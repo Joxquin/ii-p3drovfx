@@ -20,47 +20,8 @@ Item {
         return Mpris.players.values[playerSelector.currentIndex] ?? MprisController.activePlayer ?? Mpris.players.values[0];
     }
     property string artUrl: (player?.trackArtUrl && player.trackArtUrl !== "") ? player.trackArtUrl : (player === MprisController.activePlayer ? MprisController.artUrl : "")
-    property bool isLocalArt: (typeof artUrl === "string") && (artUrl.startsWith("file://") || artUrl.startsWith("/"))
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: (artUrl && artUrl !== "" && !isLocalArt) ? Qt.md5(artUrl) : ""
-    property string artFilePath: artFileName !== "" ? `${artDownloadLocation}/${artFileName}` : ""
-    property bool downloaded: false
-    property string displayedArtFilePath: ""
-
-    function updateArt() {
-        if (!root.artUrl || root.artUrl === "") {
-            root.displayedArtFilePath = "";
-            root.downloaded = false;
-            return;
-        }
-        if (root.isLocalArt) {
-            root.displayedArtFilePath = root.artUrl.startsWith("/") ? ("file://" + root.artUrl) : root.artUrl;
-            root.downloaded = true;
-            return;
-        }
-        coverArtDownloader.targetFile = root.artUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        root.displayedArtFilePath = "";
-        root.downloaded = false;
-        coverArtDownloader.running = true;
-    }
-
-    onArtUrlChanged: updateArt()
-    onArtFilePathChanged: updateArt()
-    Component.onCompleted: updateArt()
-
-    Process {
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `mkdir -p '${root.artDownloadLocation}' && ( [ -f '${artFilePath}' ] || curl -4 -sSL '${targetFile}' -o '${artFilePath}' )`]
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0 && root.artFilePath !== "") {
-                root.displayedArtFilePath = Qt.resolvedUrl(root.artFilePath);
-                root.downloaded = true;
-            }
-        }
-    }
+    readonly property string displayedArtFilePath: CoverArt.source(root.artUrl ?? "")
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
 
     readonly property bool hasArt: root.displayedArtFilePath !== "" && root.downloaded
     property color artDominantColor: (root.hasArt && colorQuantizer.colors.length > 0) ? colorQuantizer.colors[0] : Appearance.colors.colPrimary
@@ -317,7 +278,7 @@ Item {
                     text: "music_note"
                     iconSize: 48
                     color: Appearance.colors.colSubtext
-                    visible: !root.hasArt && !coverArtDownloader.running
+                    visible: !root.hasArt
                     opacity: 0.5
                 }
 
@@ -354,7 +315,7 @@ Item {
                 }
 
                 FadeLoader {
-                    shown: !root.downloaded && root.artUrl !== "" && coverArtDownloader.running
+                    shown: !root.downloaded && root.artUrl !== ""
                     anchors.centerIn: parent
                     MaterialLoadingIndicator {
                         anchors.centerIn: parent

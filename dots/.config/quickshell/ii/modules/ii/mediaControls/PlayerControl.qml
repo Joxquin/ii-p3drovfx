@@ -17,11 +17,7 @@ Item { // Player instance
     id: root
     required property MprisPlayer player
     property var artUrl: player?.trackArtUrl ?? ""
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
     property color artDominantColor: ColorUtils.mix((colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary), Appearance.colors.colPrimaryContainer, 0.8) || Appearance.m3colors.m3secondaryContainer
-    property bool downloaded: false
     property list<real> visualizerPoints: []
     property real maxVisualizerValue: 1000 // Max value in the data points
     property int visualizerSmoothing: 2 // Number of points to average for smoothing
@@ -41,7 +37,8 @@ Item { // Player instance
     property real playPauseButtonSize: compactMode ? 32 : 44
     property real trackChangeButtonSize: compactMode ? 18 : 24
 
-    property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
+    readonly property string displayedArtFilePath: CoverArt.source(root.artUrl)
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
 
     component TrackChangeButton: RippleButton {
         id: button
@@ -78,31 +75,9 @@ Item { // Player instance
         }
     }
 
-    onArtFilePathChanged: {
-        if (root.artUrl.length == 0) {
+    onArtUrlChanged: {
+        if (root.artUrl.length == 0)
             root.artDominantColor = Appearance.m3colors.m3secondaryContainer;
-            return;
-        }
-
-        // Binding does not work in Process
-        coverArtDownloader.targetFile = root.artUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        coverArtDownloader.artTempPath = root.artFilePath + ".tmp";
-        // Download
-        root.downloaded = false;
-        coverArtDownloader.running = true;
-    }
-
-    Process { // Cover art downloader
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: (exitCode, exitStatus) => {
-            // curl failure leaves no file behind; only trust the cache on success.
-            root.downloaded = (exitCode === 0);
-        }
     }
 
     ColorQuantizer {

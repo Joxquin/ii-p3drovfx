@@ -93,59 +93,15 @@ Item {
     }
 
     // ── Cover Art Resolution & Caching ────────────────────────────────────
-    property string artDownloadLocation: Directories.coverArt
-    property bool isLocalArt: root.artUrl.startsWith("file://") || root.artUrl.startsWith("/")
-    property string artFileName: root.artUrl !== "" ? Qt.md5(root.artUrl) : ""
-    property string artFilePath: root.artFileName !== "" ? `${artDownloadLocation}/${root.artFileName}` : ""
-    property bool artDownloaded: false
-
-    readonly property string effectiveArtSource: {
-        if (!root.artUrl || root.artUrl === "") return "";
-        if (root.isLocalArt) {
-            return root.artUrl.startsWith("/") ? ("file://" + root.artUrl) : root.artUrl;
-        }
-        if (root.artDownloaded && root.artFilePath !== "") {
-            return "file://" + root.artFilePath;
-        }
-        return root.artUrl;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: ""
-        property string filePath: ""
-        property string tempPath: ""
-        command: ["bash", "-c", `mkdir -p '${root.artDownloadLocation}' && ( [ -f '${filePath}' ] || (curl -4 -sSL '${StringUtils.shellSingleQuoteEscape(targetFile)}' -o '${tempPath}' && mv '${tempPath}' '${filePath}') )`]
-        onExited: (exitCode, exitStatus) => {
-            root.artDownloaded = (exitCode === 0);
-        }
-    }
-
-    function checkAndDownloadArt() {
-        if (!root.artUrl || root.artUrl === "") {
-            root.artDownloaded = false;
-            return;
-        }
-        if (root.isLocalArt) {
-            root.artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = root.artUrl;
-        artDownloader.filePath = root.artFilePath;
-        artDownloader.tempPath = root.artFilePath + ".tmp";
-        artDownloader.running = true;
-    }
-
-    onArtUrlChanged: {
-        root.checkAndDownloadArt();
-    }
+    readonly property string cachedArtSource: CoverArt.source(root.artUrl)
+    readonly property string effectiveArtSource: root.cachedArtSource || root.artUrl
 
     // ── Dynamic Color Scheme & M3 Tokens ──────────────────────────────────
-    readonly property bool useDynamicColors: (Config.options?.media?.dynamicAlbumColors ?? false) && (root.artDownloaded || root.isLocalArt)
+    readonly property bool useDynamicColors: (Config.options?.media?.dynamicAlbumColors ?? false) && root.cachedArtSource !== ""
 
     ColorQuantizer {
         id: colorQuantizer
-        source: root.artDownloaded ? ("file://" + root.artFilePath) : (root.isLocalArt ? (root.artUrl.startsWith("/") ? ("file://" + root.artUrl) : root.artUrl) : "")
+        source: root.cachedArtSource
         depth: 0
         rescaleSize: 1
     }
@@ -300,8 +256,8 @@ Item {
             return;
         }
 
-        // Silent upgrade when curl finishes downloading cached local file for the same track
-        if (root.artDownloaded && newSrc === ("file://" + root.artFilePath) && currentActive.source === root.artUrl) {
+        // Silent upgrade when the cover cache lands for the track showing the remote URL
+        if (root.cachedArtSource !== "" && newSrc === root.cachedArtSource && currentActive.source === root.artUrl) {
             currentActive.source = newSrc;
             root.activeArtSource = newSrc;
             return;
@@ -421,7 +377,6 @@ Item {
     Component.onCompleted: {
         root.displayTitle = root.title;
         root.displayArtist = root.artist;
-        root.checkAndDownloadArt();
         root._initialized = true;
         if (root.effectiveArtSource !== "") {
             root.applyArtTransition(root.effectiveArtSource);

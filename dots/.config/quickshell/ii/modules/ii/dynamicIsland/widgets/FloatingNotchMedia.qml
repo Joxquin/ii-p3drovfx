@@ -140,29 +140,7 @@ Item {
     readonly property color lightVizColor: root.useDynamicColors ? root.blendedColors.colPrimary : Appearance.colors.colOnSurface
 
 
-    property bool isLocalArt: root.artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(root.artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    FileView {
-        id: artFileCheck
-        path: root.artFilePath
-        onLoaded: {
-            root.artDownloaded = true;
-        }
-        onLoadFailed: error => {
-            if (error === FileViewError.FileNotFound)
-                root.artDownloaded = false;
-        }
-    }
-
-    readonly property string localArtFilePath: {
-        if (!root.artUrl || root.artUrl === "") return "";
-        if (root.isLocalArt) return FileUtils.trimFileProtocol(root.artUrl);
-        return root.artDownloaded ? root.artFilePath : "";
-    }
+    readonly property string localArtFilePath: CoverArt.localPath(root.artUrl)
 
     readonly property string resolvedArtPath: root.localArtFilePath !== "" ? Qt.resolvedUrl(root.localArtFilePath) : ""
 
@@ -189,9 +167,7 @@ Item {
             return "";
         if (root.currentArtUrl.startsWith("file://") || root.currentArtUrl.startsWith("/"))
             return root.currentArtUrl;
-        if (root.artDownloaded && root.artFilePath !== "")
-            return Qt.resolvedUrl(root.artFilePath);
-        return root.effectiveSource(root.currentArtUrl);
+        return CoverArt.source(root.currentArtUrl) || root.effectiveSource(root.currentArtUrl);
     }
 
     readonly property string previousArtSource: {
@@ -262,18 +238,6 @@ Item {
         artOutgoingBlur = 0;
         artOutgoingScale = 1.0;
         artOutgoingAnimation.restart();
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f '${artFilePath}' ] || (curl -4 -sSL '${StringUtils.shellSingleQuoteEscape(targetFile)}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: exitCode => {
-            if (exitCode === 0)
-                root.artDownloaded = true;
-        }
     }
 
     Behavior on artVignetteBlur {
@@ -485,7 +449,7 @@ Item {
 
     Image {
         id: artPreload
-        source: root.awaitingImageLoad ? (root.artDownloaded ? Qt.resolvedUrl(root.artFilePath) : root.effectiveSource(root.pendingArtUrl)) : ""
+        source: root.awaitingImageLoad ? (CoverArt.source(root.pendingArtUrl) || root.effectiveSource(root.pendingArtUrl)) : ""
         visible: false
         asynchronous: true
         width: 16
@@ -514,23 +478,6 @@ Item {
     }
 
     onArtUrlChanged: {
-        var shouldDownload = false;
-        
-        if (!root.artUrl || root.artUrl === "") {
-            root.artDownloaded = false;
-        } else if (root.isLocalArt) {
-            root.artDownloaded = true;
-        } else {
-            shouldDownload = true;
-            artDownloader.targetFile = root.artUrl;
-            artDownloader.artFilePath = root.artFilePath;
-            artDownloader.artTempPath = root.artFilePath + ".tmp";
-        }
-        
-        if (shouldDownload) {
-            artDownloader.running = true;
-        }
-
         if (!root._initialized)
             return;
         if (root.artUrl === root.currentArtUrl && root.currentArtUrl !== "")

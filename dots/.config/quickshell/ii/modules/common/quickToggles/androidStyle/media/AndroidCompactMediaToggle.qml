@@ -38,37 +38,7 @@ AndroidWidgetTileBase {
 
     readonly property bool useDynamicColors: (Config.options.background.widgets.compact_media.dynamicAlbumColors ?? true) && root.artSource !== ""
     readonly property string artUrl: MprisController.artUrl
-    readonly property bool isLocalArt: artUrl.startsWith("file://")
-
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: (artUrl && artUrl.length > 0) ? Qt.md5(artUrl) : ""
-    property string artFilePath: artFileName.length > 0 ? `${artDownloadLocation}/${artFileName}` : ""
-    property bool artDownloaded: false
-
-    readonly property string artSource: {
-        if (!artUrl || artUrl.length === 0) return "";
-        if (isLocalArt) return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) { artDownloaded = false; return; }
-        if (isLocalArt) { artDownloaded = true; return; }
-        artDownloader.targetFile = artUrl;
-        artDownloader.artFilePath = artFilePath;
-        artDownloader.artTempPath = artFilePath + ".tmp";
-        artDownloaded = false;
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: { artDownloaded = true; }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl)
 
     ColorQuantizer {
         id: colorQuantizer

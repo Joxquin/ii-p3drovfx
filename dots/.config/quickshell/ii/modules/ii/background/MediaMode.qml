@@ -93,11 +93,8 @@ Item { // Fullscreen MediaMode instance
     property string artUrl: applicationsSource
         ? MprisController.artUrl
         : (LocalMediaService.player?.trackArtUrl ?? "")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool downloaded: false
-    property string displayedArtFilePath: ""
+    readonly property string displayedArtFilePath: CoverArt.source(root.artUrl)
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
     property bool fileBrowserOpen: false
     property bool showAudioOutputDialog: false
     readonly property bool immersive: Config.options.background.mediaMode.immersive ?? false
@@ -237,49 +234,8 @@ Item { // Fullscreen MediaMode instance
 
     onTrackTitleChanged: Persistent.states.background.mediaMode.userScrollOffset = 0
 
-    function updateArt() {
-        if (!root.artUrl) {
-            root.displayedArtFilePath = "";
-            root.downloaded = false;
-            return;
-        }
-        if (root.artUrl && root.artUrl.startsWith("file://")) {
-            root.displayedArtFilePath = root.artUrl;
-            root.downloaded = true;
-            return;
-        }
-
-        coverArtDownloader.targetFile = root.artUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        root.displayedArtFilePath = "";
-        root.downloaded = false;
-        coverArtDownloader.running = true;
-    }
-
     function refreshArtwork() {
-        root.displayedArtFilePath = "";
-        root.updateArt();
-    }
-
-    onArtFilePathChanged: {
-        if (!root.artUrl || root.artUrl.length == 0) {
-            root.displayedArtFilePath = "";
-            return;
-        }
-        updateArt();
-    }
-
-    Process { // Cover art downloader
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `[ -f '${artFilePath}' ] || curl -sSL '${targetFile}' -o '${artFilePath}'`]
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
-                root.displayedArtFilePath = Qt.resolvedUrl(root.artFilePath);
-                root.downloaded = true;
-            }
-        }
+        CoverArt.retry(root.artUrl);
     }
 
     ColorQuantizer {

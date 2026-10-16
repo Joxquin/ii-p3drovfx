@@ -82,40 +82,7 @@ Item {
 
     // ── Cover ──
     readonly property string artUrl: root.hasPlayer ? MprisController.artUrl : ""
-    readonly property bool isLocalArt: root.artUrl.startsWith("file://") || root.artUrl.startsWith("/")
-    readonly property string artFilePath: `${Directories.coverArt}/${Qt.md5(root.artUrl)}`
-    property bool artDownloaded: false
-    readonly property string artSource: {
-        if (root.artUrl === "")
-            return "";
-        if (root.isLocalArt)
-            return root.artUrl;
-        return root.artDownloaded ? Qt.resolvedUrl(root.artFilePath) : "";
-    }
-
-    function refreshArt() {
-        if (root.artUrl === "" || root.isLocalArt) {
-            root.artDownloaded = root.isLocalArt;
-            return;
-        }
-        root.artDownloaded = false;
-        artDownloader.targetUrl = root.artUrl;
-        artDownloader.targetPath = root.artFilePath;
-        artDownloader.running = true;
-    }
-    onArtFilePathChanged: root.refreshArt()
-    Component.onCompleted: root.refreshArt()
-
-    Process {
-        id: artDownloader
-        property string targetUrl
-        property string targetPath
-        command: ["bash", "-c", `[ -f '${targetPath}' ] || (curl -4 -sSL '${targetUrl}' -o '${targetPath}.tmp' && mv '${targetPath}.tmp' '${targetPath}')`]
-        onExited: exitCode => {
-            if (artDownloader.targetPath === root.artFilePath)
-                root.artDownloaded = exitCode === 0;
-        }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl)
 
     // ── Colours ──
     readonly property bool useAlbumColors: root.dynamicColors && root.artSource !== ""

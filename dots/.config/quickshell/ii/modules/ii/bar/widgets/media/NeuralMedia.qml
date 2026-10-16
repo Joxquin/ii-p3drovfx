@@ -47,22 +47,8 @@ Item {
     readonly property int spacing: 4
 
     readonly property string artUrl: MprisController.artUrl
-    readonly property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-    readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : artUrl;
-    }
-
-    readonly property string localArtFilePath: {
-        if (!artUrl || artUrl === "") return "";
-        if (isLocalArt) return FileUtils.trimFileProtocol(artUrl);
-        return artDownloaded ? artFilePath : "";
-    }
+    readonly property string artSource: CoverArt.source(artUrl) || artUrl
+    readonly property string localArtFilePath: CoverArt.localPath(artUrl)
 
     readonly property string resolvedArtPath: localArtFilePath !== "" ? Qt.resolvedUrl(localArtFilePath) : ""
 
@@ -156,28 +142,6 @@ Item {
             rootItem.toggleVisible(hasTrack);
         }
         Qt.callLater(updatePopupRect);
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
-            return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloaded = false;
-        artDownloader.command = ["bash", "-c", `[ -f '${artFilePath}' ] || (mkdir -p '${artDownloadLocation}' && curl -4 -sSL '${artUrl}' -o '${artFilePath}.tmp' && mv '${artFilePath}.tmp' '${artFilePath}')`]
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        running: false
-        onExited: {
-            artDownloaded = true;
-        }
     }
 
     Timer {

@@ -52,45 +52,7 @@ Item {
         Qt.callLater(updatePopupRect);
     }
 
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    property string displayedArtFilePath: {
-        if (!root.artDownloaded)
-            return "";
-        if (root.artUrl.startsWith("file://"))
-            return root.artUrl;
-        return Qt.resolvedUrl(artFilePath);
-    }
-
-    onArtFilePathChanged: {
-        if (!root.artUrl || root.artUrl.length === 0) {
-            root.artDownloaded = false;
-            return;
-        }
-        if (root.artUrl.startsWith("file://")) {
-            root.artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = root.artUrl;
-        artDownloader.artFilePath = root.artFilePath;
-        artDownloader.artTempPath = root.artFilePath + ".tmp";
-        root.artDownloaded = false;
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            root.artDownloaded = true;
-        }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl ?? "")
 
     Layout.fillHeight: true
     visible: hasTrack

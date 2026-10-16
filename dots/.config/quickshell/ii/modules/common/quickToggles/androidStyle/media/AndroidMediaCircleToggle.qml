@@ -40,9 +40,6 @@ AndroidWidgetTileBase {
     property MprisPlayer currentPlayer: MprisController.activePlayer
 
     property string artUrl: MprisController.artUrl
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: (artUrl && artUrl !== "") ? Qt.md5(artUrl) : ""
-    property string artFilePath: artFileName !== "" ? `${artDownloadLocation}/${artFileName}` : ""
 
     readonly property real circleSize: Math.max(40, Math.min(root.surface.width, root.surface.height) - 12)
     readonly property real controlsSize: Math.max(22, Math.min(48, Math.round(root.circleSize * 0.24)))
@@ -73,48 +70,15 @@ AndroidWidgetTileBase {
         return legacy[raw] ?? raw;
     }
 
-    property bool downloaded: false
-    property string displayedArtFilePath: {
-        if (!root.artUrl || root.artUrl === "") return "";
-        if (root.artUrl.startsWith("file://")) return root.artUrl;
-        if (root.artUrl.startsWith("/")) return "file://" + root.artUrl;
-        return root.downloaded ? Qt.resolvedUrl(artFilePath) : "";
-    }
+    readonly property string displayedArtFilePath: CoverArt.source(root.artUrl)
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
 
     property list<real> visualizerPoints: Config.options.background.widgets.media.visualizer.enable ? CavaService.visualizerPoints : []
 
-    onArtFilePathChanged: updateArt()
 
     function nextPlayer() {
         if (!root.playerList || root.playerList.length === 0) return;
         root.currentPlayer = root.playerList[(root.playerList.indexOf(root.currentPlayer) + 1) % root.playerList.length];
-    }
-
-    function updateArt() {
-        if (!root.artUrl || root.artUrl === "") {
-            root.downloaded = false;
-            return;
-        }
-        if (root.artUrl.startsWith("file://") || root.artUrl.startsWith("/")) {
-            root.downloaded = true;
-            return;
-        }
-        coverArtDownloader.targetFile = root.artUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        coverArtDownloader.artTempPath = root.artFilePath + ".tmp";
-        root.downloaded = false;
-        coverArtDownloader.running = true;
-    }
-
-    Process {
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: (exitCode, exitStatus) => {
-            root.downloaded = exitCode === 0;
-        }
     }
 
     ColorQuantizer {
