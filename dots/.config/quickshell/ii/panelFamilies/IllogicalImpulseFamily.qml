@@ -85,7 +85,7 @@ Scope {
     PanelUrlLoader {
         extraCondition: Config.options.background.enable
         panelUrl: Qt.resolvedUrl("../modules/ii/background/Background.qml")
-        priority: 3
+        priority: 4
     }
     PanelUrlLoader {
         // The desktop layout editor's chrome; nothing to edit without the background.
@@ -135,10 +135,11 @@ Scope {
     PanelUrlLoader {
         extraCondition: Config.options.dock.enable
         panelUrl: Qt.resolvedUrl("../modules/ii/dock/Dock.qml")
-        priority: 1
+        priority: 3
     }
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/ii/lock/Lock.qml")
+        priority: 5
     }
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/ii/mediaControls/MediaControls.qml")
@@ -163,14 +164,17 @@ Scope {
     PanelUrlLoader {
         extraCondition: !IslandPolicy.ownsNotifications
         panelUrl: Qt.resolvedUrl("../modules/ii/notificationPopup/NotificationPopup.qml")
+        priority: 1
     }
     PanelUrlLoader {
         extraCondition: !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
         panelUrl: Qt.resolvedUrl("../modules/ii/onScreenDisplay/OnScreenDisplay.qml")
+        priority: 1
     }
     PanelUrlLoader {
         extraCondition: (Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
         panelUrl: Qt.resolvedUrl("../modules/ii/onScreenDisplay/minimalist/MinimalistOsd.qml")
+        priority: 1
     }
     PanelUrlLoader {
         // Kept loaded rather than gated on the service: the windows are empty
@@ -194,6 +198,7 @@ Scope {
     }
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/ii/overview/Overview.qml")
+        priority: 2
     }
     // Optional primary surface for the ii family. This is the Tablet Family's
     // actual drawer, not a fork: only the tablet-native app/home actions are
@@ -254,6 +259,7 @@ Scope {
     }
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/ii/sessionScreen/SessionScreen.qml")
+        priority: 1
     }
     // Every family loads the chooser: a family that did not offer it would be one the
     // user could switch into and never find the way out of.
@@ -272,10 +278,12 @@ Scope {
     PanelUrlLoader {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         panelUrl: Qt.resolvedUrl("../modules/ii/sidebarPolicies/SidebarPolicies.qml")
+        priority: 2
     }
     PanelUrlLoader {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         panelUrl: Qt.resolvedUrl("../modules/ii/sidebarDashboard/SidebarDashboard.qml")
+        priority: 2
     }
     PanelUrlLoader {
         extraCondition: BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
@@ -336,7 +344,7 @@ Scope {
     PanelUrlLoader {
         extraCondition: IslandPolicy.enabled
         panelUrl: Qt.resolvedUrl("../modules/ii/dynamicIsland/DynamicIsland.qml")
-        priority: 2
+        priority: 3
     }
     PanelUrlLoader {
         extraCondition: Config.ready && Boolean(Config.options && Config.options.interactions && Config.options.interactions.touchGestures && Config.options.interactions.touchGestures.enable)
