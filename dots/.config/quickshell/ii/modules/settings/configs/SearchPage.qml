@@ -75,7 +75,39 @@ ContentPage {
             buildSliceTimer.restart();
     }
 
+    // Headings of redesigned pages (hero cards, panes, chips) are not
+    // cloneable: each is a row that opens its page and flashes it there.
+    Component {
+        id: landmarkGroupComponent
+
+        ContentSection {
+            id: landmarkGroup
+            property var landmarks: []
+            searchResult: true
+            Layout.fillWidth: true
+
+            Repeater {
+                model: landmarkGroup.landmarks
+                delegate: ConfigSubpageRow {
+                    required property var modelData
+                    title: modelData.text
+                    onOpenSubPage: landmarkGroup.navigateToLandmark(modelData.text)
+                }
+            }
+        }
+    }
+
     function buildSection(section, i) {
+        if (section.landmarks) {
+            landmarkGroupComponent.createObject(dynamicContainer, {
+                title: section.title,
+                icon: section.icon,
+                pageId: section.pageId,
+                subPage: section.subPage,
+                landmarks: section.landmarks
+            });
+            return;
+        }
         let qmlStr = section.fileImports + "\n";
         qmlStr += "import QtQuick; import QtQuick.Layouts; import qs.modules.common.widgets; import qs.services; import qs.modules.common; \n";
         qmlStr += "ContentSection { searchResult: true; title: \"" + section.title.replace(/"/g, '\\"') + "\"; icon: \"" + section.icon + "\"; pageId: \"" + (section.pageId ? section.pageId.replace(/"/g, '\\"') : "") + "\"; subPage: \"" + (section.subPage ? section.subPage.replace(/"/g, '\\"') : "") + "\"; Layout.fillWidth: true; \n";

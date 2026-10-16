@@ -202,9 +202,13 @@ than nested layouts — see `qt-nested-layout-fillwidth` for why layouts absorb 
   `killall qs; setsid -f qs -c ii` (check `pgrep -x hyprlock` first).
 - Every file that calls `Translation.tr` imports `qs.services` — a missing import is only a
   `ReferenceError` at runtime.
-- Settings search indexes the proxy sections listed in the page's `searchSources`
-  (`SettingsPageRegistry`), not the new components. Keep a `ContentSection` proxy with the
-  real `ConfigSwitch`es there when an option should stay searchable.
+- Settings search clones only the controls of the proxy sections listed in the page's
+  `searchSources` (`SettingsPageRegistry`). Keep a `ContentSection` proxy with the real
+  `ConfigSwitch`es there when an option should be toggled from the results. Headings and
+  labels the new components draw (`title:`/`text:`/`label: Translation.tr("…")`, short, not
+  prose) are found anyway as **landmarks** (`scripts/settings/search_landmarks.py`): a result
+  row that opens the page and flashes the text. The crawl follows components by type name
+  through the page's local imports; a component only built from a string URL is not reached.
 - Theme swatches read the shared `ThemePreviewCache`; bind to `ThemePreviewCache.revision`
   rather than relying on catching `cacheChanged`, and repaint a `Canvas` on
   `onAvailableChanged` / `onVisibleChanged` — a paint requested before either is lost.

@@ -366,6 +366,136 @@ FloatingWindow {
             pendingHighlightTimer.restart();
     }
 
+    /*
+     * A search landmark - a heading on a hero card, pane or chip - has no
+     * ContentSection to claim the highlight request. Sections and controls
+     * claim theirs within a tick; whatever is left after that is looked up as
+     * text in the page (retrying while lazy parts and sub-pages build) and
+     * flashed in place.
+     */
+    Connections {
+        target: SearchRegistry
+        function onCurrentSearchChanged() {
+            if (SearchRegistry.currentSearch !== "")
+                landmarkLocator.locate(SearchRegistry.currentSearch);
+        }
+    }
+
+    Timer {
+        id: landmarkLocator
+        property string wanted: ""
+        property int attempts: 0
+        interval: 120
+        repeat: true
+
+        function locate(text) {
+            wanted = text;
+            attempts = 0;
+            restart();
+        }
+
+        onTriggered: {
+            // The search page keeps its query in currentSearch: not a request.
+            if (root.currentPage === root.pageIndexById("search")
+                    || SearchRegistry.currentSearch !== wanted) {
+                stop();
+                return;
+            }
+            attempts++;
+            const target = root.findTextItem(pageLoader.item, wanted);
+            if (target === "claimed") {
+                stop();
+                return;
+            }
+            if (target) {
+                stop();
+                root.flashItem(target);
+                SearchRegistry.currentSearch = "";
+            } else if (attempts >= 12) {
+                // Left set, as before: a section that builds later still claims it.
+                stop();
+            }
+        }
+    }
+
+    // The item showing `text`, or "claimed" when a section or slider bearing it
+    // highlights itself.
+    function findTextItem(rootItem, text) {
+        if (!rootItem || !text)
+            return null;
+        const wanted = text.toLowerCase();
+        let stack = [rootItem];
+        while (stack.length > 0) {
+            const item = stack.pop();
+            if (!item || !item.visible || item.opacity <= 0.01)
+                continue;
+            // Sections and sliders watch currentSearch and flash themselves
+            // (a lazy section can arrive after the first look).
+            if (item.currentSearch !== undefined
+                    && (String(item.title ?? "").toLowerCase() === wanted
+                        || String(item.text ?? "").toLowerCase() === wanted))
+                return "claimed";
+            if (typeof item.text === "string" && item.width > 0 && item.height > 0
+                    && item.text.toLowerCase() === wanted)
+                return item;
+            const kids = item.children;
+            for (let i = kids.length - 1; i >= 0; i--)
+                stack.push(kids[i]);
+        }
+        return null;
+    }
+
+    function flashItem(target) {
+        let p = target.parent;
+        while (p) {
+            if (p.contentY !== undefined && p.contentItem !== undefined
+                    && p.contentHeight > p.height + 1) {
+                const y = p.contentItem.mapFromItem(target, 0, 0).y - 100;
+                p.contentY = Math.max(0, Math.min(y, p.contentHeight - p.height));
+                break;
+            }
+            p = p.parent;
+        }
+        // A label stretched across its row is flashed where its words are.
+        let x = 0;
+        let width = target.width;
+        if (target.paintedWidth !== undefined && target.paintedWidth < target.width) {
+            width = target.paintedWidth;
+            if (target.horizontalAlignment === Text.AlignHCenter)
+                x = (target.width - width) / 2;
+            else if (target.horizontalAlignment === Text.AlignRight)
+                x = target.width - width;
+        }
+        landmarkFlashComponent.createObject(target, {
+            x: x - 6,
+            y: -6,
+            width: width + 12,
+            height: target.height + 12
+        });
+    }
+
+    Component {
+        id: landmarkFlashComponent
+
+        Rectangle {
+            id: flash
+            radius: Appearance.rounding.small
+            color: Appearance.colors.colPrimary
+            opacity: 0
+            z: 1000
+
+            SequentialAnimation {
+                running: true
+                SequentialAnimation {
+                    loops: 3
+                    NumberAnimation { target: flash; property: "opacity"; to: 0.3; duration: 150 }
+                    NumberAnimation { target: flash; property: "opacity"; to: 0; duration: 150 }
+                }
+                ScriptAction { script: flash.destroy() }
+            }
+        }
+    }
+
     function consumePendingSettingsPage() {
         const pending = GlobalStates.consumePendingSettingsPage();
         root.pendingSubPage = GlobalStates.settingsPendingSubPage || "";
@@ -586,7 +716,7 @@ FloatingWindow {
 
         let totalWidgets = 0;
         for (let s of result) {
-            totalWidgets += s.items.length;
+            totalWidgets += s.items.length + (s.landmarks?.length ?? 0);
             for (let sub of s.subsections) {
                 totalWidgets += sub.items.length;
             }

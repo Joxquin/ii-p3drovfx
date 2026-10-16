@@ -16,6 +16,12 @@ Item {
     property var sections: []
     property var fileSources: ({})
     property var fileImportsBySource: ({})
+    // Headings, labels and chips the redesigned pages draw outside any cloneable
+    // control ({ pageId, subPage, key, text, subPageTitle }); see scripts/settings/search_landmarks.py.
+    property var landmarks: []
+    readonly property int maxLandmarksPerGroup: 6
+    property bool _sectionsDone: false
+    property bool _landmarksDone: false
     property bool settingsActive: false
     property bool indexing: false
     property bool indexed: false
@@ -39,9 +45,12 @@ Item {
         sections = [];
         fileSources = ({});
         fileImportsBySource = ({});
+        landmarks = [];
         root._memoResults = null;
         root.indexed = false;
         root.indexing = true;
+        root._sectionsDone = false;
+        root._landmarksDone = false;
         let configRoot = FileUtils.trimFileProtocol(Directories.config) + "/quickshell/ii/";
         let basePath = configRoot + "modules/settings/configs/";
 
@@ -80,12 +89,26 @@ Item {
         pageFile.start(files, ids, subPages);
         listPresetsSearchProc.running = false;
         listPresetsSearchProc.running = true;
+        landmarkCrawler.start(configRoot);
 
-        if (files.length === 0) {
-            root.indexing = false;
-            root.indexed = true;
-            root.indexReady();
-        }
+        if (files.length === 0)
+            root.partIndexed("sections");
+    }
+
+    // Sections and landmarks are read side by side; the index is ready when both are.
+    function partIndexed(part) {
+        if (!root.indexing)
+            return;
+        if (part === "sections")
+            root._sectionsDone = true;
+        else
+            root._landmarksDone = true;
+        if (!root._sectionsDone || !root._landmarksDone)
+            return;
+        root.indexing = false;
+        root.indexed = true;
+        root._memoResults = null;
+        root.indexReady();
     }
 
     function setSettingsActive(active) {
@@ -107,10 +130,12 @@ Item {
         root.sections = [];
         root.fileSources = ({});
         root.fileImportsBySource = ({});
+        root.landmarks = [];
         root._memoResults = null;
         root._memoQuery = "";
         root.currentSearch = "";
         pageFile.cancel();
+        landmarkCrawler.cancel();
         listPresetsSearchProc.running = false;
     }
 
@@ -157,14 +182,12 @@ Item {
         }
 
         function finishIndexing() {
-            root.indexing = false;
-            root.indexed = true;
             path = "";
             files = [];
             pageIds = [];
             subPages = [];
             currentIndex = 0;
-            root.indexReady();
+            root.partIndexed("sections");
         }
 
         onLoaded: {
@@ -189,6 +212,82 @@ Item {
                 Qt.callLater(() => loadNext());
             }
         }
+    }
+
+    // Landmarks come from scripts/settings/search_landmarks.py, one run per
+    // index: crawling the page component trees here held the UI thread for
+    // seconds.
+    QtObject {
+        id: landmarkCrawler
+
+        property bool active: false
+
+        function start(configRoot) {
+            cancel();
+            active = true;
+            const pages = SettingsPageRegistry.pages.map(p => ({
+                id: p.id,
+                component: p.component,
+                subPages: p.subPages ?? [],
+                searchable: p.searchable !== false
+            }));
+            landmarkReader.command = ["python3", Directories.scriptPath + "/settings/search_landmarks.py",
+                configRoot, JSON.stringify(pages)];
+            landmarkWatchdog.restart();
+            landmarkReader.running = true;
+        }
+
+        function cancel() {
+            active = false;
+            landmarkWatchdog.stop();
+            landmarkReader.running = false;
+        }
+
+        function received(text) {
+            if (!active)
+                return;
+            let payload = null;
+            try {
+                payload = JSON.parse(text);
+            } catch (e) {
+                failed();
+                return;
+            }
+            root.landmarks = (payload.landmarks ?? []).map(l => ({
+                pageId: l.pageId,
+                subPage: l.subPage,
+                key: l.key,
+                text: Translation.tr(l.key),
+                subPageTitle: l.subPageTitle ? Translation.tr(l.subPageTitle) : ""
+            }));
+            cancel();
+            root.partIndexed("landmarks");
+        }
+
+        function failed() {
+            // Landmarks are an addition: without them the index still holds
+            // every cloneable control.
+            if (!active)
+                return;
+            console.warn("[SearchRegistry] landmark crawl failed; searching controls only");
+            cancel();
+            root.partIndexed("landmarks");
+        }
+    }
+
+    Process {
+        id: landmarkReader
+        stdout: StdioCollector {
+            id: landmarkReaderOut
+            onStreamFinished: landmarkCrawler.received(landmarkReaderOut.text)
+        }
+    }
+
+    // A reader that never starts (no python3) never finishes its stream either.
+    Timer {
+        id: landmarkWatchdog
+        interval: 8000
+        onTriggered: landmarkCrawler.failed()
     }
 
     Process {
@@ -654,12 +753,98 @@ Item {
             }
         }
         
+        results.push(...matchLandmarks(query, queryTokens, results));
+        // A query that names a page ("lock screen") wants that page first, not
+        // the same words drawn on another one.
+        for (let r of results) {
+            const page = SettingsPageRegistry.pageById(r.pageId);
+            const names = [page?.name ?? "", ...(page?.aliases ?? [])];
+            if (names.some(n => n !== "" && (Translation.tr(n).toLowerCase() === query || n.toLowerCase() === query)))
+                r.score += 5000;
+        }
         results.sort((a, b) => b.score - a.score);
         root._memoQuery = query;
         root._memoResults = results;
         return results;
     }
     
+    function sharesToken(text, queryTokens) {
+        const tokens = tokenize(text);
+        return queryTokens.some(q => tokens.some(t => t.startsWith(q)));
+    }
+
+    /*
+     * Landmark hits, one group per page (or sub-page), as results that carry
+     * `landmarks` instead of cloneable `items`. A heading a cloned section
+     * already shows for that page is left to the clone.
+     */
+    function matchLandmarks(query, queryTokens, sectionResults) {
+        let shown = {};
+        // Headings and control labels a clone already shows for that page.
+        for (let r of sectionResults) {
+            let labels = [r.title, ...r.items.map(i => i.text)];
+            for (let sub of r.subsections)
+                labels.push(sub.title, ...sub.items.map(i => i.text));
+            for (let label of labels)
+                if (label)
+                    shown[r.pageId + "|" + Translation.tr(label).toLowerCase()] = true;
+        }
+
+        let groups = {};
+        let order = [];
+        for (let l of root.landmarks) {
+            const lower = l.text.toLowerCase();
+            if (shown[l.pageId + "|" + lower])
+                continue;
+            let score = getMatchScore(l.text, query, queryTokens);
+            if (score === 0 && l.key !== l.text)
+                score = getMatchScore(l.key, query, queryTokens);
+            if (score === 0) {
+                // "dock color" may name the page and a heading on it, but the
+                // heading must hold one of the words itself.
+                if (!sharesToken(l.text, queryTokens))
+                    continue;
+                const page = SettingsPageRegistry.pageById(l.pageId);
+                const context = Translation.tr(page?.name ?? "") + " " + (l.subPageTitle || "");
+                const contextScore = getMatchScore(context + " " + l.text, query, queryTokens);
+                if (contextScore === 0)
+                    continue;
+                score = Math.round(contextScore / 2);
+            }
+            // The very words of a heading: what the user is looking at.
+            if (lower === query || l.key.toLowerCase() === query)
+                score += 4000;
+
+            const groupKey = l.pageId + "|" + l.subPage;
+            if (!groups[groupKey]) {
+                const page = SettingsPageRegistry.pageById(l.pageId);
+                groups[groupKey] = {
+                    pageId: l.pageId,
+                    subPage: l.subPage,
+                    title: l.subPageTitle || Translation.tr(page?.name ?? l.pageId),
+                    icon: page?.icon ?? "",
+                    landmarks: [],
+                    items: [],
+                    subsections: [],
+                    score: 0
+                };
+                order.push(groupKey);
+            }
+            if (!groups[groupKey].landmarks.some(other => other.text.toLowerCase() === lower))
+                groups[groupKey].landmarks.push({ text: l.text, score: score });
+        }
+
+        let out = [];
+        for (let key of order) {
+            let g = groups[key];
+            g.landmarks.sort((a, b) => b.score - a.score);
+            g.landmarks = g.landmarks.slice(0, root.maxLandmarksPerGroup);
+            g.score = g.landmarks[0].score;
+            out.push(g);
+        }
+        return out;
+    }
+
     function getResultsRanked(text) {
         return getSearchResult(text);
     }
