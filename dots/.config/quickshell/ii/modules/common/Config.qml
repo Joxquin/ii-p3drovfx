@@ -6788,6 +6788,17 @@ Singleton {
                 property bool searchAnywhere: false
             }
 
+            // Ctrl+Shift+Super+Q starts the app of the last closed window again, on its workspace.
+            property JsonObject reopenClosedWindow: JsonObject {
+                property bool enable: true
+                // How many closed windows are remembered. Memory only, never written to disk.
+                property int depth: 10
+                // A window closed sooner than this after it opened (a splash screen, a prompt) is not remembered.
+                property int minLifetimeMs: 1500
+                // App classes whose closes are never remembered, matched case-insensitively.
+                property list<string> ignoredClasses: ["org.quickshell", "quickshell", "xdg-desktop-portal-gtk", "org.freedesktop.impl.portal.desktop.kde", "org.kde.polkit-kde-authentication-agent-1", "hyprpolkitagent", "hyprland-share-picker", "pinentry-qt", "gcr-prompter"]
+            }
+
             property JsonObject overview: JsonObject {
                 property bool enable: true
                 // Reuse the Tablet Family's app drawer as the ii family's primary

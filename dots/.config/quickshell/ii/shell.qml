@@ -135,6 +135,7 @@ ShellRoot {
         if (Config.options?.launcher?.typeToSearch?.enable ?? false)
             TypeToSearch.armed; // Register binds only when type-to-search is enabled
         StaleFocusRelease.active; // Drops the keyboard from a window silently sent off screen
+        ClosedWindows.count; // Registers the reopen bind and keeps the closed-window stack; idle while disabled
         if (Config.options?.interactions?.touchGestures?.enable ?? true)
             TouchGestureService.enabled; // Start the touch helper only when gestures are enabled
         TouchpadGestures.enabled; // Keeps the compositor's touchpad gesture snapshot in step with the config

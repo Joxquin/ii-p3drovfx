@@ -226,6 +226,8 @@ hl.bind("SUPER + ALT + SHIFT + Tab", hl.dsp.global("quickshell:tilingLayoutCycle
 --     { non_consuming = true })
 hl.bind("SUPER + Q", hl.dsp.window.close(), { description = "Window: Close" })
 hl.bind("SUPER + SHIFT + ALT + Q", hl.dsp.exec_cmd("hyprctl kill"), { description = "Window: Forcefully zap a window" })
+hl.bind("SUPER + SHIFT + CTRL + Q", hl.dsp.global("quickshell:reopenClosedWindow"),
+    { description = "Window: Reopen the last closed window" })
 
 --# Window split ratio
 --#/# binde = SUPER, ;/',, # Adjust split ratio

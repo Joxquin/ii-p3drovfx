@@ -636,6 +636,38 @@ Item {
         }
 
         ContentSection {
+            title: Translation.tr("Reopen closed windows")
+            icon: "history"
+
+            KeyboardShortcutBox {
+                Layout.fillWidth: true
+                text: Translation.tr("Starts the app of the last closed window again, on the workspace it was on and, if it floated, at its size and place. Press again for the one before")
+                keys: ["Super", "Shift", "Ctrl", "Q"]
+            }
+
+            ConfigSwitch {
+                buttonIcon: "history"
+                text: Translation.tr("Remember closed windows")
+                checked: Config.options.reopenClosedWindow.enable
+                onCheckedChanged: Config.options.reopenClosedWindow.enable = checked
+                StyledToolTip {
+                    text: Translation.tr("Kept in memory only and forgotten when the shell restarts: a command line can hold private paths or tokens")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "stacks"
+                text: Translation.tr("Windows remembered")
+                enabled: Config.options.reopenClosedWindow.enable
+                value: Config.options.reopenClosedWindow.depth
+                from: 1
+                to: 50
+                stepSize: 1
+                onValueChanged: Config.options.reopenClosedWindow.depth = value
+            }
+        }
+
+        ContentSection {
             Layout.topMargin: 12
             icon: "link"
             title: Translation.tr("Related settings")
