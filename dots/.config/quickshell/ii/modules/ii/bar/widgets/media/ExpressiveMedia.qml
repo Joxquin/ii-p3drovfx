@@ -218,13 +218,13 @@ Item {
 
                     StyledImage {
                         anchors.fill: parent
-                        source: root.displayedArtFilePath
+                        source: root.artSource
                         fillMode: Image.PreserveAspectCrop
                         cache: false
                         antialiasing: true
                         sourceSize.width: parent.width
                         sourceSize.height: parent.height
-                        visible: root.displayedArtFilePath !== ""
+                        visible: root.artSource !== ""
                     }
 
                     MaterialSymbol {
@@ -233,7 +233,7 @@ Item {
                         text: "music_note"
                         iconSize: Appearance.font.pixelSize.normal
                         color: palette.colOnBackground
-                        visible: root.displayedArtFilePath === ""
+                        visible: root.artSource === ""
                     }
                 }
 
@@ -398,13 +398,13 @@ Item {
 
                     StyledImage {
                         anchors.fill: parent
-                        source: root.displayedArtFilePath
+                        source: root.artSource
                         fillMode: Image.PreserveAspectCrop
                         cache: false
                         antialiasing: true
                         sourceSize.width: artRect.width
                         sourceSize.height: artRect.height
-                        visible: root.displayedArtFilePath !== ""
+                        visible: root.artSource !== ""
                     }
 
                     MaterialSymbol {
@@ -413,7 +413,7 @@ Item {
                         text: "music_note"
                         iconSize: Appearance.font.pixelSize.normal
                         color: palette.colOnBackground
-                        visible: root.displayedArtFilePath === ""
+                        visible: root.artSource === ""
                     }
                 }
 
