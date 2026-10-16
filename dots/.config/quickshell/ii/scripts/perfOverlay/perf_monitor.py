@@ -1545,10 +1545,25 @@ def run(args):
 
 
 def watch(args):
-    """Report the game MangoHud is logging, and nothing when none is."""
+    """Report the game MangoHud is logging, and nothing when none is.
+
+    MangoHud only logs while autostart_log is armed, which the HUD does just
+    for its own samplers, so the watcher registers as one: otherwise a game
+    only shows up here once the HUD is already on screen.
+    """
+    register_sampler()
+    set_armed(True)
+
+    def leave():
+        unregister_sampler()
+        disarm_if_idle()
+
+    atexit.register(leave)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    parent = os.getppid()
     mango = MangoLog(log_dirs(args.mangohud_dir), window=30, stale_after=2.0)
     last = None
-    while True:
+    while os.getppid() == parent:
         state = mango.poll()
         process = state.get("process", "") if state.get("active") else ""
         if process != last:

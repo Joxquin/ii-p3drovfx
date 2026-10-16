@@ -208,8 +208,11 @@ Singleton {
         return list;
     }
     readonly property bool rawRunning: root.matches.length > 0
-    readonly property bool rawFocused: root.matches.some(m => m.address === root.focusedAddress)
-    readonly property var primaryMatch: root.matches.find(m => m.address === root.focusedAddress)
+    // The MangoHud match has no window: an empty focus must not match it.
+    readonly property bool rawFocused: root.focusedAddress.length > 0
+        && root.matches.some(m => m.address === root.focusedAddress)
+    readonly property var primaryMatch: (root.focusedAddress.length > 0
+        ? root.matches.find(m => m.address === root.focusedAddress) : undefined)
         ?? root.matches[0] ?? null
 
     property bool gameRunning: false
