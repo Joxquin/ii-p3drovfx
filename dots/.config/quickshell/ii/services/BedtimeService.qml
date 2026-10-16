@@ -96,7 +96,7 @@ Singleton {
         if (root.shutdownArmed)
             Quickshell.execDetached(["notify-send", Translation.tr("Shutting down in %1 s").arg(root.shutdownGraceSeconds),
                 Translation.tr("No snoozes left. Save your work and close your apps."),
-                "-a", "Bedtime", "-i", "system-shutdown", "--urgency=critical"]);
+                "-a", "Bedtime", "-i", "power_settings_new", "--urgency=critical"]);
     }
 
     // Wakes the modal right when a snooze ends, instead of on the next 30 s tick.
@@ -297,7 +297,7 @@ Singleton {
     }
 
     function notify(title, body): void {
-        Quickshell.execDetached(["notify-send", title, body, "-a", "Bedtime", "-i", "weather-clear-night", "--urgency=normal"]);
+        Quickshell.execDetached(["notify-send", title, body, "-a", "Bedtime", "-i", "bedtime", "--urgency=normal"]);
     }
 
     function formatLate(minutes): string {
