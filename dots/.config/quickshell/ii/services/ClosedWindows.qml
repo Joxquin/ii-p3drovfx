@@ -43,6 +43,9 @@ Singleton {
     property var probeQueue: []
     // Addresses of windows a reopen brought back, until they close.
     property var reopenedAddresses: ({})
+    // pid -> true once the process has shown two tiled windows at once (kitty -1, a browser):
+    // its floating windows are real windows, not dialogs. Dropped with the pid.
+    property var multiWindowPids: ({})
 
     // A reopen waiting for its window: { record, deadline }.
     property var pending: null
@@ -100,6 +103,13 @@ Singleton {
             if (pids[pid])
                 procs[pid] = root.procs[pid];
         }
+        const multiWindowPids = {};
+        for (const pid of Object.keys(root.multiWindowPids)) {
+            if (pids[pid])
+                multiWindowPids[pid] = true;
+        }
+        for (const pid of Logic.tiledPids(Object.values(next)))
+            multiWindowPids[pid] = true;
         const queue = root.probeQueue.slice();
         for (const pid of Object.keys(pids)) {
             if (Number(pid) > 0 && !procs[pid] && queue.indexOf(Number(pid)) === -1)
@@ -109,6 +119,7 @@ Singleton {
         root.known = next;
         root.gone = gone;
         root.procs = procs;
+        root.multiWindowPids = multiWindowPids;
         root.probeQueue = queue;
         root.runProbe();
     }
@@ -141,7 +152,7 @@ Singleton {
         }
 
         const proc = root.procs[record.pid] ?? null;
-        const reason = Logic.skipReason(record, proc, Object.values(root.known), root.opts, Date.now(), root.selfPid);
+        const reason = Logic.skipReason(record, proc, Object.values(root.known), root.opts, Date.now(), root.selfPid, root.multiWindowPids);
         if (reason.length > 0)
             return;
         const entry = root.desktopEntryFor(record.appClass);

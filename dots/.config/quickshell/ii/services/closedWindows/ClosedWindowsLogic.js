@@ -52,6 +52,8 @@ function recordFor(client, previous, monitors, now) {
         "localAt": localAt,
         "size": size,
         "firstSeen": previous?.firstSeen ?? now,
+        // Dialogs map floating; a window floated by hand later is a window like any other.
+        "floatedAtOpen": previous ? previous.floatedAtOpen === true : client.floating === true,
         // Brought back by a reopen: the user asked for this window, so it is never a splash screen.
         "reopened": previous?.reopened === true
     };
@@ -89,20 +91,35 @@ function basename(path) {
     return text.slice(text.lastIndexOf("/") + 1);
 }
 
-/// A floating window closing while a bigger window of the same process stays open is a
-/// dialog (an in-process file chooser, a preferences box): relaunching the app is not what
-/// undoing that close means.
-function isDialog(record, others) {
-    if (!record.floating || !(record.pid > 0))
+/// A dialog (an in-process file chooser, a preferences box) is not worth relaunching the app
+/// for. Neither Hyprland nor the toplevel protocol reports a dialog's parent here, so it is
+/// told apart by where it lives: floating since it opened, over a bigger window of the same
+/// process on the same workspace. A process that runs several real windows (kitty -1, a
+/// browser - `multiWindowPids`) is left out: its small floating windows are windows too.
+function isDialog(record, others, multiWindowPids) {
+    if (!record.floating || !record.floatedAtOpen || !(record.pid > 0))
+        return false;
+    if (multiWindowPids?.[record.pid])
         return false;
     const area = record.size[0] * record.size[1];
     return (others ?? []).some(other => other.address !== record.address
         && other.pid === record.pid
+        && other.workspaceId === record.workspaceId
         && other.size[0] * other.size[1] > area);
 }
 
+/// Pids with two or more tiled windows in one window list.
+function tiledPids(records) {
+    const counts = {};
+    for (const record of records) {
+        if (record.pid > 0 && !record.floating)
+            counts[record.pid] = (counts[record.pid] ?? 0) + 1;
+    }
+    return Object.keys(counts).filter(pid => counts[pid] >= 2).map(Number);
+}
+
 /// Why a close is not remembered, or "" when it is.
-function skipReason(record, proc, others, opts, now, selfPid) {
+function skipReason(record, proc, others, opts, now, selfPid, multiWindowPids) {
     if (!record || record.appClass.length === 0)
         return "no class";
     const ignored = (opts?.ignoredClasses ?? []).map(name => String(name).toLowerCase());
@@ -115,7 +132,7 @@ function skipReason(record, proc, others, opts, now, selfPid) {
         return "the shell's own window";
     if (!record.reopened && now - record.firstSeen < Number(opts?.minLifetimeMs ?? 0))
         return "too short-lived";
-    if (isDialog(record, others))
+    if (isDialog(record, others, multiWindowPids))
         return "dialog";
     return "";
 }

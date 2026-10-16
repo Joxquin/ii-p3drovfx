@@ -47,8 +47,12 @@ test('a record keeps the workspace, geometry relative to its monitor, and when i
     const first = L.recordFor(client('a'), null, monitors, 1000);
     assert.deepEqual(plain(first), {
         address: '0xa', pid: 100, appClass: 'kitty', title: 'shell', workspaceId: 3, workspaceName: '3',
-        floating: false, fullscreen: 0, at: [2020, 140], localAt: [100, 140], size: [800, 600], firstSeen: 1000, reopened: false
+        floating: false, fullscreen: 0, at: [2020, 140], localAt: [100, 140], size: [800, 600], firstSeen: 1000, floatedAtOpen: false, reopened: false
     });
+    // Floating since it opened is decided once: floating it later does not make it a dialog.
+    const floatedLater = L.recordFor(client('a', { floating: true }), first, monitors, 2000);
+    assert.equal(floatedLater.floatedAtOpen, false);
+    assert.equal(L.recordFor(client('b', { floating: true }), null, monitors, 2000).floatedAtOpen, true);
     assert.equal(L.recordFor(client('a'), first, monitors, 9000).firstSeen, 1000);
 });
 
@@ -86,15 +90,33 @@ test('a reopened window counts however soon it closes again', () => {
     assert.equal(L.recordFor(client('a'), before, monitors, 1200).reopened, true);
 });
 
-test('a floating window smaller than another window of its process is a dialog', () => {
-    const dialog = record({ address: '0xd', floating: true, size: [500, 400] });
+test('a window floating since it opened, over a bigger window of its process on its workspace, is a dialog', () => {
+    const dialog = record({ address: '0xd', floating: true, floatedAtOpen: true, size: [500, 400] });
     const main = record({ address: '0xm', size: [1600, 1000] });
-    assert.equal(L.skipReason(dialog, proc(), [main], opts, 5000, 42), 'dialog');
+    assert.equal(L.skipReason(dialog, proc(), [main], opts, 5000, 42, {}), 'dialog');
     // The process's last window, or a tiled one, is a real window.
-    assert.equal(L.skipReason(dialog, proc(), [], opts, 5000, 42), '');
-    assert.equal(L.skipReason(record({ address: '0xd', size: [500, 400] }), proc(), [main], opts, 5000, 42), '');
+    assert.equal(L.skipReason(dialog, proc(), [], opts, 5000, 42, {}), '');
+    assert.equal(L.skipReason(record({ address: '0xd', size: [500, 400] }), proc(), [main], opts, 5000, 42, {}), '');
     // Another process's bigger window says nothing about this one.
-    assert.equal(L.skipReason(dialog, proc(), [record({ address: '0xm', pid: 7, size: [1600, 1000] })], opts, 5000, 42), '');
+    assert.equal(L.skipReason(dialog, proc(), [record({ address: '0xm', pid: 7, size: [1600, 1000] })], opts, 5000, 42, {}), '');
+});
+
+test('the dialog guess leaves real floating windows alone', () => {
+    const small = { address: '0xd', floating: true, floatedAtOpen: true, size: [500, 400] };
+    const main = record({ address: '0xm', size: [1600, 1000] });
+    // Floated by hand after it opened.
+    assert.equal(L.skipReason(record(Object.assign({}, small, { floatedAtOpen: false })), proc(), [main], opts, 5000, 42, {}), '');
+    // Its bigger sibling is on another workspace (a scratchpad terminal).
+    assert.equal(L.skipReason(record(Object.assign({}, small, { workspaceId: -98, workspaceName: 'special:scratch' })),
+        proc(), [main], opts, 5000, 42, {}), '');
+    // The process runs several real windows (kitty -1).
+    assert.equal(L.skipReason(record(small), proc(), [main], opts, 5000, 42, { 100: true }), '');
+});
+
+test('a process with two tiled windows at once runs several real windows', () => {
+    const list = [record({ address: '0x1' }), record({ address: '0x2' }), record({ address: '0x3', pid: 7 }),
+        record({ address: '0x4', pid: 7, floating: true })];
+    assert.deepEqual(plain(L.tiledPids(list)), [100]);
 });
 
 test('the start command: Flatpak, then AppImage, then the command line, then the desktop entry', () => {
