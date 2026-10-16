@@ -29,6 +29,11 @@
 #   missing  never built. Never built implicitly either: a helper nobody
 #            compiled is one nobody asked for, and an updater that compiles it
 #            anyway is a surprise.
+#
+# A binary that is gone while its stamp is still there (or the binary or stamp
+# of the name it had before a rename) was built once and then lost, usually to
+# an updater that did not know its name yet. That reads as `stale`, not
+# `missing`: the user did ask for it, so the next update offers it back.
 set -uo pipefail
 
 SCRIPTS_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
@@ -44,6 +49,31 @@ HELPERS=(
     "sni_watcher:tray"
     "health_watch:health"
 )
+
+# name:former name, in the same directory. An updater from before the rename
+# carries the old binary and stamp across and drops the new binary.
+FORMER_NAMES=(
+    "workspace_arranger:workspace_compactor"
+)
+
+former_name() {
+    local entry
+    for entry in "${FORMER_NAMES[@]}"; do
+        [[ "${entry%%:*}" == "$1" ]] && {
+            printf '%s' "${entry#*:}"
+            return 0
+        }
+    done
+    return 1
+}
+
+# was_built <name> <dir> — a stamp, or anything left under the former name.
+was_built() {
+    local name="$1" dir="$2" old
+    [[ -f "$dir/.$name.stamp" ]] && return 0
+    old="$(former_name "$name")" || return 1
+    [[ -e "$dir/$old" || -f "$dir/.$old.stamp" ]]
+}
 
 helper_dir() {
     local entry
@@ -76,7 +106,7 @@ state_of() {
     bin="$dir/$name"
     stamp="$dir/.$name.stamp"
     [[ -x "$bin" ]] || {
-        printf 'missing'
+        was_built "$name" "$dir" && printf 'stale' || printf 'missing'
         return 0
     }
     want="$(src_hash "$dir/${name}_src")" || {
@@ -119,7 +149,11 @@ build_one() {
     # away a compile that worked. A rename leaves it on the old inode.
     cp "$src/target/release/$name" "$bin.new" || return 1
     mv -f "$bin.new" "$bin" || return 1
-    write_stamp "$name"
+    write_stamp "$name" || return 1
+    # Whatever is left under the former name only keeps `was_built` answering.
+    local old
+    old="$(former_name "$name")" && rm -f "$dir/$old" "$dir/.$old.stamp"
+    return 0
 }
 
 names_from_args() {
