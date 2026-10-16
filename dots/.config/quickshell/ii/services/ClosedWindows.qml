@@ -41,6 +41,8 @@ Singleton {
     property var procs: ({})
     property int selfPid: 0
     property var probeQueue: []
+    // Addresses of windows a reopen brought back, until they close.
+    property var reopenedAddresses: ({})
 
     // A reopen waiting for its window: { record, deadline }.
     property var pending: null
@@ -74,6 +76,8 @@ Singleton {
         for (const client of (HyprlandData.windowList ?? [])) {
             const address = Logic.normalisedAddress(client.address);
             const record = Logic.recordFor(client, root.known[address] ?? null, HyprlandData.monitors, now);
+            if (root.reopenedAddresses[address])
+                record.reopened = true;
             next[address] = record;
             if (record.pid > 0)
                 pids[record.pid] = true;
@@ -119,6 +123,12 @@ Singleton {
 
     function windowClosed(address: string): void {
         const record = root.known[address] ?? root.gone[address] ?? null;
+        if (root.reopenedAddresses[address]) {
+            // Hyprland reuses addresses: the next window here is a new one.
+            const reopened = Object.assign({}, root.reopenedAddresses);
+            delete reopened[address];
+            root.reopenedAddresses = reopened;
+        }
         if (!record)
             return;
         const known = Object.assign({}, root.known);
@@ -174,6 +184,9 @@ Singleton {
         const record = root.pending.record;
         root.pending = null;
         pendingExpiry.stop();
+        root.reopenedAddresses = Object.assign({}, root.reopenedAddresses, { [opened.address]: true });
+        if (root.known[opened.address])
+            root.known[opened.address].reopened = true;
         if (verdict === "move") {
             for (const dispatch of Logic.fallbackDispatches(opened.address, record))
                 Hyprland.dispatch(dispatch);

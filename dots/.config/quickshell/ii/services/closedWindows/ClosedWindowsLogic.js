@@ -51,7 +51,9 @@ function recordFor(client, previous, monitors, now) {
         "at": at,
         "localAt": localAt,
         "size": size,
-        "firstSeen": previous?.firstSeen ?? now
+        "firstSeen": previous?.firstSeen ?? now,
+        // Brought back by a reopen: the user asked for this window, so it is never a splash screen.
+        "reopened": previous?.reopened === true
     };
 }
 
@@ -111,7 +113,7 @@ function skipReason(record, proc, others, opts, now, selfPid) {
     const program = basename(proc?.argv?.[0]);
     if (program === "qs" || program === "quickshell")
         return "the shell's own window";
-    if (now - record.firstSeen < Number(opts?.minLifetimeMs ?? 0))
+    if (!record.reopened && now - record.firstSeen < Number(opts?.minLifetimeMs ?? 0))
         return "too short-lived";
     if (isDialog(record, others))
         return "dialog";

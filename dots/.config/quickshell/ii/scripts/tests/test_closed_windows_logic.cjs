@@ -47,7 +47,7 @@ test('a record keeps the workspace, geometry relative to its monitor, and when i
     const first = L.recordFor(client('a'), null, monitors, 1000);
     assert.deepEqual(plain(first), {
         address: '0xa', pid: 100, appClass: 'kitty', title: 'shell', workspaceId: 3, workspaceName: '3',
-        floating: false, fullscreen: 0, at: [2020, 140], localAt: [100, 140], size: [800, 600], firstSeen: 1000
+        floating: false, fullscreen: 0, at: [2020, 140], localAt: [100, 140], size: [800, 600], firstSeen: 1000, reopened: false
     });
     assert.equal(L.recordFor(client('a'), first, monitors, 9000).firstSeen, 1000);
 });
@@ -77,6 +77,13 @@ test('closes worth remembering pass, the rest say why not', () => {
     assert.equal(L.skipReason(record({ pid: 42 }), proc(), [], opts, 5000, 42), "the shell's own window");
     assert.equal(L.skipReason(record(), proc({ argv: ['/usr/bin/qs', '-c', 'ii'] }), [], opts, 5000, 0), "the shell's own window");
     assert.equal(L.skipReason(record(), proc(), [], opts, 2000, 42), 'too short-lived');
+});
+
+test('a reopened window counts however soon it closes again', () => {
+    assert.equal(L.skipReason(record({ reopened: true }), proc(), [], opts, 1100, 42), '');
+    const before = L.recordFor(client('a'), null, monitors, 1000);
+    before.reopened = true;
+    assert.equal(L.recordFor(client('a'), before, monitors, 1200).reopened, true);
 });
 
 test('a floating window smaller than another window of its process is a dialog', () => {
