@@ -155,6 +155,19 @@ Singleton {
         root.modesOpen = true;
     }
 
+    /// The System Health window (Ctrl+Super+H), built on demand like the clock app.
+    property bool healthAppOpen: false
+    /// A tab the health app should land on when it opens, consumed on arrival.
+    property string healthAppPendingTab: ""
+    /// A finding the health app should open in its sheet on arrival ("unit:user:x.service").
+    property string healthAppPendingFinding: ""
+
+    function openHealthApp(tab = "", findingId = ""): void {
+        root.healthAppPendingTab = String(tab ?? "");
+        root.healthAppPendingFinding = String(findingId ?? "");
+        root.healthAppOpen = true;
+    }
+
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
     // Names of screens showing the Always On Display (the OLED saver). Independent

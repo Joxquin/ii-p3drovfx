@@ -6,11 +6,13 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
-import qs.modules.ii.clock.components
 import qs.services.ai.blocks
 
 /**
- * The assistant's seat above the Modes and Routines grids.
+ * The assistant's seat: above the Modes and Routines grids, and on System Health's
+ * sheets, crash stage and hero. Modes uses it as it was built; the properties after
+ * `placeholder` let another surface send an empty prompt (a default question), word
+ * its own verdicts, and drop the hop to the chat when its answer is shown in place.
  *
  * One surface, five beats, and every verdict is said *inside* the element — the Notes
  * prompt bar's rule: no separate toast, no tooltip archaeology. It opens as a filled
@@ -40,6 +42,14 @@ Item {
     property string createdName: ""
     /// What the empty field invites ("Describe a mode…").
     property string placeholder: Translation.tr("Describe a mode or routine…")
+    /// Send with an empty field: the surface fills in its default question.
+    property bool allowEmpty: false
+    /// The success beat's words; empty keeps the Modes wording ("Created “name”").
+    property string successText: ""
+    /// The answered beat's words.
+    property string answeredText: Translation.tr("Answered in the chat — nothing was created")
+    /// Whether the refusal and answer beats offer the hop to the chat transcript.
+    property bool showChatHop: true
 
     signal submitted(string text)
     signal stopRequested()
@@ -54,8 +64,8 @@ Item {
     /// The verdict lives where the sentence was typed; the pill hides the input for it.
     readonly property bool verdict: settled || failed || answered
     /// Refusal and answer point at the transcript; success does not need to.
-    readonly property bool needsChat: failed || answered
-    readonly property bool canSend: promptInput.text.trim().length > 0 && !running
+    readonly property bool needsChat: (failed || answered) && showChatHop
+    readonly property bool canSend: (root.allowEmpty || promptInput.text.trim().length > 0) && !running
 
     implicitWidth: 300
     implicitHeight: expanded ? (needsChat ? 104 : 58) : 0
@@ -65,11 +75,11 @@ Item {
         animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
     }
 
+    // `errorText` is the owner's: it is bound from outside and cleared there on send.
+    // Assigning it here would break that binding and freeze every later error blank.
     onExpandedChanged: {
-        if (expanded) {
-            root.errorText = "";
+        if (expanded)
             Qt.callLater(() => promptInput.forceActiveFocus());
-        }
     }
 
     // A bar built mid-beat (a tab switch to the page that holds what was created) still
@@ -241,11 +251,12 @@ Item {
                             font.pixelSize: ClockStyle.textNormal + 1
                             font.weight: Font.DemiBold
                             text: root.settled
-                                ? (root.createdName.length > 0
+                                ? (root.successText.length > 0 ? root.successText
+                                    : root.createdName.length > 0
                                     ? Translation.tr("Created “%1”").arg(root.createdName)
                                     : Translation.tr("Created"))
                                 : (root.answered
-                                    ? Translation.tr("Answered in the chat — nothing was created")
+                                    ? root.answeredText
                                     : (root.errorText.length > 0
                                         ? root.errorText : Translation.tr("It did not work")))
                             color: root.settled ? ClockStyle.colOnPrimaryContainer
@@ -338,10 +349,13 @@ Item {
 
     function trySend(): void {
         const text = promptInput.text.trim();
-        if (text.length === 0 || root.running || root.settled)
+        if ((text.length === 0 && !root.allowEmpty) || root.running || root.settled)
             return;
-        root.errorText = "";
         root.submitted(text);
+    }
+
+    function clear(): void {
+        promptInput.text = "";
     }
 
     function focusInput(): void {

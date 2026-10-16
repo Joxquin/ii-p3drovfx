@@ -130,6 +130,8 @@ const sources = {
     phoneCall: { phase: "ringing", missedName: "" },
     phoneLink: { announcedKind: "camera" },
     phoneMirrorError: { payload: { reason: "device", title: "Phone disconnected", sessionId: "" } },
+    health: { payload: { more: 0, finding: { id: "unit:user:example.service", kind: "unit", sev: "critical", since: 0, count: 1,
+        data: { scope: "user", unit: "example.service", why: "exec-missing", exitStatus: 203, exitCode: "exited", result: "exit-code" } } } },
     privacy: { announcedKind: "microphone", announcedApps: "Firefox" },
     songRec: { phase: "listening", failureMessage: "", dismiss: function() {} },
     sports: { liveGame: null },

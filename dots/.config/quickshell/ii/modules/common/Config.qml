@@ -4961,6 +4961,9 @@ Singleton {
                         property bool enable: true
                         property string side: "right"
                     }
+                    property JsonObject health: JsonObject {
+                        property bool enable: true
+                    }
                     // The teleprompter: a user script scrolling through the island.
                     // Every value here is read (and clamped) in one place, by
                     // services/Teleprompter.qml; the faces and the Settings page only
@@ -5188,6 +5191,9 @@ Singleton {
                     // EasyEffects' preset as a bubble for as long as it runs: scroll to
                     // switch, rest on it for the presets, bypass and the app.
                     property bool disableEasyEffects: false
+                    // A new critical System Health problem (a service failed, a program
+                    // crashed), with the fix as its button.
+                    property bool disableHealth: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
                 }
@@ -6568,6 +6574,88 @@ Singleton {
                         property bool enable: false
                         property int intervalMinutes: 15
                     }
+                }
+            }
+
+            /**
+             * System Health: failed services, crashes, new journal errors, drives,
+             * firmware and update chores, watched by the `health_watch` helper and shown
+             * in the app on Ctrl+Super+H. Every option below is edited from the app's
+             * own Settings page; the helper restarts when one of them changes.
+             */
+            property JsonObject health: JsonObject {
+                property bool enable: true
+                property JsonObject alerts: JsonObject {
+                    // A strip on the island for a new critical problem.
+                    property bool island: true
+                    // A notification instead when the island is off.
+                    property bool notifyFallback: true
+                    // Alerts wait while the focused window is fullscreen (games too) or
+                    // Do Not Disturb is on, and arrive as one summary afterwards.
+                    property bool holdInFullscreen: true
+                    property int maxPer10Min: 3
+                }
+                property JsonObject sources: JsonObject {
+                    property bool units: true
+                    property bool userUnits: true
+                    property bool appLaunches: true
+                    property bool crashes: true
+                    property bool journal: true
+                    property bool drives: true
+                    property bool filesystems: true
+                    property bool firmware: true
+                    property bool packages: true
+                    property bool pressure: true
+                    property bool thermals: true
+                    property bool timesync: true
+                    // Packages built here that a library or Qt update broke.
+                    property bool rebuild: true
+                    // The shell's own helpers and memory.
+                    property bool shell: true
+                    // How long each boot took, and which unit slowed it.
+                    property bool boot: true
+                    // Battery wear, GPU resets, machine checks, OOM kills, fans, buses.
+                    property bool hardware: true
+                    // QML errors in the shell's log. Off: following the log keeps a
+                    // `qs log` process of about 50 MB running.
+                    property bool shellLog: false
+                }
+                property JsonObject noise: JsonObject {
+                    // A journal error group is "known" once it appeared on this many of
+                    // the last `ofLastBoots` boots; known groups never alert.
+                    property int knownAfterBoots: 3
+                    property int ofLastBoots: 5
+                    // A known group that stayed away this long counts as new again.
+                    property int quietDaysForNew: 14
+                }
+                property JsonObject thresholds: JsonObject {
+                    property int diskWarnPercent: 90
+                    property int diskCritPercent: 97
+                    property int psiMemPercent: 10
+                    property int restartLoop: 5
+                    // The shell's memory, in MiB, past which it is a finding.
+                    property int shellMemoryMb: 1200
+                    // Battery health (full charge against design, %) to warn below;
+                    // 20 points lower is critical.
+                    property int batteryWearPercent: 80
+                }
+                property JsonObject assistant: JsonObject {
+                    // The "Explain with the assistant" button. Nothing is sent until it
+                    // is pressed; `policies.ai` = 0 hides it as well.
+                    property bool enable: true
+                    // User and host names, the home path, IP and MAC addresses are
+                    // replaced before anything leaves the computer.
+                    property bool redact: true
+                }
+                property int historyDays: 30
+                // scripts/quickshell-guard/qs-guard.sh, which starts the shell: read
+                // from config.json at the next start, since the shell is not up yet.
+                property JsonObject guard: JsonObject {
+                    // Hyprland notifications when the shell cannot start or crashes,
+                    // and a restart after a crash. Off: the guard just runs qs.
+                    property bool enable: true
+                    // A terminal on the rebuild script when a Qt update is why.
+                    property bool openTerminal: true
                 }
             }
 

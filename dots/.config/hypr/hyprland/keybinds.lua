@@ -44,6 +44,7 @@ hl.bind("SUPER + ALT + T", hl.dsp.global("quickshell:clockToggle"), { descriptio
 hl.bind("SUPER + CTRL + E", hl.dsp.global("quickshell:easyEffectsToggle"), { description = "Shell: Toggle EasyEffects" })
 hl.bind("SUPER + U", hl.dsp.global("quickshell:usageToggle"), { description = "Shell: Toggle app usage stats" })
 hl.bind("SUPER + Y", hl.dsp.global("quickshell:modesToggle"), { description = "Shell: Toggle modes & routines" })
+hl.bind("SUPER + CTRL + H", hl.dsp.global("quickshell:healthToggle"), { description = "Shell: Toggle System Health" })
 --##! Screen & input
 hl.bind("SUPER + K", hl.dsp.global("quickshell:oskToggle"), { description = "Shell: Toggle on-screen keyboard" })
 hl.bind("SUPER + SHIFT + D", hl.dsp.global("quickshell:dictationToggle"), { description = "Shell: Toggle dictation" })
@@ -103,9 +104,13 @@ hl.bind("CTRL + SUPER + T", hl.dsp.exec_cmd(qsIsAlive .. " || " .. qsScripts .. 
 --##! User
 -- `qs kill` is the only shutdown that also takes the shell's child processes
 -- down with it, and it returns once the instance is really gone; killall is
--- kept for an instance too wedged to answer over IPC. MALLOC_CONF: see execs.lua.
+-- kept for an instance too wedged to answer over IPC. MALLOC_CONF and the guard:
+-- see execs.lua.
 hl.bind("CTRL + SUPER + R",
-    hl.dsp.exec_cmd("killall ydotool; qs kill -c $qsConfig || killall qs quickshell 2>/dev/null; MALLOC_CONF=narenas:1 qs -c $qsConfig &"),
+    hl.dsp.exec_cmd("killall ydotool; qs kill -c $qsConfig || killall qs quickshell 2>/dev/null; "
+        .. "g=" .. qsScripts .. "/quickshell-guard/qs-guard.sh; "
+        .. "if [ -x \"$g\" ]; then MALLOC_CONF=narenas:1 setsid -f \"$g\" -c $qsConfig; "
+        .. "else MALLOC_CONF=narenas:1 qs -c $qsConfig & fi"),
     { description = "Shell: Restart widgets" })
 --##! Bar & panels
 hl.bind("CTRL + SUPER + P", hl.dsp.global("quickshell:panelFamilyCycle"), { description = "Shell: Cycle panel family" })

@@ -1315,6 +1315,46 @@ Singleton {
         });
     }
 
+    /// System Health: "health" finds the app; any 2+ characters find open problems by
+    /// title, unit, program or kind ("zeron", "crash", "battery").
+    function healthMatches(queryText: string): var {
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        if (query.length < 2 || !(Config.options?.health?.enable ?? true))
+            return [];
+        const out = [];
+        if ("system health".includes(query) || query.includes("health"))
+            out.push({ app: true });
+        for (const f of Array.from(HealthService.findings ?? [])) {
+            if (HealthService.isSnoozed(f))
+                continue;
+            const d = f.data ?? {};
+            const hay = [HealthText.title(f), d.unit, d.name, d.exe, d.model, f.kind,
+                ...Array.from(d.packages ?? []).map(p => p.name)].join(" ").toLocaleLowerCase();
+            if (hay.includes(query))
+                out.push({ finding: f });
+        }
+        return out.slice(0, 6);
+    }
+
+    function createHealthResult(match: var): var {
+        if (match.app) {
+            const n = HealthService.attentionCount;
+            return resultComp.createObject(null, {
+                key: "health:app", name: Translation.tr("System Health"), type: Translation.tr("App"), verb: Translation.tr("Open"),
+                iconName: "monitor_heart", iconType: LauncherSearchResult.IconType.Material,
+                comment: n > 0 ? HealthText.plural(n, Translation.tr("%1 thing needs attention"), Translation.tr("%1 things need attention")) : Translation.tr("All clear"),
+                execute: () => GlobalStates.openHealthApp("overview", "")
+            });
+        }
+        const f = match.finding;
+        return resultComp.createObject(null, {
+            key: "health:" + String(f.id), name: HealthText.title(f), type: Translation.tr("System Health"), verb: Translation.tr("Open"),
+            iconName: f.sev === "critical" ? "error" : f.sev === "warning" ? "warning" : "info",
+            iconType: LauncherSearchResult.IconType.Material, comment: HealthText.detail(f, Date.now()),
+            execute: () => HealthService.openFinding(String(f.id))
+        });
+    }
+
     function bluetoothMatches(queryText: string): var {
         if (!Config.options.search.modules.bluetooth)
             return [];
@@ -3516,6 +3556,10 @@ Singleton {
         ////////// Processes ///////////////////
         for (const process of root.processMatches(root.query))
             result.push(root.createProcessResult(process));
+
+        ////////// System Health ////////////
+        for (const match of root.healthMatches(root.query))
+            result.push(root.createHealthResult(match));
 
         ////////// Modes & routines ////////////
         for (const mode of root.modeMatches(root.query))

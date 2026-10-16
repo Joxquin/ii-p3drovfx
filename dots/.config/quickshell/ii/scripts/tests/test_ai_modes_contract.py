@@ -26,7 +26,7 @@ ADAPTER = read("services/ai/integrations/AiModesIntegration.qml")
 MESSAGE = read("modules/ii/sidebarPolicies/aiChat/AiMessage.qml")
 MODES = read("services/Modes.qml")
 AGENT = read("modules/ii/modes/ModesAiAgent.qml")
-BAR = read("modules/ii/modes/ModeAiBar.qml")
+BAR = read("modules/ii/clock/components/AssistantPromptBar.qml")
 CONTENT = read("modules/ii/modes/ModesAppContent.qml")
 MODES_DIR = ROOT / "modules" / "ii" / "modes"
 

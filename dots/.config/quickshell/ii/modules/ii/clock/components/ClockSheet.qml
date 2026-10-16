@@ -133,6 +133,11 @@ FocusScope {
         ColumnLayout {
             id: actionsColumn
             Layout.fillWidth: true
+            // Pinned to what its visible buttons need. A footer whose buttons are all
+            // hidden reports 0 and the parent layout then shared out the leftover height
+            // to it, so the body above stopped halfway down an empty sheet.
+            Layout.preferredHeight: implicitHeight
+            Layout.maximumHeight: implicitHeight
             visible: children.length > 0
             spacing: 8
         }

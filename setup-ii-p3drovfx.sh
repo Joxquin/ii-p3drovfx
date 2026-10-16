@@ -1507,7 +1507,9 @@ HELPERS_TO_BUILD=()
 # and compiling one nobody asked for would be a surprise; the tray watcher is a
 # fix that does nothing at all until it exists, and a shell without it loses its
 # tray icons on every restart. Offered, never forced — the prompt still asks.
-HELPERS_OFFERED_WHEN_MISSING=("sni_watcher")
+# System Health is on by default and shows only its setup page until its helper
+# exists, so the helper is offered the same way.
+HELPERS_OFFERED_WHEN_MISSING=("sni_watcher" "health_watch")
 
 offered_when_missing() {
     local name
@@ -1566,6 +1568,73 @@ plan_helper_rebuild() {
     return 0
 }
 
+# offer_qt_hook <target_dir> — offer the pacman hook that says, during the update
+# itself, when a Qt update leaves Quickshell needing a rebuild: the running shell
+# keeps working until it restarts, so that is the moment to rebuild. Default yes
+# (it only reads and warns), asked once: a "no" is remembered, and Settings can
+# install it later. An installed hook from an older ii is updated after asking.
+offer_qt_hook() {
+    local script="$1/scripts/quickshell-guard/install-hook.sh" status
+    local declined="$SETUP_STATE_DIR/qt-hook-declined"
+    [[ -f "$script" ]] || return 0
+    status="$(bash "$script" status 2>/dev/null)"
+    case "$status" in
+    installed | unsupported | "") return 0 ;;
+    missing) [[ -f "$declined" ]] && return 0 ;;
+    esac
+    [[ "$OPT_ASSUME_YES" == true || ! -t 0 ]] && {
+        ui_note "Recommended: Settings > System Health can install a pacman hook that warns when Quickshell needs a rebuild for a new Qt."
+        return 0
+    }
+    if [[ "$status" == outdated ]]; then
+        ui_confirm "Update the pacman hook that checks Quickshell after Qt updates?" yes || return 0
+    else
+        ui_note "After a Qt update, Quickshell needs a rebuild or the shell may not start."
+        ui_note "A pacman hook can say so during the update itself, while the shell still runs."
+        if ! ui_confirm "Install it? Recommended (Settings can remove it)" yes; then
+            mkdir -p "$SETUP_STATE_DIR" && : >"$declined"
+            return 0
+        fi
+    fi
+    if sudo_prime && sudo bash "$script" install >>"$LOG_FILE" 2>&1; then
+        ui_ok "pacman hook" "checks Quickshell after Qt updates"
+    else
+        ui_warn "Not installed — see $(tilde "$LOG_FILE")"
+    fi
+    return 0
+}
+
+# offer_crash_access <health_dir> — once System Health's helper is built, offer
+# the one privileged extra it has: read access for this account to the crash
+# dumps of system programs (root-owned files in /var/lib/systemd/coredump).
+# A dump is a copy of a program's memory and can hold passwords or keys, so it is
+# asked in words, defaults to no, and is never assumed by --yes. Settings can
+# grant or revoke it later; crash-access.sh does the work either way.
+offer_crash_access() {
+    local dir="$1" script="$1/crash-access.sh" user
+    user="$(id -un)"
+    [[ -f "$script" ]] || return 0
+    have setfacl || return 0
+    [[ "$(bash "$script" status "$user" 2>/dev/null)" == "granted" ]] && return 0
+    [[ "$OPT_ASSUME_YES" == true || ! -t 0 ]] && {
+        ui_note "System Health: crash dumps of system programs stay root-only. Settings can allow them."
+        return 0
+    }
+    ui_note "System Health can let your account read crash dumps of system programs."
+    ui_note "A dump is a copy of a program's memory and can contain passwords or keys."
+    ui_note "They never leave this computer, and the assistant never sees them."
+    if ui_confirm "Allow it? (Settings can revoke it any time)" no; then
+        if sudo_prime && sudo bash "$script" grant "$user" >>"$LOG_FILE" 2>&1; then
+            ui_ok "crash dumps" "readable by $user"
+        else
+            ui_warn "Not granted — see $(tilde "$LOG_FILE")"
+        fi
+    else
+        ui_note "Left root-only. The journal's stack traces still show on the Crashes page."
+    fi
+    return 0
+}
+
 # run_helper_rebuild <target_dir> — builds what plan_helper_rebuild collected.
 run_helper_rebuild() {
     local target="$1" script="$1/scripts/rust-helpers.sh"
@@ -1601,6 +1670,7 @@ run_helper_rebuild() {
         if ((rc == 0)); then
             ui_ok "$name" "rebuilt"
             built=$((built + 1))
+            [[ "$name" == "health_watch" ]] && offer_crash_access "$dir"
         else
             ui_fail "$name" "build failed — see $(tilde "$LOG_FILE")"
             failed=$((failed + 1))
@@ -2229,13 +2299,27 @@ start_quickshell() {
         ui_ok "Started" "tray watcher"
     fi
 
+    # A Quickshell built for another Qt may not start at all; said here, where the
+    # user is reading, as well as by the guard below once it fails.
+    local guard="$TARGET_DIR/scripts/quickshell-guard/qs-guard.sh"
+    if ! "$bin" --private-check-compat >/dev/null 2>&1; then
+        ui_warn "Quickshell was built for another Qt and may not start. Rebuild it: $(tilde "$TARGET_DIR")/scripts/quickshell-guard/qs-rebuild.sh"
+    fi
+
     # MALLOC_CONF: the allocator setting the session start uses (hyprland/execs.lua);
     # without it a shell restarted from here runs ~100 MB heavier until the next login.
-    if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
-        MALLOC_CONF=narenas:1 nohup "$bin" -c ii >/dev/null 2>&1 &
+    # Through the guard when there is one, as at login: it says so when the shell
+    # cannot start, since the shell is the notification daemon.
+    local args=(-c ii)
+    [[ "$TARGET_DIR" == "$QS_DIR/ii" ]] || args=(--path "$TARGET_DIR")
+    if [[ -x "$guard" ]]; then
+        MALLOC_CONF=narenas:1 nohup setsid -f "$guard" "${args[@]}" >/dev/null 2>&1
+    else
+        MALLOC_CONF=narenas:1 nohup "$bin" "${args[@]}" >/dev/null 2>&1 &
+    fi
+    if [[ "${args[0]}" == -c ]]; then
         ui_ok "Started" "$bin -c ii"
     else
-        MALLOC_CONF=narenas:1 nohup "$bin" --path "$TARGET_DIR" >/dev/null 2>&1 &
         ui_ok "Started" "$bin --path $(tilde "$TARGET_DIR")"
     fi
     return 0
@@ -2691,6 +2775,7 @@ apply_config() {
     # shell spends none of it down: the running helpers keep going on their old
     # binaries, and each rebuild installs through a rename that the shell notices.
     run_helper_rebuild "$TARGET_DIR"
+    offer_qt_hook "$TARGET_DIR"
 
     # Applying again is still an installation experience, and switching a fork
     # introduces a potentially different shell. Only an in-place update should

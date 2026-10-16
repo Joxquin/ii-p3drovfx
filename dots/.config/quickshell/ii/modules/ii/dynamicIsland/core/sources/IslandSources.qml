@@ -26,7 +26,7 @@ Item {
         // Side glances.
         earbuds, btPhone, weather, batteryGlance, reminderSoon, privacy, discordVoice, phoneMirror, phoneLink, sports,
         // Announcements.
-        phoneMirrorError, phoneKeyboard, workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn, systemTray,
+        health, phoneMirrorError, phoneKeyboard, workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn, systemTray,
         easyEffects
     ]
 
@@ -76,6 +76,7 @@ Item {
     readonly property UpdateSource update: UpdateSource {}
     readonly property SystemTraySource systemTray: SystemTraySource {}
     readonly property EasyEffectsSource easyEffects: EasyEffectsSource {}
+    readonly property HealthSource health: HealthSource {}
 
     function sourceFor(activityId) {
         for (let i = 0; i < sources.all.length; i++) {

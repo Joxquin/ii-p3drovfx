@@ -66,6 +66,7 @@ Scope {
         get notes() { return NotesService.ready; },
         get tasks() { return true; },
         get modes() { return Modes.ready; },
+        get health() { return HealthService.running; },
         get rag() { return Ai.ragIntegration.isReady(); }
     })
 
