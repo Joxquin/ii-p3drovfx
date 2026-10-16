@@ -187,7 +187,8 @@ Rectangle {
             font.pixelSize: Config.options.cheatsheet.fontSize.comment || Appearance.font.pixelSize.smaller
             color: Appearance.colors.colOnSurface
             opacity: 0.7
-            text: bindRow.modelData.comment || ""
+            // The section title already names the category; drop the "Utilities: " prefix.
+            text: (bindRow.modelData.comment || "").replace(/^[A-Z][A-Za-z]*: /, "")
         }
     }
 
