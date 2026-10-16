@@ -6527,6 +6527,12 @@ Singleton {
                     property int remindEveryMinutes: 15
                     // A night ends at this hour of the next morning.
                     property int nightEndsHour: 5
+                    // Intrusive mode: past bedtime a full-screen modal takes over; a few
+                    // short snoozes, then a countdown and a forced shutdown.
+                    property bool intrusive: false
+                    property int snoozeMinutes: 5
+                    property int maxSnoozes: 3
+                    property int shutdownGraceSeconds: 30
                 }
                 // Mirror the phone's next alarm over ADB (read-only).
                 property JsonObject phoneAlarm: JsonObject {

@@ -778,6 +778,10 @@ Singleton {
                 property string windDownNotified: ""
                 property string bedtimeNotified: ""
                 property real lastNudge: 0
+                // Intrusive mode: snoozes taken tonight, keyed like the reminders (night@target).
+                property string intrusiveMark: ""
+                property int snoozeCount: 0
+                property real snoozedUntil: 0
             }
             // Screen-time limits: today's ignores, extra time and sent warnings, as
             // one JSON document so the day can be reset in a single write.

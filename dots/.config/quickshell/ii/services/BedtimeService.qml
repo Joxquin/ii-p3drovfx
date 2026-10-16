@@ -22,6 +22,12 @@ import QtQuick
  *
  * Reminders: one when wind-down starts, one at bedtime, then a nudge every
  * `remindEveryMinutes` while you are still up.
+ *
+ * Intrusive mode (`intrusive`): past the target a full-screen modal (BedtimeOverlay)
+ * covers every output. It can be snoozed `maxSnoozes` times for `snoozeMinutes` each;
+ * once they are spent it counts `shutdownGraceSeconds` down — time to save and close —
+ * and powers the computer off. Snoozes are persisted per night@target, so a reload or
+ * a reboot does not hand them back.
  */
 Singleton {
     id: root
@@ -46,6 +52,69 @@ Singleton {
     readonly property string tonightKey: root.nightKey(root.now)
     readonly property var tonightTarget: root.targetFor(root.tonightKey)
     readonly property bool appliesTonight: root.appliesTo(root.tonightKey)
+
+    // ── Intrusive mode ──────────────────────────────────────────────────
+    readonly property bool intrusive: root.enabled && (root.opts?.intrusive ?? false)
+    readonly property int snoozeMinutes: Math.max(1, root.opts?.snoozeMinutes ?? 5)
+    readonly property int maxSnoozes: Math.max(0, root.opts?.maxSnoozes ?? 3)
+    readonly property int shutdownGraceSeconds: Math.max(10, root.opts?.shutdownGraceSeconds ?? 30)
+    readonly property string intrusiveMark: `${root.tonightKey}@${root.targetTime}`
+    readonly property bool intrusiveTonight: Persistent.ready && Persistent.states.bedtime.intrusiveMark === root.intrusiveMark
+    readonly property int snoozesUsed: root.intrusiveTonight ? Persistent.states.bedtime.snoozeCount : 0
+    readonly property int snoozesLeft: Math.max(0, root.maxSnoozes - root.snoozesUsed)
+    readonly property real snoozedUntil: root.intrusiveTonight ? Persistent.states.bedtime.snoozedUntil : 0
+    /// The modal is up: intrusive, past bedtime, not snoozed, screen unlocked.
+    readonly property bool intrusiveDue: root.intrusive && root.phase === "bedtime"
+        && root.now.getTime() >= root.snoozedUntil && !GlobalStates.screenLocked
+    /// Out of snoozes: the countdown to the shutdown runs (and keeps running if locked).
+    readonly property bool shutdownArmed: root.intrusive && root.phase === "bedtime"
+        && root.now.getTime() >= root.snoozedUntil && root.snoozesLeft <= 0
+    /// Epoch ms of the forced shutdown while armed, else 0.
+    property real shutdownAt: 0
+
+    function snooze(): bool {
+        if (!root.intrusiveDue || root.snoozesLeft <= 0)
+            return false;
+        const state = Persistent.states.bedtime;
+        const count = root.snoozesUsed + 1;
+        state.intrusiveMark = root.intrusiveMark;
+        state.snoozeCount = count;
+        state.snoozedUntil = Date.now() + root.snoozeMinutes * 60000;
+        root.refresh();
+        return true;
+    }
+
+    function shutdownNow(): void {
+        root.shutdownAt = 0;
+        // Plain poweroff needs no password for the active session; a block inhibitor only
+        // stops it, so then ask to ignore inhibitors (polkit may prompt for that one).
+        Quickshell.execDetached(["bash", "-c", "systemctl poweroff || systemctl poweroff --ignore-inhibitors || loginctl poweroff"]);
+    }
+
+    onShutdownArmedChanged: {
+        root.shutdownAt = root.shutdownArmed ? Date.now() + root.shutdownGraceSeconds * 1000 : 0;
+        if (root.shutdownArmed)
+            Quickshell.execDetached(["notify-send", Translation.tr("Shutting down in %1 s").arg(root.shutdownGraceSeconds),
+                Translation.tr("No snoozes left. Save your work and close your apps."),
+                "-a", "Bedtime", "-i", "system-shutdown", "--urgency=critical"]);
+    }
+
+    // Wakes the modal right when a snooze ends, instead of on the next 30 s tick.
+    Timer {
+        running: root.intrusive && root.snoozedUntil > root.now.getTime()
+        interval: Math.max(1000, root.snoozedUntil - root.now.getTime() + 250)
+        onTriggered: root.refresh()
+    }
+
+    Timer {
+        running: root.shutdownAt > 0
+        interval: 1000
+        repeat: true
+        onTriggered: {
+            if (Date.now() >= root.shutdownAt)
+                root.shutdownNow();
+        }
+    }
 
     // ── Nights ──────────────────────────────────────────────────────────
     function pad(n) {
@@ -306,6 +375,15 @@ Singleton {
         /// Drops one night's record ("yyyy-MM-dd", the evening's date).
         function forget(night: string): void {
             Persistent.states.bedtime.nights = Array.from(Persistent.states.bedtime.nights ?? []).filter(n => n.night !== night);
+        }
+        function snooze(): string {
+            return root.snooze() ? `snoozed, ${root.snoozesLeft} left` : "not snoozable";
+        }
+        function intrusiveStatus(): string {
+            root.refresh();
+            return `${root.intrusive ? "on" : "off"} | due ${root.intrusiveDue} | snoozes ${root.snoozesUsed}/${root.maxSnoozes}`
+                + ` | until ${root.snoozedUntil > 0 ? Qt.formatTime(new Date(root.snoozedUntil), "HH:mm:ss") : "-"}`
+                + ` | shutdown ${root.shutdownAt > 0 ? Math.ceil((root.shutdownAt - Date.now()) / 1000) + " s" : "-"}`;
         }
         function status(): string {
             root.refresh();

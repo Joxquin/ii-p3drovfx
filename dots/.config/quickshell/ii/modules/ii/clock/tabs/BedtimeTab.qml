@@ -297,6 +297,17 @@ Item {
                 onToggled: day => root.toggleDay(day)
             }
 
+            ClockFormToggle {
+                Layout.topMargin: 4
+                symbol: "power_settings_new"
+                shapeKind: MaterialShape.Shape.Cookie9Sided
+                label: Translation.tr("Intrusive mode")
+                description: Translation.tr("Past bedtime a full-screen prompt asks to shut down. %1 snoozes of %2 min, then a %3 s countdown and a forced shutdown.")
+                    .arg(BedtimeService.maxSnoozes).arg(BedtimeService.snoozeMinutes).arg(BedtimeService.shutdownGraceSeconds)
+                checked: root.opts?.intrusive ?? false
+                onToggled: checked => root.opts.intrusive = checked
+            }
+
             ClockFormPicker {
                 Layout.topMargin: 4
                 symbol: "tune"

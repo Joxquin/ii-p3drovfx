@@ -320,6 +320,11 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/screenTimeOverlay/ScreenTimeOverlay.qml")
     }
     PanelUrlLoader {
+        // Intrusive bedtime: the modal past the target, snoozes, then the shutdown countdown.
+        extraCondition: BedtimeService.intrusiveDue
+        panelUrl: Qt.resolvedUrl("../modules/ii/bedtimeOverlay/BedtimeOverlay.qml")
+    }
+    PanelUrlLoader {
         extraCondition: GlobalStates.screenshotOverlayOpen
         panelUrl: Qt.resolvedUrl("../modules/ii/screenshotOverlay/ScreenshotOverlay.qml")
     }
