@@ -64,32 +64,50 @@ ShellRoot {
         Wallpapers.load(); // The background layer renders the wallpaper — needed for first paint
         ConflictKiller.load(); // Startup hygiene: conflicting notification daemons must die early
         FullGameMode.recover(); // Undo a full game mode session this shell replaces (Hyprland overrides, wallpaper)
-        deferredServicesTimer.restart();
+        deferredCoreServicesTimer.restart();
+        deferredBackgroundServicesTimer.restart();
     }
 
     Timer {
-        id: deferredServicesTimer
-        interval: 3000
-        onTriggered: root.loadDeferredServices()
+        id: deferredCoreServicesTimer
+        interval: 1500
+        onTriggered: root.loadDeferredCoreServices()
     }
 
-    function loadDeferredServices() {
+    Timer {
+        id: deferredBackgroundServicesTimer
+        interval: 4000
+        onTriggered: root.loadDeferredBackgroundServices()
+    }
+
+    function loadDeferredCoreServices() {
         Hyprsunset.load();
         DisplayColorFilter.load();
         Cliphist.refresh();
-        Updates.load();
-        ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
-        FeatureDeps.checkCore(); // One late probe: notifies once if core packages are missing
-        // The summary owns an AiTextTask, which resolves the complete AI
-        // catalog, Settings index and session store. Do not create that graph
-        // when the optional summary is disabled; opening the About page still
-        // loads it on demand through ShellUpdateSummaryCard.
-        if (Config.options?.update?.aiSummary)
-            ShellUpdateSummary.load();
         if (Config.options?.light?.darkMode?.automatic ?? false)
             DarkModeService.automatic;
         if (Config.options?.sounds?.enable)
-            SoundService.indexReady; // Instantiate only if sound themes/effects are enabled
+            SoundService.indexReady;
+        if (Config.options?.tiling?.enable)
+            TilingAssistant.enabled;
+        if (Config.options?.launcher?.typeToSearch?.enable ?? false)
+            TypeToSearch.armed;
+        StaleFocusRelease.active;
+        if (Config.options?.interactions?.touchGestures?.enable ?? true)
+            TouchGestureService.enabled;
+        TouchpadGestures.enabled;
+        if (Config.options?.bar?.workspaces?.arranger?.autoCloseGaps ?? false)
+            WorkspaceArranger.enabled;
+        if (Config.options?.modes?.enable ?? false)
+            Modes.ready;
+    }
+
+    function loadDeferredBackgroundServices() {
+        Updates.load();
+        ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
+        FeatureDeps.checkCore(); // One late probe: notifies once if core packages are missing
+        if (Config.options?.update?.aiSummary)
+            ShellUpdateSummary.load();
         if (Config.options?.background?.mediaMode?.musicVideo?.enable)
             VideoColorSampler.active;
         if (Config.options?.waterReminder?.enable)
@@ -126,18 +144,6 @@ ShellRoot {
             ScreenTimeLimits.enabled; // Daily limits: counts focused time and opens the block screen
         if (Config.options?.notes?.enable ?? true)
             NotesService.ready; // Touch singleton only when the notes feature is enabled
-        if (Config.options?.modes?.enable ?? false)
-            Modes.ready; // Touch singleton only when modes are enabled
-        if (Config.options?.tiling?.enable)
-            TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
-        if (Config.options?.launcher?.typeToSearch?.enable ?? false)
-            TypeToSearch.armed; // Register binds only when type-to-search is enabled
-        StaleFocusRelease.active; // Drops the keyboard from a window silently sent off screen
-        if (Config.options?.interactions?.touchGestures?.enable ?? true)
-            TouchGestureService.enabled; // Start the touch helper only when gestures are enabled
-        TouchpadGestures.enabled; // Keeps the compositor's touchpad gesture snapshot in step with the config
-        if (Config.options?.bar?.workspaces?.arranger?.autoCloseGaps ?? false)
-            WorkspaceArranger.enabled; // Start the arranger's watcher only when auto-close gaps is enabled
         // IconThemes is loaded by the settings page when its data is actually needed.
         if (Config.options?.dictation?.enabled)
             DictationService.installed; // Touch singleton: registers the dictation keybind, whose surfaces are all optional
