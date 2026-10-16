@@ -7150,6 +7150,11 @@ Singleton {
                         property bool enable: true
                         property string sampleText: "The quick brown fox jumps over the lazy dog 0123456789"
                     }
+                    property JsonObject dictionary: JsonObject {
+                        property bool enable: true
+                        // ISO 639 code of the dictionary to search, or "auto" to follow the shell's language.
+                        property string language: "auto"
+                    }
                     property bool math: true
                     property bool webSearch: true
                     property bool shellCommand: true

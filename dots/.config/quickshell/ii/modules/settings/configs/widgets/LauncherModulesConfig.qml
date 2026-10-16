@@ -63,6 +63,7 @@ Item {
                 ConfigSwitch { buttonIcon: "gif_box"; text: Translation.tr("GIFs"); description: Translation.tr("Search for ‘gif’ or ‘meme’. Uses KLIPY; the panel asks for a free app key the first time."); checked: Config.options.search.modules.gifs.enable; onCheckedChanged: Config.options.search.modules.gifs.enable = checked }
                 ConfigSwitch { buttonIcon: "spellcheck"; text: Translation.tr("Fix grammar"); description: Translation.tr("Search for ‘grammar’ or ‘corrigir’ to fix the selected text with the configured AI model."); checked: Config.options.search.modules.grammar.enable; onCheckedChanged: Config.options.search.modules.grammar.enable = checked }
                 ConfigSwitch { buttonIcon: "text_fields"; text: Translation.tr("Fonts"); description: Translation.tr("Search for ‘font’ or ‘fonte’ to browse installed families drawn in their own face."); checked: Config.options.search.modules.fonts.enable; onCheckedChanged: Config.options.search.modules.fonts.enable = checked }
+                ConfigSwitch { buttonIcon: "dictionary"; text: Translation.tr("Dictionary"); description: Translation.tr("Search for ‘dictionary’, ‘define’ or ‘sinônimo’ to look words up with definitions, synonyms, antonyms and examples from Wiktionary."); checked: Config.options.search.modules.dictionary.enable; onCheckedChanged: Config.options.search.modules.dictionary.enable = checked }
             }
         }
 

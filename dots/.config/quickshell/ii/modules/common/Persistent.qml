@@ -258,6 +258,8 @@ Singleton {
                 // Ctrl+letter result keybinds: { letter, key, name, type,
                 // iconName, iconType, filePath, query }. See LauncherSearch.
                 property list<var> resultKeybinds: []
+                // Dictionary lookups the user stayed on: "lang|word", newest first.
+                property list<string> dictionaryHistory: []
             }
 
             // Typing test scores. Only aggregate metrics are kept — never the
