@@ -36,6 +36,7 @@ Singleton {
         translationsDir: root.translationsDir
         onLanguagesScanned: (languages) => {
             root.availableLanguages = [...languages];
+            translationFileView.reread();
         }
     }
 
