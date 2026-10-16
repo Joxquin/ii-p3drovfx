@@ -57,7 +57,12 @@ class RealPages(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.pages = registry_pages()
-        cls.landmarks = L.crawl(str(ROOT), [p for p in cls.pages if p.get("searchable") is not False])
+        cls.blocks = {}
+        cls.landmarks = L.crawl(str(ROOT) + "/", [p for p in cls.pages if p.get("searchable") is not False], cls.blocks)
+
+    def block_of(self, page_id, key, sub_page=""):
+        lm = next(l for l in self.landmarks if l["pageId"] == page_id and l["key"] == key and l["subPage"] == sub_page)
+        return self.blocks.get(lm.get("block", ""))
 
     def has(self, page_id, key, sub_page=""):
         return any(l["pageId"] == page_id and l["key"] == key and l["subPage"] == sub_page for l in self.landmarks)
@@ -76,6 +81,45 @@ class RealPages(unittest.TestCase):
             self.assertLessEqual(len(l["key"]), L.MAX_CHARS)
             self.assertFalse(l["key"].endswith((".", "…")), l["key"])
         self.assertFalse(self.has("colors", "From your wallpaper"))
+
+    def test_components_drawing_landmarks_are_cloneable(self):
+        self.assertEqual(self.block_of("colors", "Color scheme")["type"], "ColorsPalettePane")
+        self.assertEqual(self.block_of("colors", "Change wallpaper")["type"], "ColorsWallpaperHero")
+        tile = self.block_of("colors", "Wallpaper Engine")
+        self.assertEqual(tile["type"], "ColorsFeatureTile")
+        # Sibling geometry: the literal height is inlined, the computed width dropped.
+        self.assertIn("height: 200", tile["source"])
+        self.assertNotIn("tiles.", tile["source"])
+        self.assertIn("Layout.fillWidth: true", tile["source"])
+        # `colorsThemesRoot.activeSubPage = …` gets a stand-in that opens the sub-page.
+        self.assertEqual(tile["rootId"], "colorsThemesRoot")
+        self.assertTrue(tile["source"].startswith("ColorsFeatureTile {") and tile["source"].endswith("}"))
+
+    def test_uncloneable_components_stay_links(self):
+        # A Repeater delegate reads modelData; an overlay anchors over the page.
+        types = {b["type"] for b in self.blocks.values()}
+        self.assertNotIn("BackgroundModelRow", types)
+        self.assertNotIn("FingerprintEnrollOverlay", types)
+        # Headings on the page itself, outside any settings component.
+        self.assertIsNone(self.block_of("colors", "Automation & integrations"))
+
+    def test_presentable_rules(self):
+        files = {"/r/modules/settings/configs/Tile.qml"}
+        text = (
+            "import QtQuick\nItem {\n    id: page\n"
+            "    Item {\n        id: grid\n        readonly property int cellHeight: 120\n        property int cellWidth: page.width / 3\n"
+            "        Tile {\n            width: grid.cellWidth\n            height: grid.cellHeight\n"
+            "            onOpen: page.activeSubPage = \"x.qml\"\n        }\n"
+            "        Tile {\n            text: grid.label\n        }\n"
+            "        Repeater { Tile { title: modelData.name } }\n    }\n}\n")
+        root = L.RootFile("/r/modules/settings/configs/Page.qml", text, "/r/", files)
+        tiles = [b for b in root.blocks if b[0] == "Tile"]
+        ok = L.presentable_block(root, tiles[0], lambda p: "", "/r/", files, {})
+        self.assertIn("height: 120", ok["source"])
+        self.assertNotIn("cellWidth", ok["source"])
+        self.assertEqual(ok["rootId"], "page")
+        self.assertIsNone(L.presentable_block(root, tiles[1], lambda p: "", "/r/", files, {}), "outside id in a binding")
+        self.assertIsNone(L.presentable_block(root, tiles[2], lambda p: "", "/r/", files, {}), "delegate")
 
     def test_every_page_with_its_own_file_has_landmarks(self):
         ids = {l["pageId"] for l in self.landmarks}

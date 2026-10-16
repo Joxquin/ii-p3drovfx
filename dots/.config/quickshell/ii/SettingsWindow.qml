@@ -716,7 +716,7 @@ FloatingWindow {
 
         let totalWidgets = 0;
         for (let s of result) {
-            totalWidgets += s.items.length + (s.landmarks?.length ?? 0);
+            totalWidgets += s.items.length + (s.landmarks?.length ?? 0) + (s.components?.length ?? 0);
             for (let sub of s.subsections) {
                 totalWidgets += sub.items.length;
             }

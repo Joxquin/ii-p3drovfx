@@ -19,6 +19,11 @@ Item {
     // Headings, labels and chips the redesigned pages draw outside any cloneable
     // control ({ pageId, subPage, key, text, subPageTitle }); see scripts/settings/search_landmarks.py.
     property var landmarks: []
+    // Clone sources of the settings components that draw landmarks, by block id:
+    // { type, source, imports, dir, rootId }.
+    property var landmarkBlocks: ({})
+    // Components are built live; past this many per query the rest stay links.
+    readonly property int maxComponentsPerQuery: 3
     readonly property int maxLandmarksPerGroup: 6
     property bool _sectionsDone: false
     property bool _landmarksDone: false
@@ -46,6 +51,7 @@ Item {
         fileSources = ({});
         fileImportsBySource = ({});
         landmarks = [];
+        landmarkBlocks = ({});
         root._memoResults = null;
         root.indexed = false;
         root.indexing = true;
@@ -131,6 +137,7 @@ Item {
         root.fileSources = ({});
         root.fileImportsBySource = ({});
         root.landmarks = [];
+        root.landmarkBlocks = ({});
         root._memoResults = null;
         root._memoQuery = "";
         root.currentSearch = "";
@@ -253,10 +260,12 @@ Item {
                 failed();
                 return;
             }
+            root.landmarkBlocks = payload.blocks ?? ({});
             root.landmarks = (payload.landmarks ?? []).map(l => ({
                 pageId: l.pageId,
                 subPage: l.subPage,
                 key: l.key,
+                block: l.block ?? "",
                 text: Translation.tr(l.key),
                 subPageTitle: l.subPageTitle ? Translation.tr(l.subPageTitle) : ""
             }));
@@ -286,7 +295,9 @@ Item {
     // A reader that never starts (no python3) never finishes its stream either.
     Timer {
         id: landmarkWatchdog
-        interval: 8000
+        // Generous: right after a reload the shell is busy recompiling and the
+        // reader's output waits for it; a run cut short loses every landmark.
+        interval: 30000
         onTriggered: landmarkCrawler.failed()
     }
 
@@ -763,6 +774,7 @@ Item {
                 r.score += 5000;
         }
         results.sort((a, b) => b.score - a.score);
+        root.assignLandmarkComponents(results);
         root._memoQuery = query;
         root._memoResults = results;
         return results;
@@ -780,21 +792,24 @@ Item {
      */
     function matchLandmarks(query, queryTokens, sectionResults) {
         let shown = {};
-        // Headings and control labels a clone already shows for that page.
+        // Headings and control labels a clone already shows on that page (or sub-page).
         for (let r of sectionResults) {
             let labels = [r.title, ...r.items.map(i => i.text)];
             for (let sub of r.subsections)
                 labels.push(sub.title, ...sub.items.map(i => i.text));
             for (let label of labels)
                 if (label)
-                    shown[r.pageId + "|" + Translation.tr(label).toLowerCase()] = true;
+                    shown[r.pageId + "|" + (r.subPage || "") + "|" + Translation.tr(label).toLowerCase()] = true;
         }
 
         let groups = {};
         let order = [];
         for (let l of root.landmarks) {
             const lower = l.text.toLowerCase();
-            if (shown[l.pageId + "|" + lower])
+            // A component that draws it still shows: it is what is on the page,
+            // the clone may come from a search proxy. As a row it is dropped.
+            const duplicate = !!shown[l.pageId + "|" + l.subPage + "|" + lower];
+            if (duplicate && !l.block)
                 continue;
             let score = getMatchScore(l.text, query, queryTokens);
             if (score === 0 && l.key !== l.text)
@@ -831,7 +846,7 @@ Item {
                 order.push(groupKey);
             }
             if (!groups[groupKey].landmarks.some(other => other.text.toLowerCase() === lower))
-                groups[groupKey].landmarks.push({ text: l.text, score: score });
+                groups[groupKey].landmarks.push({ text: l.text, score: score, block: l.block, duplicate: duplicate });
         }
 
         let out = [];
@@ -843,6 +858,45 @@ Item {
             out.push(g);
         }
         return out;
+    }
+
+    /*
+     * The best landmark hits are shown as the component that draws them (the
+     * pane, the tile), cloned like a control; a landmark inside a component
+     * already shown is covered by it. The rest stay link rows.
+     */
+    function assignLandmarkComponents(results) {
+        let budget = root.maxComponentsPerQuery;
+        for (let r of results) {
+            if (!r.landmarks)
+                continue;
+            let components = [];
+            let covered = [];
+            let rows = [];
+            for (let l of r.landmarks) {
+                if (l.block && components.indexOf(l.block) !== -1) {
+                    covered.push(l);
+                    continue;
+                }
+                if (l.block && budget > 0 && root.landmarkBlocks[l.block]) {
+                    components.push(l.block);
+                    covered.push(l);
+                    budget--;
+                    continue;
+                }
+                if (!l.duplicate)
+                    rows.push(l);
+            }
+            r.components = components;
+            r.coveredLandmarks = covered;
+            r.landmarks = rows;
+        }
+        // A group whose only hits were duplicates of clones has nothing left.
+        for (let i = results.length - 1; i >= 0; i--) {
+            const r = results[i];
+            if (r.landmarks && r.landmarks.length === 0 && r.components.length === 0)
+                results.splice(i, 1);
+        }
     }
 
     function getResultsRanked(text) {

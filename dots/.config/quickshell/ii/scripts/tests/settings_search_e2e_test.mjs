@@ -24,7 +24,8 @@ function liftFunction(src, name) {
 
 const names = ["extractImports", "extractDeclaredIds", "executableSource", "usesExternalId",
     "extractWidgetsWithOffset", "indexQmlFile", "extractBlocks", "getBlockSource", "extractProperty",
-    "tokenize", "registerSection", "getMatchScore", "getDynamicSearchResults", "sharesToken", "matchLandmarks"];
+    "tokenize", "registerSection", "getMatchScore", "getDynamicSearchResults", "sharesToken", "matchLandmarks",
+    "assignLandmarkComponents"];
 const registrySrc = fs.readFileSync(ROOT + "modules/common/SettingsPageRegistry.qml", "utf8");
 const pages = vm.runInNewContext("(" + registrySrc.split("readonly property var pages:")[1].split(/\n    \]\n/)[0] + "])");
 
@@ -36,7 +37,8 @@ const ctx = {
 };
 vm.createContext(ctx);
 vm.runInContext(`var root = { sections: [], fileSources: {}, fileImportsBySource: {}, landmarks: [],
-    _memoQuery: "", _memoResults: null, maxLandmarksPerGroup: 6 };
+    _memoQuery: "", _memoResults: null, maxLandmarksPerGroup: 6,
+    landmarkBlocks: {}, maxComponentsPerQuery: 3 };
     ${names.map(n => liftFunction(registryQml, n)).join("\n")}
     Object.assign(root, { ${names.join(", ")} });
     var sections = root.sections;`, ctx);
@@ -60,15 +62,18 @@ const pagesArg = JSON.stringify(pages.map(p => ({ id: p.id, component: p.compone
 const t0 = Date.now();
 const crawled = JSON.parse(execFileSync("python3", [ROOT + "scripts/settings/search_landmarks.py", ROOT, pagesArg], { encoding: "utf8", maxBuffer: 64 << 20 }));
 const crawlMs = Date.now() - t0;
-for (const l of crawled.landmarks) ctx.root.landmarks.push({ ...l, text: l.key });
+for (const l of crawled.landmarks) ctx.root.landmarks.push({ ...l, block: l.block ?? "", text: l.key });
+Object.assign(ctx.root.landmarkBlocks, crawled.blocks);
 
 const search = q => { ctx.root._memoResults = null; return JSON.parse(JSON.stringify(ctx.getDynamicSearchResults(q))); };
-const labels = r => r.landmarks ? r.landmarks.map(l => l.text) : [r.title, ...r.subsections.map(s => s.title)];
+const labels = r => r.landmarks ? [...r.landmarks, ...r.coveredLandmarks].map(l => l.text) : [r.title, ...r.subsections.map(s => s.title)];
+const blockType = id => ctx.root.landmarkBlocks[id]?.type;
 function show(q) {
     const res = search(q);
     console.log(`\n"${q}" → ${res.length} results`);
     for (const r of res.slice(0, 8))
-        console.log(`  ${String(r.score).padStart(6)} ${r.landmarks ? "link " : "clone"} [${r.pageId}${r.subPage ? " › " + r.subPage : ""}] ${r.title}: ${r.landmarks ? r.landmarks.map(l => l.text).join(" | ") : r.items.map(i => i.text).join(" | ")}`);
+        console.log(`  ${String(r.score).padStart(6)} ${r.components?.length ? "comp " : r.landmarks ? "link " : "clone"}`
+            + (r.components?.length ? ` {${r.components.map(blockType).join(", ")}}` : "") + ` [${r.pageId}${r.subPage ? " › " + r.subPage : ""}] ${r.title}: ${r.landmarks ? r.landmarks.map(l => l.text).join(" | ") : r.items.map(i => i.text).join(" | ")}`);
 }
 
 const custom = process.argv.slice(2);
@@ -117,12 +122,25 @@ for (const q of ["night light", "transparency", "bar position"]) {
 for (const q of ["dark", "show dark/light toggle", "lock screen", "wallpaper engine"]) {
     const res = search(q);
     for (const r of res.filter(r => r.landmarks)) {
-        const cloneLabels = res.filter(c => !c.landmarks && c.pageId === r.pageId)
+        const cloneLabels = res.filter(c => !c.landmarks && c.pageId === r.pageId && (c.subPage || "") === (r.subPage || ""))
             .flatMap(c => [c.title, ...c.items.map(i => i.text), ...c.subsections.flatMap(s => [s.title, ...s.items.map(i => i.text)])])
             .filter(Boolean).map(t => t.toLowerCase());
         for (const l of r.landmarks) assert.ok(!cloneLabels.includes(l.text.toLowerCase()), `"${q}" repeats ${l.text} on ${r.pageId}`);
     }
 }
+
+// The best landmark hits come as the component that draws them, a few per query.
+const componentsOf = q => search(q).flatMap(r => (r.components ?? []).map(blockType));
+assert.ok(componentsOf("color scheme").includes("ColorsPalettePane"));
+assert.ok(componentsOf("app theming").includes("ColorsFeatureTile"));
+assert.ok(componentsOf("change wallpaper").includes("ColorsWallpaperHero"));
+assert.ok(componentsOf("openrgb").includes("ColorsFeatureTile"), "the OpenRGB tile");
+assert.ok(componentsOf("automatic dark mode").includes("ColorsFeatureTile"), "the tile, beside its search proxy");
+for (const q of ["dark", "show", "color", "lock screen", "wallpaper"])
+    assert.ok(componentsOf(q).length <= 3, `"${q}" builds ${componentsOf(q).length} components`);
+// A landmark inside a shown component is not repeated as a row.
+for (const r of search("color scheme").filter(r => r.components?.length))
+    for (const l of r.landmarks) assert.ok(!r.components.includes(l.block), l.text);
 
 // Noise stays bounded: no group lists more than the cap, nonsense finds nothing.
 for (const r of search("on")) if (r.landmarks) assert.ok(r.landmarks.length <= 6);

@@ -48,9 +48,19 @@ PROP_RE = re.compile(r"([A-Za-z_]\w*)\s*:\s*[^:]*$")
 LINE_PROP_RE = re.compile(r"^\s*([A-Za-z_][\w.]*)\s*:")
 
 
+def blank(s: str, fill: str = " ") -> str:
+    return "\n".join(fill * len(part) for part in s.split("\n"))
+
+
 def strip_comments(text: str) -> str:
-    """Comments carry quotes and braces that are not code ("the user's ...")."""
-    return COMMENT_OR_STRING_RE.sub(lambda m: m.group(0) if m.group(0)[0] in "\"'`" else " ", text)
+    """Comments carry quotes and braces that are not code ("the user's ...").
+    Blanked to the same length, so offsets still point into the original text."""
+    return COMMENT_OR_STRING_RE.sub(lambda m: m.group(0) if m.group(0)[0] in "\"'`" else blank(m.group(0)), text)
+
+
+def mask_strings(code: str) -> str:
+    """String contents blanked, same length: only code is left to scan for braces and ids."""
+    return STRING_RE.sub(lambda m: m.group(0)[0] + blank(m.group(0)[1:-1], "x") + m.group(0)[-1], code)
 
 
 def unquote(literal: str) -> str:
@@ -184,7 +194,203 @@ def fallback_title(sub_page: str) -> str:
     return re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", base)
 
 
-def crawl(shell_root: str, pages: list[dict]) -> list[dict]:
+# ── Presentable components ─────────────────────────────────────────────────
+#
+# A landmark drawn by a settings component (a pane, a tile, a hero card) can be
+# shown in the results as that component, cloned from the page the way the
+# registry clones a ConfigSwitch: the usage block, with the page's imports. The
+# block may lean on the page's ids; the ones that can be stood in for are:
+# geometry read from a sibling (`width: tiles.tileWidth`: a literal property is
+# inlined, anything else is dropped and the clone fills the row), and the page
+# root's `activeSubPage`, which the clone routes to the sub-page. Any other
+# outside id leaves the landmark a link.
+
+OBJECT_RE = re.compile(r"(?<![\w.])([A-Z][A-Za-z0-9_]*)\s*\{")
+ID_RE = re.compile(r"\bid\s*:\s*([A-Za-z_]\w*)")
+GEOMETRY_RE = re.compile(r"^\s*(width|height|x|y|implicitWidth|implicitHeight|anchors(?:\.\w+)?|Layout\.\w+)\s*:\s*(.+?)\s*;?\s*$")
+LITERAL_PROP_RE = re.compile(r"^\s*(?:readonly\s+)?property\s+\w+\s+(\w+)\s*:\s*(-?\d+(?:\.\d+)?)\s*;?\s*$")
+WIDTH_PROPS = ("width", "Layout.fillWidth", "Layout.preferredWidth", "anchors.fill", "anchors.left", "anchors.right")
+DELEGATE_HOSTS = {"Repeater", "ListView", "GridView", "Instantiator", "PathView", "TableView", "Component"}
+QT5COMPAT_RE = re.compile(r"^\s*import\s+Qt5Compat", re.M)
+
+
+def object_blocks(masked: str) -> list[tuple[str, int, int, int]]:
+    """(type, start, open brace, end) of every object in comment- and string-masked code."""
+    # One pass: every brace pairs with its closer; objects are the braces a type opens.
+    closer: dict[int, int] = {}
+    stack = []
+    for m in re.finditer(r"[{}]", masked):
+        if m.group(0) == "{":
+            stack.append(m.start())
+        elif stack:
+            closer[stack.pop()] = m.end()
+    blocks = []
+    for m in OBJECT_RE.finditer(masked):
+        brace = m.end() - 1
+        blocks.append((m.group(1), m.start(), brace, closer.get(brace, len(masked))))
+    return blocks
+
+
+def top_level_lines(masked: str, brace: int, end: int) -> list[tuple[int, int]]:
+    """(start, end) of the lines that begin directly inside a block, one level deep."""
+    lines, depth, i = [], 0, brace + 1
+    line_start = i
+    while i < end - 1:
+        ch = masked[i]
+        if ch == "\n":
+            line_start = i + 1
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        if i == line_start and depth == 0:
+            eol = masked.find("\n", i)
+            eol = end - 1 if eol == -1 or eol > end - 1 else eol
+            lines.append((i, eol))
+        i += 1
+    return lines
+
+
+class RootFile:
+    """A page or sub-page file, parsed once for the component blocks it holds."""
+
+    def __init__(self, path: str, text: str, shell_root: str, file_set: set[str]):
+        self.path = path
+        self.text = text
+        self.code = strip_comments(text)
+        self.masked = mask_strings(self.code)
+        self.blocks = object_blocks(self.masked)
+        self.dirs = import_dirs(text, path, shell_root)
+        self.file_set = file_set
+        self.imports = "\n".join(l.strip() for l in text.splitlines() if l.strip().startswith("import "))
+        self.qt5compat = bool(QT5COMPAT_RE.search(text))
+        self.id_positions = {m.group(1): m.start() for m in ID_RE.finditer(self.masked)}
+        self.ids = list(self.id_positions)
+        self.root_id = ""
+        if self.blocks:
+            first = self.blocks[0]
+            for a, b in top_level_lines(self.masked, first[2], first[3]):
+                m = re.match(r"^\s*id\s*:\s*([A-Za-z_]\w*)", self.masked[a:b])
+                if m:
+                    self.root_id = m.group(1)
+                    break
+        self._literals: dict[str, dict[str, str]] = {}
+
+    def literals(self, ident: str) -> dict[str, str]:
+        """Numeric literal properties of the object that declares `ident`."""
+        if ident not in self._literals:
+            pos = self.id_positions.get(ident, -1)
+            owner = None
+            for block in self.blocks:
+                if block[2] < pos < block[3] and (owner is None or block[2] > owner[2]):
+                    owner = block
+            props = {}
+            if owner:
+                for a, b in top_level_lines(self.masked, owner[2], owner[3]):
+                    m = LITERAL_PROP_RE.match(self.masked[a:b])
+                    if m:
+                        props[m.group(1)] = m.group(2)
+            self._literals[ident] = props
+        return self._literals[ident]
+
+    def local_file(self, type_name: str) -> str:
+        for d in self.dirs:
+            candidate = d + type_name + ".qml"
+            if candidate != self.path and candidate in self.file_set:
+                return candidate
+        return ""
+
+    def outermost_component(self, offset: int):
+        """The outermost settings component (not the page root) enclosing `offset`."""
+        for block in self.blocks[1:]:
+            type_name, start, _, end = block
+            if start <= offset < end and self.local_file(type_name):
+                return block
+        return None
+
+
+def uses_qt5compat(path: str, read, shell_root: str, file_set: set[str], memo: dict, stack=()) -> bool:
+    """Qt5Compat effects pin a dead window and crash the shell once a clone is
+    destroyed with its window (see the Qt5Compat memory); such components stay links."""
+    if path in memo:
+        return memo[path]
+    if path in stack:
+        return False
+    text = read(path) or ""
+    result = bool(QT5COMPAT_RE.search(text)) or any(
+        uses_qt5compat(child, read, shell_root, file_set, memo, stack + (path,))
+        for child in child_files(text, path, shell_root, file_set))
+    memo[path] = result
+    return result
+
+
+def presentable_block(root: RootFile, block, read, shell_root: str, file_set: set[str], memo: dict) -> dict | None:
+    type_name, start, brace, end = block
+    if root.qt5compat:
+        return None
+    for t in referenced_types(root.text[start:end]):
+        f = root.local_file(t)
+        if f and uses_qt5compat(f, read, shell_root, file_set, memo):
+            return None
+
+    masked = root.masked
+    lines = top_level_lines(masked, brace, end)
+    # A block that hides itself (`visible: style === "expressive"`) would leave an
+    # empty result card whenever the condition is off.
+    if any(re.match(r"^\s*visible\s*:", masked[a:b]) for a, b in lines):
+        return None
+    # An overlay anchored over the page is not a card to list.
+    if any(re.match(r"^\s*anchors\.(fill|centerIn)\s*:", masked[a:b]) for a, b in lines):
+        return None
+    # A delegate is one of many and reads its model entry.
+    if re.search(r"\b(modelData|model\.|index)\b", masked[start:end]) or any(
+            t in DELEGATE_HOSTS and s < start and e > end for t, s, _, e in root.blocks):
+        return None
+    inner_ids = set(ID_RE.findall(masked[start:end]))
+    outside = [i for i in dict.fromkeys(root.ids) if i not in inner_ids]
+    edits: dict[tuple[int, int], str | None] = {}
+    shim = False
+    for ident in outside:
+        pattern = re.compile(r"\b" + re.escape(ident) + r"\b")
+        for m in pattern.finditer(masked, start, end):
+            if ident == root.root_id and re.match(r"\.activeSubPage\b", masked[m.end():m.end() + 15]):
+                shim = True
+                continue
+            line = next(((a, b) for a, b in lines if a <= m.start() < b), None)
+            geometry = GEOMETRY_RE.match(masked[line[0]:line[1]]) if line else None
+            if not geometry or "{" in masked[line[0]:line[1]]:
+                return None
+            value = geometry.group(2)
+            ref = re.fullmatch(re.escape(ident) + r"\.(\w+)", value)
+            literal = root.literals(ident).get(ref.group(1)) if ref else None
+            edits[line] = root.text[line[0]:line[0] + geometry.start(2)] + literal if literal else None
+
+    source = ""
+    cursor = start
+    kept_props = []
+    for a, b in lines:
+        if (a, b) in edits:
+            source += root.text[cursor:a] + (edits[(a, b)] or "")
+            cursor = b
+        name = GEOMETRY_RE.match(masked[a:b])
+        if name and edits.get((a, b), "") is not None:
+            kept_props.append(name.group(1))
+    source += root.text[cursor:end - 1]
+    if not any(p in WIDTH_PROPS for p in kept_props):
+        source += "\n    Layout.fillWidth: true\n"
+    source += "}"
+    return {
+        "type": type_name,
+        "source": source,
+        "imports": root.imports,
+        "dir": os.path.dirname(root.path) + "/",
+        "rootId": root.root_id if shim else "",
+    }
+
+
+def crawl(shell_root: str, pages: list[dict], blocks: dict | None = None) -> list[dict]:
+    """Landmarks of every page. With `blocks`, each landmark a settings component
+    draws also names (`block`) the clone source stored there."""
     shell_root = shell_root.rstrip("/") + "/"
     configs = shell_root + CONFIGS
     file_set = {os.path.join(d, f) for d, _, fs in os.walk(configs) for f in fs if f.endswith(".qml")}
@@ -200,13 +406,39 @@ def crawl(shell_root: str, pages: list[dict]) -> list[dict]:
                 texts[path] = None
         return texts[path]
 
+    roots: dict[str, RootFile] = {}
+    qt5_memo: dict[str, bool] = {}
+    block_memo: dict[str, str] = {}
+
+    def component_for(root_path: str, via: str, key: str) -> str:
+        if root_path not in roots:
+            roots[root_path] = RootFile(root_path, read(root_path) or "", shell_root, file_set)
+        root = roots[root_path]
+        if via:
+            usage = next((b for b in root.blocks if b[0] == via), None)
+            offset = usage[1] if usage else -1
+        else:
+            m = re.search(r"Translation\.tr\(\s*[\"']" + re.escape(key) + r"[\"']", root.code)
+            offset = m.start() if m else -1
+        block = root.outermost_component(offset) if offset >= 0 else None
+        if not block:
+            return ""
+        block_id = root_path + ":" + str(block[1])
+        if block_id not in block_memo:
+            built = presentable_block(root, block, read, shell_root, file_set, qt5_memo)
+            block_memo[block_id] = block_id if built else ""
+            if built:
+                blocks[block_id] = built
+        return block_memo[block_id]
+
     for page in pages:
         seen: set[tuple[str, str]] = set()
-        queue = [(shell_root + page["component"], "", 0)]
-        queue += [(configs + sub, sub, 0) for sub in page.get("subPages") or []]
+        # (file, sub-page, depth, root file, the root's child type it was reached through)
+        queue = [(shell_root + page["component"], "", 0, shell_root + page["component"], "")]
+        queue += [(configs + sub, sub, 0, configs + sub, "") for sub in page.get("subPages") or []]
         visited: set[tuple[str, str]] = set()
         while queue:
-            path, sub_page, depth = queue.pop(0)
+            path, sub_page, depth, root_path, via = queue.pop(0)
             if (path, sub_page) in visited:
                 continue
             visited.add((path, sub_page))
@@ -218,9 +450,15 @@ def crawl(shell_root: str, pages: list[dict]) -> list[dict]:
                 if (sub_page, key) in seen:
                     continue
                 seen.add((sub_page, key))
-                landmarks.append({"pageId": page["id"], "subPage": sub_page, "key": key})
+                landmark = {"pageId": page["id"], "subPage": sub_page, "key": key}
+                if blocks is not None:
+                    block_id = component_for(root_path, via, key)
+                    if block_id:
+                        landmark["block"] = block_id
+                landmarks.append(landmark)
             if depth < MAX_DEPTH:
-                queue += [(child, sub_page, depth + 1) for child in child_files(text, path, shell_root, file_set)]
+                for child in child_files(text, path, shell_root, file_set):
+                    queue.append((child, sub_page, depth + 1, root_path, via or Path(child).stem))
 
     for lm in landmarks:
         sub = lm["subPage"]
@@ -233,7 +471,9 @@ def main(argv: list[str]) -> int:
         print(__doc__, file=sys.stderr)
         return 2
     pages = [p for p in json.loads(argv[2]) if p.get("searchable") is not False]
-    json.dump({"landmarks": crawl(argv[1], pages)}, sys.stdout, ensure_ascii=False)
+    blocks: dict = {}
+    landmarks = crawl(argv[1], pages, blocks)
+    json.dump({"landmarks": landmarks, "blocks": blocks}, sys.stdout, ensure_ascii=False)
     return 0
 
 

@@ -209,6 +209,10 @@ than nested layouts — see `qt-nested-layout-fillwidth` for why layouts absorb 
   prose) are found anyway as **landmarks** (`scripts/settings/search_landmarks.py`): a result
   row that opens the page and flashes the text. The crawl follows components by type name
   through the page's local imports; a component only built from a string URL is not reached.
+- The best landmark hits show the **component itself** in the results, cloned from its usage
+  block on the page. To keep a new pane/tile cloneable: no `visible:` on the usage block, read
+  sibling geometry from literal properties (`readonly property int tileHeight: 200`), reach the
+  page only through `<pageRoot>.activeSubPage = …`, and keep Qt5Compat out of its tree.
 - Theme swatches read the shared `ThemePreviewCache`; bind to `ThemePreviewCache.revision`
   rather than relying on catching `cacheChanged`, and repaint a `Canvas` on
   `onAvailableChanged` / `onVisibleChanged` — a paint requested before either is lost.

@@ -97,7 +97,58 @@ ContentPage {
         }
     }
 
+    // A landmark group with components: the components are cloned from the
+    // page source, with its imports and from its directory, like the controls
+    // below. A page-root id the block names (`page.activeSubPage = …`) gets a
+    // stand-in that opens that sub-page instead.
+    function buildComponentGroup(section, i) {
+        const blocks = section.components.map(id => SearchRegistry.landmarkBlocks[id]).filter(b => !!b);
+        let imports = [];
+        for (let b of blocks)
+            for (let line of b.imports.split("\n"))
+                if (line && imports.indexOf(line) === -1)
+                    imports.push(line);
+        let qmlStr = imports.join("\n") + "\n";
+        qmlStr += "import QtQuick; import QtQuick.Layouts; import qs.modules.common.widgets; import qs.services; import qs.modules.common; \n";
+        qmlStr += "ContentSection { id: __searchSection; searchResult: true; Layout.fillWidth: true; title: " + JSON.stringify(section.title)
+            + "; icon: " + JSON.stringify(section.icon) + "; pageId: " + JSON.stringify(section.pageId)
+            + "; subPage: " + JSON.stringify(section.subPage || "") + "\n";
+        let rootIds = [];
+        for (let b of blocks) {
+            if (b.rootId && rootIds.indexOf(b.rootId) === -1) {
+                rootIds.push(b.rootId);
+                qmlStr += "QtObject { id: " + b.rootId + "; property var activeSubPage; onActiveSubPageChanged: if (activeSubPage) "
+                    + "__searchSection.navigateToPage(String(activeSubPage).replace(/^.*\\/modules\\/settings\\/configs\\//, \"\")) }\n";
+            }
+        }
+        for (let b of blocks)
+            qmlStr += b.source + "\n";
+        for (let l of section.landmarks)
+            qmlStr += "ConfigSubpageRow { title: " + JSON.stringify(l.text)
+                + "; onOpenSubPage: __searchSection.navigateToLandmark(" + JSON.stringify(l.text) + ") }\n";
+        qmlStr += "}";
+
+        try {
+            Qt.createQmlObject(qmlStr, dynamicContainer, "file://" + blocks[0].dir + "landmarkSection_" + i);
+        } catch (e) {
+            console.warn("[SearchPage] Failed to build landmark component:", section.title, e, "\nQML String:", qmlStr);
+            // The links still lead there.
+            landmarkGroupComponent.createObject(dynamicContainer, {
+                title: section.title,
+                icon: section.icon,
+                pageId: section.pageId,
+                subPage: section.subPage,
+                landmarks: section.landmarks.concat(section.coveredLandmarks ?? [])
+            });
+        }
+    }
+
     function buildSection(section, i) {
+        if (section.components && section.components.length > 0
+                && section.components.some(id => !!SearchRegistry.landmarkBlocks[id])) {
+            buildComponentGroup(section, i);
+            return;
+        }
         if (section.landmarks) {
             landmarkGroupComponent.createObject(dynamicContainer, {
                 title: section.title,
