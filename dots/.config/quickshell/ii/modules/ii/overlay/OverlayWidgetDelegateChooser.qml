@@ -19,7 +19,7 @@ import qs.modules.ii.overlay.perfMonitor
 
 DelegateChooser {
     id: root
-    role: "identifier"
+    role: "modelData"
 
     DelegateChoice { roleValue: "crosshair"; Crosshair {} }
     DelegateChoice { roleValue: "floatingImage"; FloatingImage {} }

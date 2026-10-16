@@ -29,9 +29,9 @@ AbstractOverlayWidget {
     property real editorBackgroundOpacity: 1
 
     // Defaults n stuff
-    required property var modelData
-    readonly property string identifier: modelData.identifier
-    readonly property string materialSymbol: modelData.materialSymbol ?? "widgets"
+    required property string modelData // the widget identifier
+    readonly property string identifier: modelData
+    readonly property string materialSymbol: OverlayContext.widgetSymbols[identifier] ?? "widgets"
     property string title: identifier.replace(/([A-Z])/g, " $1").replace(/^./, function(str){ return str.toUpperCase(); })
     property var persistentStateEntry: Persistent.states.overlay[identifier]
     property real radius: Appearance.rounding.windowRounding
