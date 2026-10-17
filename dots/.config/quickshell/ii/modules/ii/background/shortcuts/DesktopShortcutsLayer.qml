@@ -38,7 +38,21 @@ Item {
         font.pixelSize: root.labelSize
     }
     readonly property real labelShadowOffset: 1
-    readonly property real systemDragEdge: 96
+    // The screen-edge bands where panels sit (the bar's edge, the dock's),
+    // a thin one elsewhere: reaching one hands a drag over to the system.
+    // A fixed 96 px band on every edge started the hand-over at once for the
+    // icons near the screen's edges, which then hid and showed no landing.
+    readonly property var systemDragEdges: {
+        const thin = 6;
+        const bands = { "top": thin, "right": thin, "bottom": thin, "left": thin };
+        if (Config.options.bar.vertical)
+            bands[Config.options.bar.bottom ? "right" : "left"] = Appearance.sizes.verticalBarWidth;
+        else
+            bands[Config.options.bar.bottom ? "bottom" : "top"] = Appearance.sizes.barHeight;
+        if (Config.options.dock?.enable)
+            bands.bottom = Math.max(bands.bottom, (Config.options.dock.height ?? 60) + 10);
+        return bands;
+    }
     readonly property string dragMimeType: "application/x-ii-desktop-item"
 
     required property string screenName
@@ -737,11 +751,11 @@ Item {
         dropGhost.snapping = false;
     }
 
-    // Off the snap grid, a drop onto another icon is answered by the
-    // nearest clear spot; the ghost shows it only when that differs.
+    // Off the snap grid the ghost marks where the icon lands: under the
+    // pointer, or the nearest clear spot when another icon is there. A system
+    // drag hides the tile, so the ghost is its only mark on the desktop.
     function freePlan(tile, pending) {
-        const plan = DesktopShortcuts.planFreeDrop(root.screenName, [tile.entry.id], pending.x, pending.y);
-        return plan.x !== pending.x || plan.y !== pending.y ? plan : null;
+        return DesktopShortcuts.planFreeDrop(root.screenName, [tile.entry.id], pending.x, pending.y);
     }
 
     // ── System drag ────────────────────────────────────────────────────────
@@ -758,8 +772,8 @@ Item {
         if (!window)
             return false;
         const w = root.mapToItem(null, p.x, p.y);
-        const edge = root.systemDragEdge;
-        if (w.x < edge || w.y < edge || w.x > window.width - edge || w.y > window.height - edge)
+        const edge = root.systemDragEdges;
+        if (w.x < edge.left || w.y < edge.top || w.x > window.width - edge.right || w.y > window.height - edge.bottom)
             return true;
         const monitor = (HyprlandData.monitors ?? []).find(m => m.name === root.screenName);
         if (!monitor)
@@ -803,6 +817,15 @@ Item {
     function systemDragMove(p) {
         if (root.systemDragTile)
             root.systemDragTile.dragTo(p);
+    }
+
+    // Off the desktop (over a window or a panel) a system drag lands
+    // elsewhere: the ghost goes until the pointer comes back.
+    function systemDragLeave() {
+        if (root.systemDragTile) {
+            root.dragPlan = null;
+            root.dropTargetId = "";
+        }
     }
 
     // A drop on this screen's desktop: the pointer's last point, then the
@@ -871,10 +894,17 @@ Item {
         };
         for (let i = 0; i < iconRepeater.count; ++i) {
             const tile = iconRepeater.itemAt(i);
-            if (!tile || root.systemDragIds.indexOf(tile.entry.id) !== -1 || tile.intro < 1)
+            if (!tile || tile.intro < 1)
                 continue;
             const follow = tile.dragging ? Qt.point(tile.pending.x - tile.x, tile.pending.y - tile.y)
                 : tile.groupMember ? Qt.point(groupDrag.dx, groupDrag.dy) : Qt.point(0, 0);
+            if (root.systemDragIds.indexOf(tile.entry.id) !== -1) {
+                // A selection handed to the system is hidden: each member's
+                // landing spot stands in for it (a single drag has the ghost).
+                if (groupDrag.active)
+                    push(tile.entry.id, tile.x + follow.x, tile.y + follow.y, "ghost");
+                continue;
+            }
             if (tile.selected)
                 push(tile.entry.id, tile.x + follow.x, tile.y + follow.y,
                     root.focusId === tile.entry.id && root.selectedIds.length > 1 ? "focus" : "selected");
@@ -1561,8 +1591,13 @@ Item {
             Drag.supportedActions: Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
             Drag.proposedAction: Qt.CopyAction
             Drag.imageSource: tile.dragImage
-            Drag.hotSpot.x: tile.pressPoint.x - tile.origin.x
-            Drag.hotSpot.y: tile.pressPoint.y - tile.origin.y
+            // No hot spot: the snapshot hangs from the pointer's tip. Qt sends
+            // the hot spot as the icon's offset on its first buffer only, and
+            // Hyprland (0.56) takes each commit's offset as absolute, so the
+            // next buffer's 0,0 threw the icon a hot spot away from the
+            // pointer. With 0,0 every compositor draws it in the same place.
+            Drag.hotSpot.x: 0
+            Drag.hotSpot.y: 0
             Drag.onDragFinished: dropAction => root.endSystemDrag(tile, dropAction)
 
             function dragTo(p) {
@@ -1601,7 +1636,7 @@ Item {
                     root.dropTargetId = DesktopShortcuts.isGroupable(tile.entry) ? root.targetAt(p.x, p.y, tile.entry.id) : "";
                     root.dragPlan = root.dropTargetId !== "" ? null
                         : root.autoArrange ? DesktopShortcuts.planDrop(root.screenName, tile.entry.id, tile.pending.x, tile.pending.y)
-                        : tile.systemDrag ? null : root.freePlan(tile, tile.pending);
+                        : root.freePlan(tile, tile.pending);
                     root.dropSection = root.dropTargetId !== "" ? -1
                         : root.sectionAt(tile.pending.x + root.cellWidth / 2, tile.pending.y + root.cellHeight / 2, new Set([tile.entry.id]));
                 }
@@ -2013,7 +2048,8 @@ Item {
                     tile.pressPoint = root.mapFromItem(gesture, mouse.x, mouse.y);
                     tile.origin = Qt.point(tile.settled.x, tile.settled.y);
                     if (mouse.button === Qt.LeftButton && tile.fileUrl !== "" && !root.iconsLocked)
-                        tileContent.grabToImage(result => tile.dragImage = result.url);
+                        tileContent.grabToImage(result => tile.dragImage = result.url,
+                            Qt.size(Math.round(tileContent.width * 0.75), Math.round(tileContent.height * 0.75)));
                 }
                 onPositionChanged: mouse => {
                     if (!(pressedButtons & Qt.LeftButton) || tile.systemDrag)

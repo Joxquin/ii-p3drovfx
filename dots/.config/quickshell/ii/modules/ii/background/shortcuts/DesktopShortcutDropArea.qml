@@ -39,7 +39,12 @@ DropArea {
     }
     onEntered: event => root.follow(event)
     onPositionChanged: event => root.follow(event)
-    onExited: { if (iconsLayer) iconsLayer.dropTargetId = ""; }
+    onExited: {
+        if (iconsLayer) {
+            iconsLayer.dropTargetId = "";
+            iconsLayer.systemDragLeave();
+        }
+    }
     onDropped: event => root.handleDrop(event)
     function handleDrop(event) {
         const p = root.pointFor(event);
