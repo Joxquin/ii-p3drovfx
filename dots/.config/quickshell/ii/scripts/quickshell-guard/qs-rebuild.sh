@@ -83,6 +83,50 @@ if ! have pacman; then
     finish 1
 fi
 
+owner() { pacman -Qqo "$(readlink -f "$1")" 2>/dev/null; }
+
+# A Quickshell built by hand into ~/.local (cmake --install) comes first on PATH
+# and hides the package's: the package may already match Qt while the old
+# hand-built binary is the one that runs. Moving it aside is then the fix.
+packaged=""
+if ! owner "$(command -v qs)" >/dev/null; then
+    while IFS= read -r p; do
+        if owner "$p" >/dev/null; then
+            packaged="$p"
+            break
+        fi
+    done < <(type -ap qs)
+fi
+if [[ -n "$packaged" ]]; then
+    hand=()
+    for name in qs quickshell; do
+        p="$(command -v "$name")" || continue
+        owner "$p" >/dev/null && continue
+        for f in "$p" "$(readlink -f "$p")"; do
+            [[ " ${hand[*]} " == *" $f "* ]] || hand+=("$f")
+        done
+    done
+    head_line "A hand-built Quickshell hides the packaged one"
+    say "$(command -v qs) runs instead of $packaged, from the package $(owner "$packaged")."
+    say "Moving these aside lets the package's build run (nothing is deleted):"
+    for f in "${hand[@]}"; do say "  $f -> $f.hand-built"; done
+    if ! ask "Move them?"; then
+        say "Remove them yourself, or rebuild them the way you installed them."
+        finish 1
+    fi
+    for f in "${hand[@]}"; do
+        mv -n -- "$f" "$f.hand-built" || finish 1
+    done
+    hash -r
+    if check; then
+        head_line "The packaged Quickshell matches the installed Qt."
+        have hyprctl && hyprctl dismissnotify >/dev/null 2>&1
+        start_shell
+        finish 0
+    fi
+    say "$compat"
+fi
+
 bin="$(readlink -f "$(command -v qs)")"
 if ! pkg="$(pacman -Qqo "$bin" 2>/dev/null)"; then
     say ""
