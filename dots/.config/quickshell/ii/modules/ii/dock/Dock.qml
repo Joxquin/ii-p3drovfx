@@ -200,6 +200,106 @@ Scope {
 
             readonly property bool anySidebarOpen: GlobalStates.effectiveLeftOpen || GlobalStates.effectiveRightOpen
 
+            // Connect mode draws the sidebars inside the top layer, which ignores every
+            // exclusive zone: a pinned vertical dock on the sidebar's edge would sit under
+            // it. It rides along instead, the way the connected vertical bar does. Separate
+            // sidebars (default, Float+Connect) are their own surfaces and sit beside it.
+            readonly property bool sidebarPushes: dock.pinned && dock.isVertical
+                && GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate
+            readonly property bool pushSideIsLeft: dock.dockEffectivePosition === "left"
+            readonly property bool pushSideOnScreen: (dockRoot.screen?.name ?? "")
+                === (pushSideIsLeft ? GlobalStates.effectiveLeftMonitor : GlobalStates.effectiveRightMonitor)
+            readonly property real pushTarget: (sidebarPushes && pushSideOnScreen)
+                ? (pushSideIsLeft ? GlobalStates.leftSidebarTargetWidth : GlobalStates.rightSidebarTargetWidth) : 0
+            readonly property real sidebarPush: (sidebarPushes && pushSideOnScreen)
+                ? Math.round(pushSideIsLeft ? GlobalStates.animatedLeftSidebarWidth : GlobalStates.animatedRightSidebarWidth) : 0
+            readonly property bool sidebarPushing: pushTarget > 0 || sidebarPush > 0
+            // The window keeps room for the widest sidebar all along, transparent and outside
+            // the input mask: Hyprland animates a layer's geometry, so a window that grew as
+            // the slide began (and shrank as it ended) dragged the dock through a second slide
+            // of its own. Neither pinning nor the monitor the sidebar follows changes it.
+            readonly property real pushRoom: (dock.isVertical && GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate)
+                ? Math.max(Appearance.sizes.sidebarWidthExtended, GlobalStates.dashboardWidth, GlobalStates.policiesWidth) : 0
+            onSidebarPushingChanged: if (sidebarPushing) HyprlandData.updateLayers()
+
+            // Two layer surfaces never present in step, so while the push moves the dock
+            // is drawn by the top layer from a snapshot (GlobalStates.dockPushCopies) and
+            // the real one waits out of sight, then takes over again at rest.
+            readonly property bool pushMoving: sidebarPushing && sidebarPush !== Math.round(pushTarget)
+            readonly property string pushScreenName: dockRoot.screen?.name ?? ""
+            readonly property bool pushCopyCovering: pushMoving && !!GlobalStates.dockPushCopyShown[pushScreenName]
+            property int pushCopyGeneration: 0
+            property bool pushCopyReleasing: false
+
+            // Where this dock's window really is, in screen coordinates.
+            function layerRect() {
+                const name = dockRoot.pushScreenName;
+                const levels = HyprlandData.layers?.[name]?.levels ?? {};
+                const monitor = (HyprlandData.monitors ?? []).find(m => m?.name === name);
+                if (!monitor)
+                    return null;
+                for (const level of Object.keys(levels))
+                    for (const surface of Array.from(levels[level] ?? []))
+                        if (surface?.namespace === "quickshell:dock")
+                            return { "x": surface.x - monitor.x, "y": surface.y - monitor.y, "w": surface.w, "h": surface.h };
+                return null;
+            }
+
+            onPushMovingChanged: {
+                if (pushMoving) {
+                    pushCopyReleasing = false;
+                    if (GlobalStates.dockPushCopies[pushScreenName])
+                        return;
+                    const generation = ++pushCopyGeneration;
+                    const dpr = dockMouseArea.Screen.devicePixelRatio || 1;
+                    dockMouseArea.grabToImage(result => {
+                        if (generation !== dockRoot.pushCopyGeneration || !dockRoot.pushMoving)
+                            return;
+                        const rect = dockRoot.layerRect();
+                        if (!rect)
+                            return;
+                        const screenW = dockRoot.screen?.width ?? 1920;
+                        const onLeft = dockRoot.pushSideIsLeft;
+                        // The gap between the screen edge and the dock's outer edge with no push.
+                        const edge = onLeft ? rect.x : screenW - (rect.x + rect.w);
+                        const inner = onLeft
+                            ? dockMouseArea.x - dockRoot.sidebarPush
+                            : dockRoot.width - dockMouseArea.x - dockMouseArea.width - dockRoot.sidebarPush;
+                        dockRoot.pushCopyResult = result;
+                        GlobalStates.setDockPushCopy(dockRoot.pushScreenName, {
+                            "url": String(result.url),
+                            "side": onLeft ? "left" : "right",
+                            "inset": edge + inner,
+                            "y": rect.y + dockMouseArea.y,
+                            "width": dockMouseArea.width,
+                            "height": dockMouseArea.height
+                        });
+                    }, Qt.size(Math.ceil(dockMouseArea.width * dpr), Math.ceil(dockMouseArea.height * dpr)));
+                } else if (GlobalStates.dockPushCopies[pushScreenName]) {
+                    // At rest the real dock shows first; the copy goes once that frame is out.
+                    pushCopyReleasing = true;
+                } else {
+                    ++pushCopyGeneration;
+                }
+            }
+            // Keeps the snapshot's url alive while the top layer draws it.
+            property var pushCopyResult: null
+
+            Connections {
+                target: dockRoot.pushCopyReleasing ? dockMouseArea.Window.window : null
+                property int framesOut: 0
+                function onFrameSwapped() {
+                    if (++framesOut < 2)
+                        return;
+                    framesOut = 0;
+                    dockRoot.pushCopyReleasing = false;
+                    GlobalStates.setDockPushCopy(dockRoot.pushScreenName, null);
+                    dockRoot.pushCopyResult = null;
+                }
+            }
+            Component.onDestruction: GlobalStates.setDockPushCopy(dockRoot.pushScreenName, null)
+
+
             readonly property bool isSpecialWorkspaceOpen: {
                 if (!dockRoot.screen) return false;
                 const monitor = HyprlandData.monitors.find(m => m.name === dockRoot.screen.name);
@@ -339,7 +439,7 @@ Scope {
                 return Math.max(0, Math.min(island.reserve, Math.round(full - natural)));
             }
 
-            implicitWidth: Math.max(1, dockRoot.sizing.dockWidth)
+            implicitWidth: Math.max(1, dockRoot.sizing.dockWidth) + dockRoot.pushRoom
             implicitHeight: Math.max(1, dockRoot.sizing.dockHeight)
 
             anchors {
@@ -423,6 +523,8 @@ Scope {
             MouseArea {
                 id: dockMouseArea
                 hoverEnabled: dockRoot.reveal || dockRoot.effectiveHoverToReveal
+                // The top layer's snapshot stands in for it while a sidebar slides it.
+                opacity: dockRoot.pushCopyCovering ? 0 : 1
 
                 property real hoverRegion: Config.options?.dock?.hoverRegionHeight ?? 2
                 property real hiddenOffset: dockRoot.dockThickness - hoverRegion
@@ -449,12 +551,12 @@ Scope {
                     State {
                         name: "left"
                         AnchorChanges { target: dockMouseArea; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter }
-                        PropertyChanges { target: dockMouseArea; anchors.leftMargin: -(currentOffset + dockMouseArea.dipOffset) }
+                        PropertyChanges { target: dockMouseArea; anchors.leftMargin: -(currentOffset + dockMouseArea.dipOffset) + dockRoot.sidebarPush }
                     },
                     State {
                         name: "right"
                         AnchorChanges { target: dockMouseArea; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter }
-                        PropertyChanges { target: dockMouseArea; anchors.rightMargin: -(currentOffset + dockMouseArea.dipOffset) }
+                        PropertyChanges { target: dockMouseArea; anchors.rightMargin: -(currentOffset + dockMouseArea.dipOffset) + dockRoot.sidebarPush }
                     }
                 ]
 
@@ -467,11 +569,13 @@ Scope {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea)
                 }
                 Behavior on anchors.leftMargin {
-                    enabled: !DockPresets.isSwitchingPreset
+                    // The sidebar's own clock drives the push frame by frame.
+                    enabled: !DockPresets.isSwitchingPreset && !dockRoot.sidebarPushing
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea)
                 }
                 Behavior on anchors.rightMargin {
-                    enabled: !DockPresets.isSwitchingPreset
+                    // The sidebar's own clock drives the push frame by frame.
+                    enabled: !DockPresets.isSwitchingPreset && !dockRoot.sidebarPushing
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea)
                 }
 

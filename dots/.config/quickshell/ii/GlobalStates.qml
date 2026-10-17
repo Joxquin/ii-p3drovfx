@@ -845,6 +845,38 @@ Singleton {
         root.dockInsets = next;
     }
 
+    // A connected sidebar pushes a pinned vertical dock, but the dock is its own layer
+    // surface and the compositor pairs its frames with the top layer's a tick apart:
+    // followed live, it flickered beside the sliding sidebar. For the slide the dock
+    // hands a snapshot of itself to the top layer, which draws it glued to the sidebar
+    // (screen name -> { url, side, inset, y, width, height }; inset is the gap between
+    // the screen edge and the dock at rest). The top layer answers in dockPushCopyShown
+    // once a frame with the copy is on screen, and only then does the real dock hide.
+    property var dockPushCopies: ({})
+    property var dockPushCopyShown: ({})
+    function setDockPushCopy(screenName, copy) {
+        if (!screenName)
+            return;
+        const next = Object.assign({}, root.dockPushCopies);
+        if (copy)
+            next[screenName] = copy;
+        else
+            delete next[screenName];
+        root.dockPushCopies = next;
+        if (!copy)
+            root.setDockPushCopyShown(screenName, false);
+    }
+    function setDockPushCopyShown(screenName, shown) {
+        if (!screenName || !!root.dockPushCopyShown[screenName] === shown)
+            return;
+        const next = Object.assign({}, root.dockPushCopyShown);
+        if (shown)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.dockPushCopyShown = next;
+    }
+
     // What the Dynamic Island bar style really occupies of its edge, published by the
     // real bar window (screen name -> { edge, extent, reserve }). The style reserves a
     // full strip for windows but draws only a pill centred in it, so a full-width dock

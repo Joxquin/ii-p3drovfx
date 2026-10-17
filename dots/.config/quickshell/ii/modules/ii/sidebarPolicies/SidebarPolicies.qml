@@ -50,6 +50,9 @@ Scope { // Scope
     }
     readonly property real topZoneInset: root.ignoresZones ? root.frameRing + root.dockZoneAt("top") : 0
     readonly property real bottomZoneInset: root.ignoresZones ? root.frameRing + root.dockZoneAt("bottom") : 0
+    // A pinned dock on the sidebar's own edge lies beside the bar, so the open content
+    // stops beside the dock too instead of covering it.
+    readonly property real sideDockInset: root.ignoresZones ? root.dockZoneAt(root.isOnLeft ? "left" : "right") : 0
     readonly property bool barReservesSpace: !(Config.options?.bar?.autoHide?.enable && !Config.options?.bar?.autoHide?.pushWindows)
 
     function togglePoliciesExtended() {
@@ -246,7 +249,7 @@ Scope { // Scope
             }
 
             // The surface starts at the screen edge; the open content stops beside the bar.
-            readonly property real effectiveBarOffset: root.pin ? 0 : (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset)
+            readonly property real effectiveBarOffset: root.pin ? 0 : (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset) + root.sideDockInset
 
             // Setting exclusiveZone resets exclusionMode to Normal. Use the Wayland
             // sentinel directly for floating sidebars; preserve the pinned reservation.

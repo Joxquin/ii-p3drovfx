@@ -1486,6 +1486,44 @@ PanelWindow {
         }
     }
 
+    // A pinned vertical dock pushed by a sidebar, drawn here for the slide so it moves
+    // in the same frames as the sidebar (see GlobalStates.dockPushCopies).
+    Image {
+        id: dockPushCopy
+        readonly property var copy: GlobalStates.dockPushCopies[topPanel.screen.name] ?? null
+        visible: !!copy
+        z: 1000
+        source: copy ? copy.url : ""
+        cache: false
+        asynchronous: false
+        width: copy ? copy.width : 0
+        height: copy ? copy.height : 0
+        y: copy ? copy.y : 0
+        x: {
+            if (!copy)
+                return 0;
+            if (copy.side === "left")
+                return copy.inset + Math.round(GlobalStates.animatedLeftSidebarWidth);
+            return topPanel.width - copy.inset - copy.width - Math.round(GlobalStates.animatedRightSidebarWidth);
+        }
+        readonly property bool ready: visible && status === Image.Ready
+        // A swapped frame is not yet a presented one: the dock hid a frame early and blinked.
+        property int framesOut: 0
+        onReadyChanged: {
+            framesOut = 0;
+            if (!ready)
+                GlobalStates.setDockPushCopyShown(topPanel.screen.name, false);
+        }
+
+        Connections {
+            target: dockPushCopy.ready && !GlobalStates.dockPushCopyShown[topPanel.screen.name] ? dockPushCopy.Window.window : null
+            function onFrameSwapped() {
+                if (++dockPushCopy.framesOut >= 2)
+                    GlobalStates.setDockPushCopyShown(topPanel.screen.name, true);
+            }
+        }
+    }
+
     Item {
         id: keyFocusHandler
         focus: (topPanel.policiesOpenOnMonitor && !GlobalStates.policiesDetached) || (rightSidebarOpenOnMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)) || searchOpenOnMonitor

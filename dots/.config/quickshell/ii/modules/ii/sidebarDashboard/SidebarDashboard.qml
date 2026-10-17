@@ -25,8 +25,14 @@ Scope {
     }
 
     // The surface starts at the screen edge; the open content stops beside the bar.
-    readonly property real effectiveBarOffset: BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
-        ? Appearance.sizes.verticalBarWindowWidth : 0
+    // Ignoring every zone (to keep the bar off) also ignores a pinned dock on this edge,
+    // which lies beside the bar: the open content stops beside the dock as well.
+    readonly property bool ignoresZones: BarPlacement.vertical && (BarPlacement.bottom === root.isOnRight)
+    readonly property var dockInset: GlobalStates.dockInsets[root.isOnRight ? GlobalStates.effectiveRightMonitor : GlobalStates.effectiveLeftMonitor] ?? null
+    readonly property real sideDockInset: (root.ignoresZones && root.dockInset && root.dockInset.side === (root.isOnRight ? "right" : "left"))
+        ? (root.dockInset.reserved ?? 0) : 0
+    readonly property real effectiveBarOffset: (BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
+        ? Appearance.sizes.verticalBarWindowWidth : 0) + root.sideDockInset
 
     // Loader guard: PanelWindow (Wayland surface) is never created in connect mode,
     // except in Float+Connect mode (cornerStyle 1) where sidebars remain separate.
