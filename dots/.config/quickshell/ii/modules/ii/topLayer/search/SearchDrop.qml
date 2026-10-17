@@ -80,7 +80,7 @@ Item {
     property bool rightSidebarActiveOnMonitor: false
 
     readonly property bool isOpen: GlobalStates.overviewOpen && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor
-    readonly property bool isWidgetActive: isOpen || openProgress > 0.001 || dropSurface.active
+    readonly property bool isWidgetActive: isOpen || openProgress > 0.001 || dropSurface.active || overviewBubble.active
     readonly property string mode: isWidgetActive ? "launcher" : "idle"
 
     onIsWidgetActiveChanged: {
@@ -113,55 +113,7 @@ Item {
      * change once the overview is closed. This latch does the same.
      */
     property bool overviewShown: root.overviewWanted
-    readonly property bool isOverviewVisible: root.isWidgetActive && root.overviewShown
-
-    // Same push-and-fade as the default overview (Overview.qml): while a query
-    // owns the drop the grid is pushed away from the bar as the drop grows and
-    // fades on OutCubic over the drop's own growth; clearing the query plays
-    // it back on the entrance curve.
-    property real overviewFadeProgress: root.overviewShown ? 1.0 : 0.0
-    property real overviewExitProgress: 0.0
-    readonly property int overviewPushDuration: root.animStyle === "none" ? 0 : Appearance.animation.elementMoveSmall.duration
-    readonly property real overviewExitShift: root.overviewExitProgress
-        * (root.isBottomBar ? -1 : 1) * Appearance.sizes.elevationMargin * 6
-
-    ParallelAnimation {
-        id: overviewExitAnim
-        NumberAnimation {
-            target: root
-            property: "overviewExitProgress"
-            to: 1.0
-            duration: root.overviewPushDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-        }
-        NumberAnimation {
-            target: root
-            property: "overviewFadeProgress"
-            to: 0.0
-            duration: root.overviewPushDuration
-            easing.type: Easing.OutCubic
-        }
-    }
-
-    ParallelAnimation {
-        id: overviewReturnAnim
-        NumberAnimation {
-            target: root
-            property: "overviewExitProgress"
-            to: 0.0
-            duration: root._animDurationOpen
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
-        }
-        NumberAnimation {
-            target: root
-            property: "overviewFadeProgress"
-            to: 1.0
-            duration: root._animDurationOpen
-            easing.type: Easing.OutCubic
-        }
-    }
+    readonly property bool isOverviewVisible: root.isWidgetActive && (root.overviewShown || overviewBubble.active)
 
     function syncOverviewShown() {
         // Frozen outside the open state; see `overviewShown`.
@@ -170,18 +122,9 @@ Item {
         const wanted = root.overviewWanted;
         if (wanted === root.overviewShown)
             return;
+        // The overview drop carries the change: tucked back into the search
+        // while a query owns it, pulled out again when the query is cleared.
         root.overviewShown = wanted;
-        overviewExitAnim.stop();
-        overviewReturnAnim.stop();
-        if (root.animStyle === "none") {
-            root.overviewExitProgress = 0.0;
-            root.overviewFadeProgress = wanted ? 1.0 : 0.0;
-            return;
-        }
-        if (wanted)
-            overviewReturnAnim.start();
-        else
-            overviewExitAnim.start();
     }
 
     onOverviewWantedChanged: root.syncOverviewShown()
@@ -195,13 +138,8 @@ Item {
             root.searchWidgetRef.setSearchingText(GlobalStates.activeSearchQuery);
             GlobalStates.activeSearchQuery = "";
         }
-        // A new session starts from the query it opens with; the drop's own
-        // open animation brings the grid in, not the search push.
-        overviewExitAnim.stop();
-        overviewReturnAnim.stop();
+        // A new session starts from the query it opens with.
         root.overviewShown = root.overviewWanted;
-        root.overviewExitProgress = 0.0;
-        root.overviewFadeProgress = root.overviewShown ? 1.0 : 0.0;
     }
 
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
@@ -297,10 +235,6 @@ Item {
 
     // openProgress: 0 = fully closed, 1 = fully open
     property real openProgress: 0.0
-
-    // animHeight: the old curtain's reveal height. The drop no longer follows it; the
-    // classic overview still places itself by it, so its entrance is unchanged.
-    readonly property real animHeight: openProgress * root.dropH
 
     // A touchpad gesture is holding the drop where the fingers are. No transition leads in
     // or out of this state: the gesture settles the value itself before it lets go.
@@ -491,31 +425,50 @@ Item {
         }
     }
 
-    Loader { // Classic overview
-        id: overviewLoader
-        property bool loadedOnce: false
-        y: root.isBottomBar ? (root.barEdgeY - root.animHeight - height - 10) : (root.barEdgeY + root.animHeight + 10)
-        height: implicitHeight
-        anchors.horizontalCenter: parent.horizontalCenter
-        active: (loadedOnce || root.isWidgetActive) && !root.isScrollingLayout && !Config.options.search.suggestions.enable
-        visible: opacity > 0.01
-        opacity: root.isWidgetActive ? (root.animStyle === "none" ? 1.0 : root.openProgress) * root.overviewFadeProgress : 0.0
+    /**
+     * The classic overview, pulled out of the search as a drop of its own
+     * (SearchOverviewBubble). It leaves with the search's first frame and is
+     * tucked back into it while a query owns the drop. Hosted: the drop paints
+     * the overview's panel, so the widget draws no panel or shadow of its own.
+     */
+    SearchOverviewBubble {
+        id: overviewBubble
+        anchors.fill: parent
+        readonly property var overview: overviewLoader.item
+        open: root.isOpen && root.overviewShown && overview !== null
+        held: root.heldByGesture && root.overviewShown
+        heldProgress: GlobalStates.gestureDragProgress
+        animationsEnabled: root.animStyle !== "none"
+        openDuration: Math.round(700 * Appearance.animMultiplier)
+        closeDuration: Math.round(340 * Appearance.animMultiplier)
 
-        transform: [
-            Translate {
-                y: root.animStyle === "none" ? 0 : ((1.0 - root.openProgress) * (root.isBottomBar ? -30 : 30)) + root.overviewExitShift
-            },
-            Scale {
-                origin.x: overviewLoader.implicitWidth / 2
-                origin.y: overviewLoader.implicitHeight / 2
-                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * root.openProgress) : 1.0
-                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * root.openProgress) : 1.0
+        barEdgeY: root.barEdgeY
+        away: root.isBottomBar ? -1 : 1
+        searchCenterX: positioner.horizontalCenter
+        searchBodyWidth: dropSurface.liveBodyWidth
+        searchHeight: dropSurface.visibleHeight
+        searchRadius: dropSurface.liveCornerRadius
+        searchRestHeight: root.dropH
+        searchColor: root.themeBgColor
+
+        overviewCenterX: root.width / 2
+        overviewWidth: overview ? overview.implicitWidth : 0
+        overviewHeight: overview ? overview.implicitHeight : 0
+        overviewRadius: OverviewStyle.radiusCellOuter + OverviewStyle.panelPadding
+        // Where the floating panel used to sit: 10 px under the drop plus the
+        // elevation margin it drew its shadow in.
+        gap: 10 + Appearance.sizes.elevationMargin
+        panelColor: OverviewStyle.colPanel
+
+        Loader { // Classic overview
+            id: overviewLoader
+            property bool loadedOnce: false
+            active: (loadedOnce || root.isWidgetActive) && !root.isScrollingLayout && !Config.options.search.suggestions.enable
+            sourceComponent: OverviewWidget {
+                panelWindow: root.panelWindow
+                monitorIndex: root.monitorIndex
+                hosted: true
             }
-        ]
-
-        sourceComponent: OverviewWidget {
-            panelWindow: root.panelWindow
-            monitorIndex: root.monitorIndex
         }
     }
 
