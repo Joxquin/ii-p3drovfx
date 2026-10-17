@@ -157,6 +157,14 @@ def resolve_path(path: Path):
     # never on the folder it points to. Type and icon still follow it.
     path = Path(os.path.normpath(path))
     path = path.parent.resolve() / path.name
+    item = describe_path(path)
+    # Dropped files and folders are links: the icon wears a shortcut arrow.
+    if path.is_symlink():
+        item["link"] = True
+    return item
+
+
+def describe_path(path: Path):
     if path.is_dir():
         return {
             "id": "directory:" + str(path),

@@ -1796,6 +1796,28 @@ Item {
                                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                             }
                         }
+                        // A link (every dropped file or folder): the shortcut
+                        // arrow, so it never reads as a copy of the original.
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.bottom: parent.bottom
+                            anchors.leftMargin: -2
+                            anchors.bottomMargin: -2
+                            visible: tile.entry.type !== "group" && !!tile.entry.path
+                                && DesktopShortcuts.linkedPaths[tile.entry.path] === true
+                            width: Math.round(18 * Math.max(0.75, root.iconScale))
+                            height: width
+                            radius: width / 2
+                            color: Appearance.m3colors.m3surfaceContainerHighest
+                            border.width: 1
+                            border.color: Qt.alpha(Appearance.m3colors.m3outlineVariant, 0.6)
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "arrow_outward"
+                                iconSize: parent.width * 0.72
+                                color: Appearance.m3colors.m3onSurface
+                            }
+                        }
                         // Unread notifications from the app.
                         Rectangle {
                             id: unreadBadge

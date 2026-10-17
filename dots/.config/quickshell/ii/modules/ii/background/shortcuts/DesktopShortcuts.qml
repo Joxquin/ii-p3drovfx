@@ -48,6 +48,9 @@ Singleton {
     // Folder path → up to four images drawn on its icon (Dolphin's folder
     // thumbnails), from the last scan. Not persisted.
     property var folderPreviews: ({})
+    // Desktop paths that are links (what a drop makes), from the last scan:
+    // their icons wear a shortcut arrow. Not persisted.
+    property var linkedPaths: ({})
 
     // ── Desktop Folder Watcher & Scanner ───────────────────────────────────
     FolderListModel {
@@ -655,6 +658,13 @@ Singleton {
         }
         if (JSON.stringify(previews) !== JSON.stringify(root.folderPreviews))
             root.folderPreviews = previews;
+        const linked = {};
+        for (const d of diskItems) {
+            if (d.link && d.path)
+                linked[d.path] = true;
+        }
+        if (JSON.stringify(linked) !== JSON.stringify(root.linkedPaths))
+            root.linkedPaths = linked;
         const currentScreens = Object.assign({}, root.screens);
         let changed = false;
 
