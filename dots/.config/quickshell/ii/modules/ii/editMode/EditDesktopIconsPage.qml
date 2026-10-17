@@ -162,12 +162,22 @@ StyledFlickable {
         EditPanelRow {
             Layout.fillWidth: true
             first: false
-            last: true
+            last: false
             symbol: "notifications"
             title: Translation.tr("Notification count")
             trailingKind: "switch"
             switchChecked: root.options.notificationBadges
             onActivated: Config.options.background.desktopIcons.notificationBadges = !root.options.notificationBadges
+        }
+        EditPanelRow {
+            Layout.fillWidth: true
+            first: false
+            last: true
+            symbol: "arrow_outward"
+            title: Translation.tr("Link badge")
+            trailingKind: "switch"
+            switchChecked: root.options.linkBadges ?? true
+            onActivated: Config.options.background.desktopIcons.linkBadges = !(root.options.linkBadges ?? true)
         }
     }
 }

@@ -4529,6 +4529,7 @@ Singleton {
                     property string iconBackground: "none" // none | translucent | circle | squircle
                     property bool runningBadges: true // the dock's "open" dot under running apps
                     property bool notificationBadges: true // unread count from the app's notifications
+                    property bool linkBadges: true // the shortcut arrow on linked (dropped) files and folders
                     // The launch pad: sections of icons named by their entry name or
                     // path, each on a card at its own rectangle (x, y, width, height,
                     // set by dragging and resizing the card; a section without one

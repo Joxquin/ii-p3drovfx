@@ -1838,7 +1838,8 @@ Item {
                             anchors.bottom: parent.bottom
                             anchors.leftMargin: -2
                             anchors.bottomMargin: -2
-                            visible: tile.entry.type !== "group" && !!tile.entry.path
+                            visible: (root.options.linkBadges ?? true)
+                                && tile.entry.type !== "group" && !!tile.entry.path
                                 && DesktopShortcuts.linkedPaths[tile.entry.path] === true
                             width: Math.round(18 * Math.max(0.75, root.iconScale))
                             height: width
