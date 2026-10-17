@@ -64,6 +64,10 @@ UtilityTile {
         Shape {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
+            // The curve renderer leaves the disc's edge as hard steps here; a
+            // multisampled layer smooths it.
+            layer.enabled: true
+            layer.samples: 4
             ShapePath {
                 fillColor: pie.colRest
                 strokeColor: "transparent"

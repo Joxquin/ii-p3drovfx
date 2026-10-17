@@ -7,6 +7,9 @@ import qs.modules.common.widgets
  * and draws it scaled back down, so up to that magnification the lens shows
  * real pixels instead of a stretched texture. Morphs between shapes as
  * MaterialShape does.
+ *
+ * The scaled-down canvas is drawn through a mipmapped texture: a plain `scale`
+ * samples a 2-3x larger texture bilinearly and leaves its edges jagged at rest.
  */
 Item {
     id: root
@@ -22,14 +25,22 @@ Item {
     implicitHeight: root.implicitSize
 
     readonly property real _scale: Math.max(1, Math.min(3, root.renderScale))
+    readonly property bool _oversampled: root._scale > 1
 
     MaterialShape {
         id: canvas
         width: root.width * root._scale
         height: root.height * root._scale
-        scale: 1 / root._scale
-        transformOrigin: Item.TopLeft
         shape: root.shapeName.length > 0 ? (canvas.shapeMap[root.shapeName] ?? root.shape) : root.shape
         color: root.color
+    }
+
+    ShaderEffectSource {
+        anchors.fill: parent
+        visible: root._oversampled
+        sourceItem: root._oversampled ? canvas : null
+        hideSource: root._oversampled
+        mipmap: true
+        smooth: true
     }
 }

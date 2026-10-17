@@ -95,6 +95,7 @@ UtilityTile {
 
     // Square: the phone's charge as a ring around the badge.
     ClockProgressRing {
+        multisample: true
         anchors.fill: parent
         anchors.margins: Math.round(tile.side * 0.08)
         visible: !tile.wide && tile.phoneCharge >= 0 && !tile.dropHovering

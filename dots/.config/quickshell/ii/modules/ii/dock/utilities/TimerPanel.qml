@@ -50,6 +50,7 @@ ColumnLayout {
                     implicitWidth: 52
                     implicitHeight: 52
                     ClockProgressRing {
+                        multisample: true
                         anchors.fill: parent
                         value: row.finished ? 0 : row.secondsLeft / Math.max(1, row.modelData.durationSeconds ?? 1)
                         thickness: 5

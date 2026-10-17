@@ -38,6 +38,7 @@ ColumnLayout {
         color: ClockStyle.colField
 
         ClockProgressRing {
+            multisample: true
             anchors.centerIn: parent
             width: 204
             height: 204

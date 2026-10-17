@@ -70,6 +70,7 @@ UtilityTile {
         visible: !tile.wide
 
         ClockProgressRing {
+            multisample: true
             anchors.fill: parent
             anchors.margins: Math.round(tile.side * 0.08)
             visible: tile.started
@@ -113,6 +114,7 @@ UtilityTile {
             implicitWidth: tile.badgeSize
             implicitHeight: tile.badgeSize
             ClockProgressRing {
+                multisample: true
                 anchors.fill: parent
                 value: tile.secondsLeft / tile.lapDuration
                 thickness: Math.max(3, Math.round(tile.badgeSize * 0.09))

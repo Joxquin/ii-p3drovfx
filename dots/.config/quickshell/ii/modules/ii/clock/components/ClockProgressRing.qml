@@ -17,6 +17,9 @@ Item {
     id: root
 
     property real value: 0
+    // The curve renderer leaves the ring's edges as hard steps at small sizes; a
+    // multisampled layer smooths them. Off by default: big clock rings do not need it.
+    property bool multisample: false
     property real thickness: 10
     property bool wavy: true
     property int waves: 14
@@ -100,6 +103,8 @@ Item {
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
+        layer.enabled: root.multisample
+        layer.samples: 4
 
         ShapePath {
             strokeColor: root.sweep >= 360 ? "transparent" : root.colTrack

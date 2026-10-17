@@ -115,6 +115,7 @@ UtilityTile {
         visible: !tile.wide
 
         ClockProgressRing {
+            multisample: true
             anchors.fill: parent
             anchors.margins: Math.round(tile.side * 0.08)
             visible: tile.ready && !tile.isCredits
@@ -193,6 +194,7 @@ UtilityTile {
             implicitWidth: Math.round(tile.badgeSize * 0.84)
             implicitHeight: implicitWidth
             ClockProgressRing {
+                multisample: true
                 anchors.fill: parent
                 value: tile.used(tile.secondary) / 100
                 thickness: Math.max(2, Math.round(parent.width * 0.09))
