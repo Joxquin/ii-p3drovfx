@@ -98,8 +98,19 @@ PanelWindow {
 
     readonly property bool isDynamicIslandTop: !topPanel.barVertical && !topPanel.barBottom && BarInteraction.cornerStyle === 3 && hasBarOnThisMonitor
     readonly property bool isDynamicIslandBottom: !topPanel.barVertical && topPanel.barBottom && BarInteraction.cornerStyle === 3 && hasBarOnThisMonitor
-    readonly property real sidebarTopOffset: isDynamicIslandTop ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && !topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
-    readonly property real sidebarBottomOffset: isDynamicIslandBottom ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
+    // A pinned dock on the top or bottom edge is a separate surface under nothing here: the
+    // sidebars, the vertical bar and the wrapped frame ran on beneath it. Its exclusive zone
+    // is treated as part of that edge instead - they stop where the windows do.
+    readonly property var dockInset: GlobalStates.dockInsets[topPanel.screen.name] ?? null
+    readonly property bool dockShapesShell: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate
+    readonly property real dockTopZone: (dockShapesShell && dockInset && dockInset.side === "top") ? (dockInset.reserved ?? 0) : 0
+    readonly property real dockBottomZone: (dockShapesShell && dockInset && dockInset.side === "bottom") ? (dockInset.reserved ?? 0) : 0
+    // The dock sits inside the frame's ring when nothing else holds that edge.
+    readonly property real ringThickness: usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0
+    readonly property real sidebarTopOffset: sidebarTopBarOffset + (dockTopZone > 0 ? dockTopZone + (sidebarTopBarOffset > 0 ? 0 : ringThickness) : 0)
+    readonly property real sidebarBottomOffset: sidebarBottomBarOffset + (dockBottomZone > 0 ? dockBottomZone + (sidebarBottomBarOffset > 0 ? 0 : ringThickness) : 0)
+    readonly property real sidebarTopBarOffset: isDynamicIslandTop ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && !topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
+    readonly property real sidebarBottomBarOffset: isDynamicIslandBottom ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
 
     property real leftSidebarMaskWidth: 0
     property real rightSidebarMaskWidth: 0
@@ -305,6 +316,8 @@ PanelWindow {
 
             sidebarTopOffset: topPanel.sidebarTopOffset
             sidebarBottomOffset: topPanel.sidebarBottomOffset
+            dockTopInset: topPanel.dockTopZone
+            dockBottomInset: topPanel.dockBottomZone
         }
     }
 
@@ -637,6 +650,10 @@ PanelWindow {
                             bottom: parent.bottom
                             left: undefined
                             right: undefined
+                            // The column ends at a top/bottom dock and the frame's band carries
+                            // on under it; without the frame there is no band, so it runs on.
+                            topMargin: (topPanel.usingWrappedFrame && topPanel.dockTopZone > 0) ? topPanel.dockTopZone + topPanel.ringThickness : 0
+                            bottomMargin: (topPanel.usingWrappedFrame && topPanel.dockBottomZone > 0) ? topPanel.dockBottomZone + topPanel.ringThickness : 0
                         }
 
                         x: {
@@ -993,6 +1010,7 @@ PanelWindow {
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
         x: GlobalStates.animatedLeftSidebarWidth
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: topPanel.sidebarBottomOffset
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
         sourceComponent: RoundCorner {
@@ -1053,6 +1071,7 @@ PanelWindow {
         anchors.right: parent.right
         anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: topPanel.sidebarBottomOffset
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
         sourceComponent: RoundCorner {
@@ -1231,7 +1250,7 @@ PanelWindow {
     Item {
         id: leftSidebarTopCornerMaskItem
         x: topPanel.leftSidebarMaskWidth
-        y: 0
+        y: topPanel.sidebarTopOffset
         width: leftSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
         height: leftSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
@@ -1247,7 +1266,7 @@ PanelWindow {
     Item {
         id: leftSidebarBottomCornerMaskItem
         x: topPanel.leftSidebarMaskWidth
-        y: topPanel.height - (leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0)
+        y: topPanel.height - topPanel.sidebarBottomOffset - (leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0)
         width: leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
         height: leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
@@ -1255,7 +1274,7 @@ PanelWindow {
     Item {
         id: rightSidebarTopCornerMaskItem
         x: topPanel.width - topPanel.rightSidebarMaskWidth - width
-        y: 0
+        y: topPanel.sidebarTopOffset
         width: rightSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
         height: rightSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
@@ -1271,7 +1290,7 @@ PanelWindow {
     Item {
         id: rightSidebarBottomCornerMaskItem
         x: topPanel.width - topPanel.rightSidebarMaskWidth - width
-        y: topPanel.height - height
+        y: topPanel.height - topPanel.sidebarBottomOffset - height
         width: rightSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
         height: rightSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
