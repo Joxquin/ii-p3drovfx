@@ -116,6 +116,8 @@ Item {
     // Island backgrounds (barBackgroundStyle 3) are separate pills with gaps
     // between them, so a solid plate would fill those gaps with the bar color.
     readonly property bool barWeldedToFrame: !isFloatingOrIsland && Config.options.bar.barBackgroundStyle !== 3
+    readonly property bool leftPlateShown: barWeldedToFrame && !hasLeftFrame
+    readonly property bool rightPlateShown: barWeldedToFrame && !hasRightFrame
 
     // Inner corner radius of wrapped frame always respects windowRounding
     readonly property real frameInnerCornerRadius: Appearance.rounding.windowRounding
@@ -186,11 +188,12 @@ Item {
             top: parent.top
             left: parent.left
             right: parent.right
-            // With a dock band it sits past a top bar and spans the whole edge, under the bar
-            // column and the sidebars, which draw over it in the same colour.
+            // With a dock band it sits past a top bar and spans the whole edge, except where
+            // a bar plate already runs to the screen edge: with transparency every overlap
+            // paints the translucent colour twice and reads as a second shade.
             topMargin: (!hasTopFrame) ? (visualsRoot.dockTopBand > 0 ? visualsRoot.totalTopPush : -Math.max(0, frameThickness - visualsRoot.hBarHiddenAmount)) : 0
-            leftMargin: visualsRoot.dockTopBand > 0 ? 0 : visualsRoot.totalLeftPush
-            rightMargin: visualsRoot.dockTopBand > 0 ? 0 : visualsRoot.totalRightPush
+            leftMargin: (visualsRoot.dockTopBand > 0 && !visualsRoot.leftPlateShown) ? 0 : visualsRoot.totalLeftPush
+            rightMargin: (visualsRoot.dockTopBand > 0 && !visualsRoot.rightPlateShown) ? 0 : visualsRoot.totalRightPush
         }
         height: hasTopFrame ? frameThickness + visualsRoot.dockTopBand : (visualsRoot.dockTopBand > 0 ? visualsRoot.dockTopBand : frameThickness)
         color: visualsRoot.baseColor
@@ -204,8 +207,8 @@ Item {
             left: parent.left
             right: parent.right
             bottomMargin: (!hasBottomFrame) ? (visualsRoot.dockBottomBand > 0 ? visualsRoot.totalBottomPush : -Math.max(0, frameThickness - visualsRoot.hBarHiddenAmount)) : 0
-            leftMargin: visualsRoot.dockBottomBand > 0 ? 0 : visualsRoot.totalLeftPush
-            rightMargin: visualsRoot.dockBottomBand > 0 ? 0 : visualsRoot.totalRightPush
+            leftMargin: (visualsRoot.dockBottomBand > 0 && !visualsRoot.leftPlateShown) ? 0 : visualsRoot.totalLeftPush
+            rightMargin: (visualsRoot.dockBottomBand > 0 && !visualsRoot.rightPlateShown) ? 0 : visualsRoot.totalRightPush
         }
         height: hasBottomFrame ? frameThickness + visualsRoot.dockBottomBand : (visualsRoot.dockBottomBand > 0 ? visualsRoot.dockBottomBand : frameThickness)
         color: visualsRoot.baseColor

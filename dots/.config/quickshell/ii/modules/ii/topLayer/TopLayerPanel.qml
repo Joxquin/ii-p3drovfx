@@ -105,6 +105,20 @@ PanelWindow {
     readonly property bool dockShapesShell: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate
     readonly property real dockTopZone: (dockShapesShell && dockInset && dockInset.side === "top") ? (dockInset.reserved ?? 0) : 0
     readonly property real dockBottomZone: (dockShapesShell && dockInset && dockInset.side === "bottom") ? (dockInset.reserved ?? 0) : 0
+    // The frame's band under the dock: the reserved zone, or a full-width tray while it shows.
+    // It follows the tray's reveal slide, which is what the dock no longer paints.
+    readonly property real dockTopBandTarget: (dockShapesShell && dockInset && dockInset.side === "top") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
+    readonly property real dockBottomBandTarget: (dockShapesShell && dockInset && dockInset.side === "bottom") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
+    property real dockTopBand: dockTopBandTarget
+    property real dockBottomBand: dockBottomBandTarget
+    Behavior on dockTopBand {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(topPanel)
+    }
+    Behavior on dockBottomBand {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(topPanel)
+    }
+    readonly property bool dockOnFrameBand: frameLoader.active && dockShapesShell
+    onDockOnFrameBandChanged: GlobalStates.setDockBand(topPanel.screen.name, topPanel.dockOnFrameBand)
     // The dock sits inside the frame's ring when nothing else holds that edge.
     readonly property real ringThickness: usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0
     readonly property real sidebarTopOffset: sidebarTopBarOffset + (dockTopZone > 0 ? dockTopZone + (sidebarTopBarOffset > 0 ? 0 : ringThickness) : 0)
@@ -156,6 +170,7 @@ PanelWindow {
             topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
         }
         topPanel.updateFocusGrab();
+        GlobalStates.setDockBand(topPanel.screen.name, topPanel.dockOnFrameBand);
     }
 
     readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.effectiveLeftMonitor
@@ -316,8 +331,8 @@ PanelWindow {
 
             sidebarTopOffset: topPanel.sidebarTopOffset
             sidebarBottomOffset: topPanel.sidebarBottomOffset
-            dockTopInset: topPanel.dockTopZone
-            dockBottomInset: topPanel.dockBottomZone
+            dockTopInset: topPanel.dockTopBand
+            dockBottomInset: topPanel.dockBottomBand
         }
     }
 
@@ -1460,7 +1475,10 @@ PanelWindow {
         }
     }
 
-    Component.onDestruction: GlobalFocusGrab.removeDismissable(topPanel)
+    Component.onDestruction: {
+        GlobalFocusGrab.removeDismissable(topPanel);
+        GlobalStates.setDockBand(topPanel.screen.name, false);
+    }
 
     Connections {
         target: GlobalStates

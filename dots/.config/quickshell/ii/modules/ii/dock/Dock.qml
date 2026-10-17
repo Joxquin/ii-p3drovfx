@@ -186,14 +186,16 @@ Scope {
                 readonly property string side: dock.dockEffectivePosition
                 readonly property real thickness: dockRoot.unmagnifiedThickness
                 readonly property real reserved: dockRoot.exclusiveZone
+                readonly property real shown: (dockRoot.isFullWidth && dockRoot.reveal) ? dockRoot.unmagnifiedThickness : 0
 
                 function publish() {
-                    GlobalStates.setDockInset(editInsetPublisher.screenName, editInsetPublisher.side, editInsetPublisher.thickness, editInsetPublisher.reserved);
+                    GlobalStates.setDockInset(editInsetPublisher.screenName, editInsetPublisher.side, editInsetPublisher.thickness, editInsetPublisher.reserved, editInsetPublisher.shown);
                 }
 
                 onSideChanged: publish()
                 onThicknessChanged: publish()
                 onReservedChanged: publish()
+                onShownChanged: publish()
                 Component.onCompleted: publish()
                 Component.onDestruction: GlobalStates.setDockInset(editInsetPublisher.screenName, "", 0)
             }
@@ -353,6 +355,10 @@ Scope {
             readonly property bool isDynamicIsland: dockContent.isDynamicIsland
             readonly property bool isHug: dockContent.isHug
             readonly property bool isTransparent: dockContent.isTransparent
+            // The top layer's frame band fills this edge in the frame's colour: a full-width
+            // tray whenever it shows, any tray while pinned.
+            readonly property bool onFrameBand: !dock.isVertical && !!GlobalStates.dockBandScreens[dockRoot.screen?.name ?? ""]
+                && (dockRoot.isFullWidth || dock.pinned)
             readonly property bool isFullWidth: dockContent.isFullWidth
             readonly property bool isFullWidthConcave: dockContent.isFullWidthConcave
             readonly property bool isAttachedToEdge: dockContent.isAttachedToEdge
@@ -642,7 +648,7 @@ Scope {
                             return Qt.vector2d(0, -2);
                         }
                         visible: !dockContent.islandsStyle && !dockRoot.isDynamicIsland && !dockRoot.isTransparent
-                            && opacity > 0.01
+                            && !dockRoot.onFrameBand && opacity > 0.01
                             && !Config.options.appearance.transparency.popups
                             && !Config.options.appearance.transparency.enable
                     }
@@ -666,7 +672,7 @@ Scope {
                         // at all (dynamic island, full width).
                         readonly property real trayCornerRadius: (dockRoot.isDynamicIsland || dockRoot.isHug || dockRoot.isFullWidth) ? 0 : dockContent.dockCornerRadius
 
-                        color: (dockRoot.isDynamicIsland || dockRoot.isTransparent) ? "transparent" : Appearance.colors.colLayer0
+                        color: (dockRoot.isDynamicIsland || dockRoot.isTransparent || dockRoot.onFrameBand) ? "transparent" : Appearance.colors.colLayer0
                         radius: trayCornerRadius
                         topLeftRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "right") ? dockContent.dockCornerRadius : 0) : trayCornerRadius
                         topRightRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "left") ? dockContent.dockCornerRadius : 0) : trayCornerRadius

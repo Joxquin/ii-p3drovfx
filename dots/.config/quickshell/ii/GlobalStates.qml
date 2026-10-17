@@ -833,15 +833,16 @@ Singleton {
     // `reserved` is the exclusive zone the dock holds for windows right now: its
     // thickness while pinned and revealed, 0 otherwise. A surface that ignores the
     // compositor's zones reads it to stay clear of the dock the way zone-respecting
-    // ones do.
-    function setDockInset(screenName, side, thickness, reserved) {
+    // ones do. `shown` is the thickness a full-width tray covers right now, pinned
+    // or not: the top layer paints that tray as part of the wrapped frame.
+    function setDockInset(screenName, side, thickness, reserved, shown) {
         if (!screenName)
             return;
         const next = Object.assign({}, root.dockInsets);
         if (!side || !(thickness > 0))
             delete next[screenName];
         else
-            next[screenName] = { "side": side, "thickness": thickness, "reserved": reserved > 0 ? reserved : 0 };
+            next[screenName] = { "side": side, "thickness": thickness, "reserved": reserved > 0 ? reserved : 0, "shown": shown > 0 ? shown : 0 };
         root.dockInsets = next;
     }
 
@@ -875,6 +876,22 @@ Singleton {
         else
             delete next[screenName];
         root.dockPushCopyShown = next;
+    }
+
+    // Screens whose top layer paints the wrapped frame's band under a top/bottom dock
+    // (screen name -> true). The dock leaves its tray to the band there: Hyprland blurs
+    // every surface on its own, so a tray of its own never matched the frame beside it,
+    // and stacked on the band the translucent fill read as a second, darker shade.
+    property var dockBandScreens: ({})
+    function setDockBand(screenName, banded) {
+        if (!screenName || !!root.dockBandScreens[screenName] === banded)
+            return;
+        const next = Object.assign({}, root.dockBandScreens);
+        if (banded)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.dockBandScreens = next;
     }
 
     // What the Dynamic Island bar style really occupies of its edge, published by the
