@@ -11,7 +11,7 @@ import gi
 
 gi.require_version("Gio", "2.0")
 gi.require_version("GioUnix", "2.0")
-from gi.repository import Gio, GioUnix
+from gi.repository import Gio, GioUnix, GLib
 
 
 def icon_string(icon, fallback):
@@ -193,7 +193,7 @@ def describe_path(path: Path):
         }
     content_type = Gio.content_type_guess(str(path), None)[0]
     icon = appimage_icon(path) if content_type == "application/vnd.appimage" else None
-    return {
+    item = {
         "id": "file:" + str(path),
         "type": "file",
         "path": str(path),
@@ -202,6 +202,174 @@ def describe_path(path: Path):
         "icon": icon or icon_string(Gio.content_type_get_icon(content_type), "text-x-generic"),
         "modified": int(path.stat().st_mtime * 1000) if path.exists() else 0
     }
+    if not icon:
+        picture = file_picture(path)
+        if picture:
+            item["thumbnail"] = picture
+    return item
+
+
+def file_picture(path: Path):
+    """What a file manager draws for a file instead of its type icon: the
+    cached freedesktop thumbnail, or a small image itself. Never made here,
+    so a scan stays a few stats per file; `thumbnails` makes the missing."""
+    try:
+        real = path.resolve()
+        picture = cached_thumbnail(real)
+        if not picture and real.suffix.lower() in PREVIEW_IMAGE_SUFFIXES \
+                and real.stat().st_size <= PREVIEW_IMAGE_MAX_BYTES:
+            picture = str(real)
+        return picture
+    except OSError:
+        return None
+
+
+THUMBNAIL_SIZE = ("large", 256)
+THUMBNAIL_TIMEOUT = 20
+THUMBNAIL_LIMIT = 64
+# Spec'd per-program failure cache: a file no thumbnailer can read is not
+# retried on every scan, only once it changes.
+THUMBNAIL_FAIL_DIR = THUMBNAIL_ROOT / "fail" / "ii-desktop"
+
+
+def system_thumbnailers():
+    """The installed freedesktop thumbnailers (what Nautilus runs), as
+    (mime types, Exec) pairs; the user's own come first."""
+    dirs = [Path(GLib.get_user_data_dir())] + [Path(d) for d in GLib.get_system_data_dirs()]
+    found, seen = [], set()
+    for base in dirs:
+        folder = base / "thumbnailers"
+        try:
+            files = sorted(folder.glob("*.thumbnailer"))
+        except OSError:
+            continue
+        for f in files:
+            if f.name in seen:
+                continue
+            seen.add(f.name)
+            key = GLib.KeyFile()
+            try:
+                key.load_from_file(str(f), GLib.KeyFileFlags.NONE)
+                exec_line = key.get_string("Thumbnailer Entry", "Exec")
+                mimes = [m for m in key.get_string_list("Thumbnailer Entry", "MimeType") if m]
+            except GLib.Error:
+                continue
+            if exec_line and mimes:
+                found.append((mimes, exec_line))
+    return found
+
+
+def thumbnailer_for(mime: str, thumbnailers):
+    for mimes, exec_line in thumbnailers:
+        if mime in mimes:
+            return exec_line
+    for mimes, exec_line in thumbnailers:
+        if any(Gio.content_type_is_a(mime, m) for m in mimes):
+            return exec_line
+    return None
+
+
+def tag_thumbnail(png: Path, uri: str, mtime: float):
+    """Thumb::URI and Thumb::MTime, which file managers check before they
+    trust a thumbnail; without Pillow the file is still a valid picture."""
+    try:
+        from PIL import Image, PngImagePlugin
+    except ImportError:
+        return
+    try:
+        with Image.open(png) as image:
+            image.load()
+            info = PngImagePlugin.PngInfo()
+            info.add_text("Thumb::URI", uri)
+            info.add_text("Thumb::MTime", str(int(mtime)))
+            image.save(png, "PNG", pnginfo=info)
+    except Exception:
+        pass
+
+
+def make_thumbnail(real: Path, thumbnailers):
+    import hashlib
+    import shlex
+    import subprocess
+    gfile = Gio.File.new_for_path(str(real))
+    uri = gfile.get_uri()
+    digest = hashlib.md5(uri.encode()).hexdigest()
+    mtime = real.stat().st_mtime
+    failed = THUMBNAIL_FAIL_DIR / (digest + ".png")
+    try:
+        if failed.stat().st_mtime >= mtime:
+            return None
+    except OSError:
+        pass
+    try:
+        info = gfile.query_info("standard::content-type", Gio.FileQueryInfoFlags.NONE, None)
+        mime = Gio.content_type_get_mime_type(info.get_content_type()) or ""
+    except GLib.Error:
+        mime = ""
+    exec_line = thumbnailer_for(mime, thumbnailers) if mime else None
+    if not exec_line:
+        return None
+    name, size = THUMBNAIL_SIZE
+    folder = THUMBNAIL_ROOT / name
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / (digest + ".png")
+    partial = folder / f"{digest}.ii-{os.getpid()}.png"
+    fields = {"%u": uri, "%i": str(real), "%o": str(partial), "%s": str(size), "%%": "%"}
+    argv = []
+    for word in shlex.split(exec_line):
+        for field, value in fields.items():
+            word = word.replace(field, value)
+        argv.append(word)
+    ok = False
+    try:
+        result = subprocess.run(["nice", "-n", "15"] + argv, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                timeout=THUMBNAIL_TIMEOUT)
+        ok = result.returncode == 0 and partial.is_file() and partial.stat().st_size > 0
+    except (OSError, subprocess.SubprocessError):
+        ok = False
+    if not ok:
+        partial.unlink(missing_ok=True)
+        THUMBNAIL_FAIL_DIR.mkdir(parents=True, exist_ok=True)
+        failed.touch()
+        return None
+    tag_thumbnail(partial, uri, mtime)
+    partial.replace(target)
+    return str(target)
+
+
+def cmd_thumbnails(desktop_dir: str):
+    """Make the thumbnails the desktop's files lack, with the system's own
+    thumbnailers into the shared cache, so Nautilus and Dolphin reuse them.
+    Reports desktop path → thumbnail for the ones it made."""
+    p = Path(desktop_dir).expanduser().resolve()
+    made, errors = {}, []
+    thumbnailers = None
+    try:
+        entries = sorted(p.iterdir(), key=lambda x: x.name.lower())
+    except OSError as e:
+        return {"thumbnails": made, "errors": [str(e)]}
+    budget = THUMBNAIL_LIMIT
+    for entry in entries:
+        if budget <= 0:
+            break
+        if entry.name.startswith(".") or entry.suffix in (".desktop", ".part", ".crdownload"):
+            continue
+        try:
+            if not entry.is_file() or file_picture(entry):
+                continue
+            real = entry.resolve()
+            if real.suffix.lower() == ".appimage":
+                continue
+            if thumbnailers is None:
+                thumbnailers = system_thumbnailers()
+            budget -= 1
+            picture = make_thumbnail(real, thumbnailers)
+            if picture:
+                made[str(p / entry.name)] = picture
+        except OSError as e:
+            errors.append(f"{entry.name}: {e}")
+    return {"thumbnails": made, "errors": errors}
 
 
 def resolve_uri_or_path(value):
@@ -570,6 +738,9 @@ def main():
             print(json.dumps({"items": [], "errors": [f"Unknown mode: {mode}"]}))
             return
         print(json.dumps(cmd_copy_to_desktop(desktop_dir, urls, mode), ensure_ascii=False))
+    elif cmd == "thumbnails":
+        desktop_dir = sys.argv[2] if len(sys.argv) > 2 else "~/Desktop"
+        print(json.dumps(cmd_thumbnails(desktop_dir), ensure_ascii=False))
     elif cmd == "resolve":
         urls = sys.argv[2] if len(sys.argv) > 2 else "[]"
         print(json.dumps(cmd_resolve(urls), ensure_ascii=False))

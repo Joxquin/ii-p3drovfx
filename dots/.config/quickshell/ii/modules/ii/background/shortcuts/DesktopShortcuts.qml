@@ -51,6 +51,12 @@ Singleton {
     // Desktop paths that are links (what a drop makes), from the last scan:
     // their icons wear a shortcut arrow. Not persisted.
     property var linkedPaths: ({})
+    // File path → its thumbnail (a PDF's page, a video's frame, a photo),
+    // drawn in place of the type icon as a file manager does. Not persisted.
+    property var fileThumbnails: ({})
+    // "path|modified" of the files the thumbnailer already tried: a file it
+    // cannot read is asked again only once it changes.
+    property var thumbnailsTried: ({})
 
     // ── Desktop Folder Watcher & Scanner ───────────────────────────────────
     FolderListModel {
@@ -97,6 +103,48 @@ Singleton {
         }
         onExited: (exitCode, exitStatus) => {
             scanner.command = [];
+        }
+    }
+
+    // The thumbnails a scan found missing are made after it, off the scan's
+    // path: the icons show at once and their pictures follow.
+    function requestThumbnails(diskItems) {
+        const wanted = diskItems.filter(d => d.type === "file" && !d.thumbnail && d.path
+            && !root.thumbnailsTried[d.path + "|" + d.modified]);
+        if (wanted.length === 0)
+            return;
+        const tried = Object.assign({}, root.thumbnailsTried);
+        for (const d of wanted)
+            tried[d.path + "|" + d.modified] = true;
+        root.thumbnailsTried = tried;
+        if (thumbnailer.running) {
+            thumbnailer.again = true;
+            return;
+        }
+        thumbnailer.command = ["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+            "thumbnails", root.desktopFolder];
+        thumbnailer.running = true;
+    }
+
+    Process {
+        id: thumbnailer
+        property bool again: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const made = JSON.parse(text).thumbnails ?? {};
+                    if (Object.keys(made).length > 0)
+                        root.fileThumbnails = Object.assign({}, root.fileThumbnails, made);
+                } catch (error) {
+                    console.warn("[DesktopShortcuts] Thumbnail parse error:", error);
+                }
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (thumbnailer.again) {
+                thumbnailer.again = false;
+                thumbnailer.running = true;
+            }
         }
     }
 
@@ -665,6 +713,14 @@ Singleton {
         }
         if (JSON.stringify(linked) !== JSON.stringify(root.linkedPaths))
             root.linkedPaths = linked;
+        const thumbnails = {};
+        for (const d of diskItems) {
+            if (d.type === "file" && d.thumbnail && d.path)
+                thumbnails[d.path] = d.thumbnail;
+        }
+        if (JSON.stringify(thumbnails) !== JSON.stringify(root.fileThumbnails))
+            root.fileThumbnails = thumbnails;
+        root.requestThumbnails(diskItems);
         const currentScreens = Object.assign({}, root.screens);
         let changed = false;
 

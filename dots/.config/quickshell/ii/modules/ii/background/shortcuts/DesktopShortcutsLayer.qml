@@ -1947,7 +1947,36 @@ Item {
                         // shrink has no counter for them — they are the
                         // desktop). Mipmapping keeps their edges clean.
                         mipmap: true
-                        source: DesktopShortcuts.iconSource(tile.entry.icon, tile.entry.type === "file" ? "text-x-generic" : "folder")
+                        // A file with a thumbnail (a photo, a PDF's first
+                        // page, a video frame) shows it, as a file manager
+                        // does; the type icon holds until the picture loads.
+                        readonly property string thumbnail: tile.entry.type === "file" && !tile.entry.customIcon
+                            ? (DesktopShortcuts.fileThumbnails[tile.entry.path] ?? "") : ""
+                        readonly property bool thumbnailShown: thumbnailImage.status === Image.Ready
+                        source: glyphIcon.thumbnailShown ? ""
+                            : DesktopShortcuts.iconSource(tile.entry.icon, tile.entry.type === "file" ? "text-x-generic" : "folder")
+                        Image {
+                            id: thumbnailImage
+                            anchors.fill: parent
+                            visible: glyphIcon.thumbnailShown
+                            source: glyphIcon.thumbnail !== ""
+                                ? DesktopShortcuts.fileUrl(glyphIcon.thumbnail) + "?" + (tile.entry.modified ?? 0) : ""
+                            sourceSize: Qt.size(Math.ceil(width * 2), Math.ceil(height * 2))
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            mipmap: true
+                            smooth: true
+                            // A hairline frame on the picture itself, so a
+                            // white page reads on a light wallpaper.
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: thumbnailImage.paintedWidth
+                                height: thumbnailImage.paintedHeight
+                                color: "transparent"
+                                border.width: 1
+                                border.color: Qt.alpha(Appearance.m3colors.m3outlineVariant, 0.7)
+                            }
+                        }
 
                         // A soft shadow under the picture; hovering warms it
                         // into a glow of the primary while the tile lifts.
