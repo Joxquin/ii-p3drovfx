@@ -359,6 +359,9 @@ Scope {
             // tray whenever it shows, any tray while pinned.
             readonly property bool onFrameBand: !dock.isVertical && !!GlobalStates.dockBandScreens[dockRoot.screen?.name ?? ""]
                 && (dockRoot.isFullWidth || dock.pinned)
+            // Its compositor blur follows: nothing of its own to blur on the band.
+            onOnFrameBandChanged: Appearance.dockOnFrameBand = dockRoot.onFrameBand
+            Component.onCompleted: Appearance.dockOnFrameBand = dockRoot.onFrameBand
             readonly property bool isFullWidth: dockContent.isFullWidth
             readonly property bool isFullWidthConcave: dockContent.isFullWidthConcave
             readonly property bool isAttachedToEdge: dockContent.isAttachedToEdge

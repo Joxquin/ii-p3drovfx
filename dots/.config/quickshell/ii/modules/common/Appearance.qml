@@ -402,6 +402,14 @@ Singleton {
     // above the island's own alpha and dropped its blur.
     readonly property real islandIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
+    // The dock's tray is colLayer0 (background transparency): hold the threshold just
+    // under it, as for the bar, or every antialiased edge of its widgets blurs too and
+    // a ring of the bright backdrop outlines each one. On the wrapped frame's band the
+    // dock paints no tray at all - the band below already carries the blur - so only
+    // opaque pixels pass. Set by the dock (Dock.qml), which knows when it is on the band.
+    property bool dockOnFrameBand: false
+    readonly property real dockIgnoreAlpha: root.dockOnFrameBand ? 0.99 : Math.max(0, 1 - root.backgroundTransparency - 0.01)
+
     // Popups only need compositor blur when transparency is enabled; for opaque popups,
     // compositor blur behind a 100% opaque surface is completely invisible and causes
     // Hyprland to blur the drop shadow pixels into a thick frosted halo when ignore_alpha is low.
@@ -464,6 +472,7 @@ Singleton {
             script += "hl.layer_rule({ name = 'ii:appearance:popup', match = { namespace = 'quickshell:popup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
         }
         script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:bar' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:dock', match = { namespace = 'quickshell:dock' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.dockIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
         // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
@@ -503,6 +512,7 @@ Singleton {
 
     onIgnoreAlphaChanged: root.pushHyprlandLayerRules()
     onBarIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onDockIgnoreAlphaChanged: root.pushHyprlandLayerRules()
     onBackgroundWidgetsRulesChanged: root.pushHyprlandLayerRules()
     onPopupBlurEnabledChanged: root.pushHyprlandLayerRules()
     onPopupIgnoreAlphaChanged: root.pushHyprlandLayerRules()
