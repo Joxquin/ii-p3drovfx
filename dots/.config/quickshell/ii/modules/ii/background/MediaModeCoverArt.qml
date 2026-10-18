@@ -287,11 +287,14 @@ Item {
                     positionSlider.seekDirty = false;
                     positionSlider.pendingSeekPosition = target;
                     positionSlider.value = target / positionSlider.trackLength;
-                    if (typeof coverArt.player.seek === "function") {
-                        coverArt.player.seek(target);
-                    } else {
+                    // Absolute. MprisPlayer.seek() is relative (an offset from the current
+                    // position), so seeking to the slider value ran the track to its end.
+                    // An MPRIS player goes through seekFraction, which also seeds the clock
+                    // against the player's echo; the local player takes `position` directly.
+                    if (coverArt.player.dbusName !== undefined)
+                        MprisController.seekFraction(coverArt.player, target / positionSlider.trackLength);
+                    else
                         coverArt.player.position = target;
-                    }
                     seekSettleTimer.restart();
                 }
 

@@ -266,148 +266,156 @@ Item {
         }
     }
 
-    MediaModeImmersiveArtwork {
-        id: artwork
-        anchors.fill: parent
-        opacity: root.introArt
-        source: root.artSource
-        layout: root.artLayout
-        panelProgress: root.panelProgress
-        videoActive: root.context.videoActive
-        tint: root.tint
-        fieldColor: root.fieldColor
-    }
-
-    MaterialSymbol {
-        x: (root.stageWidth - width) / 2
-        anchors.verticalCenter: parent.verticalCenter
-        visible: !root.context.displayedArtFilePath && !root.context.videoActive && root.introStarted
-        opacity: root.introArt
-        text: "album"
-        iconSize: Appearance.font.pixelSize.hugeass * 4
-        color: ColorUtils.applyAlpha(root.foreground, 0.24)
-    }
-
-    // Visualizers over the artwork, under the glass and controls. Same mode as the
-    // classic frontend (0 off, 1 waves, 2 bars, 3 radial).
-    readonly property int visualizerMode: context.visualizerMode
-    readonly property bool visualizerPlaying: context.player?.isPlaying ?? false
-
-    WaveVisualizer {
-        anchors.fill: parent
-        visible: root.visualizerMode === 1
-        opacity: root.introArt
-        live: root.visualizerPlaying && visible
-        color: root.foreground
-        points: root.context.visualizerPoints
-    }
-
-    Row {
-        anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        height: 120
-        spacing: 12
-        visible: root.visualizerMode === 2
-        opacity: root.introArt * 0.85
-
-        Repeater {
-            model: root.context.visualizerPoints.length > 0 ? root.context.visualizerPoints.length : 16
-            delegate: ModernVisualizerBar {
-                required property int index
-                barWidth: 12
-                maxHeight: 110
-                minHeight: 12
-                color: ColorUtils.applyAlpha(root.foreground, 0.5)
-                fgColor: root.foreground
-                playing: root.visualizerPlaying
-                amplitude: Math.max(0.1, Math.min(1.0, (root.context.visualizerPoints[index] ?? 100) / 900.0))
-                bgAmplitude: amplitude * 0.8
-            }
-        }
-    }
-
-    // Light fringes over the always-dark artwork, whatever the shell theme is.
-    readonly property color visualizerColorA: ColorUtils.colorWithLightness(tint, 0.72)
-    readonly property color visualizerColorB: ColorUtils.colorWithLightness(Appearance.m3colors.m3tertiary, 0.72)
-
-    HaloVisualizer {
-        anchors.fill: parent
-        visible: root.visualizerMode === 4
-        opacity: root.introArt
-        live: root.visualizerPlaying
-        points: root.context.visualizerPoints
-        coreColor: root.foreground
-        colorA: root.visualizerColorA
-        colorB: root.visualizerColorB
-    }
-
-    // Circles live in the lyrics column and stay there with the panels hidden. The
-    // instrumental lyrics state draws its own ring.
+    // Everything the frosted surfaces blur: the artwork and what is drawn over it
+    // (visualizers, kinetic lyrics). With the artwork alone as their backdrop,
+    // the words passing under a surface were hidden by it instead of blurred.
     Item {
-        id: circleVisualizer
-        readonly property real columnWidth: root.width - root.columnX - root.gutter
-        readonly property real centerX: root.columnX + columnWidth / 2
-        width: Math.max(0, Math.min(columnWidth, panels.height) * 0.82)
-        height: width
-        x: centerX - width / 2
-        y: panels.y + (panels.height - height) / 2
-        visible: (root.visualizerMode === 3 || root.visualizerMode === 5)
-                 && !(root.context.rightPanelVisible && root.activeTab === "lyrics"
-                      && (lyricsLoader.item?.instrumental ?? false))
-        opacity: root.introPanels
+        id: backdropStage
+        anchors.fill: parent
 
-        RadialWaveVisualizer {
+        MediaModeImmersiveArtwork {
+            id: artwork
             anchors.fill: parent
-            visible: root.visualizerMode === 3
-            live: root.visualizerPlaying && circleVisualizer.visible && visible
+            opacity: root.introArt
+            source: root.artSource
+            layout: root.artLayout
+            panelProgress: root.panelProgress
+            videoActive: root.context.videoActive
+            tint: root.tint
+            fieldColor: root.fieldColor
+        }
+
+        MaterialSymbol {
+            x: (root.stageWidth - width) / 2
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !root.context.displayedArtFilePath && !root.context.videoActive && root.introStarted
+            opacity: root.introArt
+            text: "album"
+            iconSize: Appearance.font.pixelSize.hugeass * 4
+            color: ColorUtils.applyAlpha(root.foreground, 0.24)
+        }
+
+        // Visualizers over the artwork, under the glass and controls. Same mode as the
+        // classic frontend (0 off, 1 waves, 2 bars, 3 radial).
+        readonly property int visualizerMode: context.visualizerMode
+        readonly property bool visualizerPlaying: context.player?.isPlaying ?? false
+
+        WaveVisualizer {
+            anchors.fill: parent
+            visible: root.visualizerMode === 1
+            opacity: root.introArt
+            live: root.visualizerPlaying && visible
             color: root.foreground
             points: root.context.visualizerPoints
         }
 
-        CircleSpectrumVisualizer {
+        Row {
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            height: 120
+            spacing: 12
+            visible: root.visualizerMode === 2
+            opacity: root.introArt * 0.85
+
+            Repeater {
+                model: root.context.visualizerPoints.length > 0 ? root.context.visualizerPoints.length : 16
+                delegate: ModernVisualizerBar {
+                    required property int index
+                    barWidth: 12
+                    maxHeight: 110
+                    minHeight: 12
+                    color: ColorUtils.applyAlpha(root.foreground, 0.5)
+                    fgColor: root.foreground
+                    playing: root.visualizerPlaying
+                    amplitude: Math.max(0.1, Math.min(1.0, (root.context.visualizerPoints[index] ?? 100) / 900.0))
+                    bgAmplitude: amplitude * 0.8
+                }
+            }
+        }
+
+        // Light fringes over the always-dark artwork, whatever the shell theme is.
+        readonly property color visualizerColorA: ColorUtils.colorWithLightness(tint, 0.72)
+        readonly property color visualizerColorB: ColorUtils.colorWithLightness(Appearance.m3colors.m3tertiary, 0.72)
+
+        HaloVisualizer {
             anchors.fill: parent
-            visible: root.visualizerMode === 5
+            visible: root.visualizerMode === 4
+            opacity: root.introArt
             live: root.visualizerPlaying
             points: root.context.visualizerPoints
             coreColor: root.foreground
             colorA: root.visualizerColorA
             colorB: root.visualizerColorB
         }
-    }
 
-    // Kinetic lyrics: centred on the whole screen, under the glass and the controls.
-    Loader {
-        id: kineticLoader
-        anchors.fill: parent
-        opacity: root.kineticShown ? root.introPanels : 0
-        visible: opacity > 0
-        active: root.kineticShown || opacity > 0
-        Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        // Circles live in the lyrics column and stay there with the panels hidden. The
+        // instrumental lyrics state draws its own ring.
+        Item {
+            id: circleVisualizer
+            readonly property real columnWidth: root.width - root.columnX - root.gutter
+            readonly property real centerX: root.columnX + columnWidth / 2
+            width: Math.max(0, Math.min(columnWidth, panels.height) * 0.82)
+            height: width
+            x: centerX - width / 2
+            y: panels.y + (panels.height - height) / 2
+            visible: (root.visualizerMode === 3 || root.visualizerMode === 5)
+                     && !(root.context.rightPanelVisible && root.activeTab === "lyrics"
+                          && (lyricsLoader.item?.instrumental ?? false))
+            opacity: root.introPanels
+
+            RadialWaveVisualizer {
+                anchors.fill: parent
+                visible: root.visualizerMode === 3
+                live: root.visualizerPlaying && circleVisualizer.visible && visible
+                color: root.foreground
+                points: root.context.visualizerPoints
+            }
+
+            CircleSpectrumVisualizer {
+                anchors.fill: parent
+                visible: root.visualizerMode === 5
+                live: root.visualizerPlaying
+                points: root.context.visualizerPoints
+                coreColor: root.foreground
+                colorA: root.visualizerColorA
+                colorB: root.visualizerColorB
             }
         }
-        sourceComponent: Item {
-            // Dims the artwork so the type reads on any cover.
-            Rectangle {
-                anchors.fill: parent
-                color: Appearance.m3colors.m3scrim
-                opacity: 0.38
+
+        // Kinetic lyrics: centred on the whole screen, under the glass and the controls.
+        Loader {
+            id: kineticLoader
+            anchors.fill: parent
+            opacity: root.kineticShown ? root.introPanels : 0
+            visible: opacity > 0
+            active: root.kineticShown || opacity > 0
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                }
             }
-            MediaModeKineticLyrics {
-                anchors.fill: parent
-                player: root.context.player
-                textColor: root.foreground
-                accentColor: root.visualizerColorA
-                bottomInset: nowPlaying.height + root.gutter
-                fisheye: (Config.options.background.mediaMode.kineticFisheye ?? false) ? 0.7 : 0
-                Behavior on fisheye {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMove.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+            sourceComponent: Item {
+                // Dims the artwork so the type reads on any cover.
+                Rectangle {
+                    anchors.fill: parent
+                    color: Appearance.m3colors.m3scrim
+                    opacity: 0.38
+                }
+                MediaModeKineticLyrics {
+                    anchors.fill: parent
+                    player: root.context.player
+                    textColor: root.foreground
+                    accentColor: root.visualizerColorA
+                    bottomInset: nowPlaying.height + root.gutter
+                    fisheye: (Config.options.background.mediaMode.kineticFisheye ?? false) ? 0.7 : 0
+                    Behavior on fisheye {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMove.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
                     }
                 }
             }
@@ -422,7 +430,7 @@ Item {
         height: sourceChip.height
         radius: sourceChip.radius
         opacity: root.introChrome
-        backdrop: artwork
+        backdrop: backdropStage
         color: root.glass
     }
     MediaModeImmersiveGlass {
@@ -432,7 +440,7 @@ Item {
         height: toolbar.height
         radius: toolbar.radius
         opacity: root.introChrome
-        backdrop: artwork
+        backdrop: backdropStage
         color: root.glass
     }
     MediaModeImmersiveGlass {
@@ -442,7 +450,7 @@ Item {
         height: transportCard.height
         radius: transportCard.radius
         opacity: root.introCard
-        backdrop: artwork
+        backdrop: backdropStage
         color: root.glass
     }
     MediaModeImmersiveGlass {
@@ -453,7 +461,7 @@ Item {
         radius: tabs.radius
         visible: panels.visible && tabs.visible
         opacity: panels.opacity
-        backdrop: artwork
+        backdrop: backdropStage
         color: root.glass
     }
 
@@ -683,11 +691,14 @@ Item {
                             positionSlider.seekDirty = false;
                             positionSlider.pendingSeekPosition = target;
                             positionSlider.value = target / positionSlider.trackLength;
-                            if (typeof root.context.player.seek === "function") {
-                                root.context.player.seek(target);
-                            } else {
+                            // Absolute. MprisPlayer.seek() is relative (an offset from the current
+                            // position), so seeking to the slider value ran the track to its end.
+                            // An MPRIS player goes through seekFraction, which also seeds the clock
+                            // against the player's echo; the local player takes `position` directly.
+                            if (root.context.player.dbusName !== undefined)
+                                MprisController.seekFraction(root.context.player, target / positionSlider.trackLength);
+                            else
                                 root.context.player.position = target;
-                            }
                             seekSettleTimer.restart();
                         }
 
@@ -1072,7 +1083,7 @@ Item {
         anchors.fill: parent
         context: root.context
         open: root.optionsOpen
-        backdrop: artwork
+        backdrop: backdropStage
         foreground: root.foreground
         tint: root.tint
         sheetTopMargin: toolbar.y + toolbar.height + Appearance.sizes.elevationMargin
