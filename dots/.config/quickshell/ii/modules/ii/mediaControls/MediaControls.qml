@@ -30,6 +30,26 @@ Scope {
     property bool popupHovered: false
     property bool stickyActive: false
     property bool openedViaHover: false
+    property bool _openingFromHover: false
+    readonly property bool hoverOpens: BarInteraction.enablePopups && !BarInteraction.clickToShow
+
+    // Same open debounce as StyledPopup: a pointer crossing the widget does not
+    // flash the popup.
+    Timer {
+        id: hoverOpenDebounce
+        interval: 60
+        repeat: false
+        onTriggered: {
+            if (!root.targetHovered || !root.hoverOpens || GlobalStates.mediaControlsOpen)
+                return;
+            // Set before opening: the Loader may build the window before the
+            // Connections below run, and the window picks its grab from this.
+            root._openingFromHover = true;
+            root.openedViaHover = true;
+            GlobalStates.mediaControlsOpen = true;
+            root._openingFromHover = false;
+        }
+    }
 
     Timer {
         id: hoverGraceTimer
@@ -54,14 +74,20 @@ Scope {
         }
     }
 
-    onTargetHoveredChanged: evaluateHoverState()
+    onTargetHoveredChanged: {
+        if (root.targetHovered && root.hoverOpens)
+            hoverOpenDebounce.restart();
+        else
+            hoverOpenDebounce.stop();
+        evaluateHoverState();
+    }
     onPopupHoveredChanged: evaluateHoverState()
 
     Connections {
         target: GlobalStates
         function onMediaControlsOpenChanged() {
             if (GlobalStates.mediaControlsOpen) {
-                root.openedViaHover = GlobalStates.mediaWidgetHovered;
+                root.openedViaHover = root._openingFromHover;
                 if (root.openedViaHover) {
                     root.stickyActive = true;
                     root.evaluateHoverState();
@@ -202,11 +228,31 @@ Scope {
                 item: scaledContent
             }
 
-            Component.onCompleted: {
-                GlobalFocusGrab.addDismissable(panelWindow);
+            // Hover-opened, it behaves like a StyledPopup in hover mode: it only joins
+            // the shared grab as persistent, so input still reaches it over an open
+            // sidebar. Starting a dismissable grab here took the pointer away from the
+            // bar (TopLayerPanel is not a grab member), the widget saw a leave, the
+            // grace closed the popup, the grab ended, the pointer re-entered the bar
+            // and the popup reopened — over and over while hovering.
+            // Opened any other way (click, shortcut, IPC, dock) it keeps closing on an
+            // outside press through the dismissable grab.
+            readonly property bool dismissable: !root.openedViaHover
+
+            function updateGrabMembership() {
+                if (panelWindow.dismissable) {
+                    GlobalFocusGrab.removePersistent(panelWindow);
+                    GlobalFocusGrab.addDismissable(panelWindow);
+                } else {
+                    GlobalFocusGrab.removeDismissable(panelWindow);
+                    GlobalFocusGrab.addPersistent(panelWindow);
+                }
             }
+
+            onDismissableChanged: updateGrabMembership()
+            Component.onCompleted: updateGrabMembership()
             Component.onDestruction: {
                 GlobalFocusGrab.removeDismissable(panelWindow);
+                GlobalFocusGrab.removePersistent(panelWindow);
             }
             Connections {
                 target: GlobalFocusGrab

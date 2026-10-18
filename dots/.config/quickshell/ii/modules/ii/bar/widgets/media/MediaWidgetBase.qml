@@ -126,11 +126,11 @@ Item {
         onEntered: {
             if (root.previewMode)
                 return;
+            // Anchor first: MediaControls opens from this hover after its debounce,
+            // the same way StyledPopup does for every other bar widget.
+            if (hoverEnabled)
+                root.updatePopupRect();
             GlobalStates.setMediaWidgetHovered(true);
-            if (!hoverEnabled)
-                return;
-            root.updatePopupRect();
-            GlobalStates.mediaControlsOpen = true;
         }
         onExited: if (!root.previewMode) GlobalStates.setMediaWidgetHovered(false)
 

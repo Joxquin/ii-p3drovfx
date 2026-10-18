@@ -1613,23 +1613,12 @@ Singleton {
 
     // Media Popup placement (transient, non-persistent)
     property rect mediaPopupRect: Qt.rect(0, 0, 0, 0)
+    // Raw hover of the bar media widget. MediaControls owns the open debounce
+    // and the close grace, exactly as StyledPopup does for the other popups.
     property bool mediaWidgetHovered: false
-    property Timer mediaWidgetHoverTimer: Timer {
-        id: mediaWidgetHoverTimer
-        interval: 400
-        repeat: false
-        onTriggered: {
-            root.mediaWidgetHovered = false;
-        }
-    }
 
     function setMediaWidgetHovered(hovered) {
-        if (hovered) {
-            mediaWidgetHoverTimer.stop();
-            root.mediaWidgetHovered = true;
-        } else {
-            mediaWidgetHoverTimer.restart();
-        }
+        root.mediaWidgetHovered = hovered;
     }
 
     // Color Picker Popup
