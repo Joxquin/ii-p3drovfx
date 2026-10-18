@@ -4647,6 +4647,8 @@ Singleton {
                 }
                 property JsonObject mediaMode: JsonObject {
                     property bool immersive: false
+                    property bool kineticLyrics: false // Immersive only, BetterLyrics word-timed lines
+                    property bool kineticFisheye: false // Fisheye lens over the kinetic lyrics
                     property bool togglePerMonitor: true
                     property string backgroundShape: "Square"
                     property bool enableBackgroundAnimation: true // It **may** cause nausea for someone

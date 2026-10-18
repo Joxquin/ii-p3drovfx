@@ -250,6 +250,20 @@ Item {
                         font.pixelSize: Appearance.font.pixelSize.smaller
                     }
                 }
+                SwitchRow {
+                    visible: root.context.showLyricsPanel
+                    symbol: "animated_images"
+                    label: Translation.tr("Kinetic lyrics (BetterLyrics word sync)")
+                    checked: Config.options.background.mediaMode.kineticLyrics ?? false
+                    onToggled: checked => Config.options.background.mediaMode.kineticLyrics = checked
+                }
+                SwitchRow {
+                    visible: root.context.showLyricsPanel && (Config.options.background.mediaMode.kineticLyrics ?? false)
+                    symbol: "camera"
+                    label: Translation.tr("Fisheye lens")
+                    checked: Config.options.background.mediaMode.kineticFisheye ?? false
+                    onToggled: checked => Config.options.background.mediaMode.kineticFisheye = checked
+                }
                 RowLayout {
                     Layout.fillWidth: true
                     visible: root.context.showLyricsPanel

@@ -67,6 +67,14 @@ Item {
     // Room for the title and the transport card on the artwork side.
     readonly property real stageWidth: width + (columnX - width) * panelProgress
     readonly property bool bothTabs: context.lyricsPanelVisible && context.queueEligible
+    // Kinetic typography needs word timings, which only BetterLyrics provides; any
+    // other source keeps the regular lyrics column.
+    readonly property bool kineticAvailable: LyricsService.usingBetterlyrics && !context.forcePlainLyrics
+                                             && Config.options.lyricsService.lyricsProvider !== "lrclib"
+                                             && LyricsService.syncedLines.some(line => (line.words?.length ?? 0) > 0)
+    readonly property bool kineticShown: (Config.options.background.mediaMode.kineticLyrics ?? false)
+                                         && kineticAvailable && context.rightPanelVisible
+                                         && context.lyricsPanelVisible && activeTab === "lyrics"
     readonly property string activeTab: !context.lyricsPanelVisible ? "queue" : (!context.queueEligible ? "lyrics" :
                                                                                                         panelTab)
 
@@ -366,6 +374,45 @@ Item {
             coreColor: root.foreground
             colorA: root.visualizerColorA
             colorB: root.visualizerColorB
+        }
+    }
+
+    // Kinetic lyrics: centred on the whole screen, under the glass and the controls.
+    Loader {
+        id: kineticLoader
+        anchors.fill: parent
+        opacity: root.kineticShown ? root.introPanels : 0
+        visible: opacity > 0
+        active: root.kineticShown || opacity > 0
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMove.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+            }
+        }
+        sourceComponent: Item {
+            // Dims the artwork so the type reads on any cover.
+            Rectangle {
+                anchors.fill: parent
+                color: Appearance.m3colors.m3scrim
+                opacity: 0.38
+            }
+            MediaModeKineticLyrics {
+                anchors.fill: parent
+                player: root.context.player
+                textColor: root.foreground
+                accentColor: root.visualizerColorA
+                bottomInset: nowPlaying.height + root.gutter
+                fisheye: (Config.options.background.mediaMode.kineticFisheye ?? false) ? 0.7 : 0
+                Behavior on fisheye {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+            }
         }
     }
 
@@ -957,7 +1004,7 @@ Item {
                 id: lyricsLoader
                 anchors.fill: parent
                 active: root.context.lyricsPanelVisible
-                opacity: root.activeTab === "lyrics" ? 1 : 0
+                opacity: root.activeTab === "lyrics" && !root.kineticShown ? 1 : 0
                 visible: opacity > 0
                 transform: Translate {
                     x: (1 - lyricsLoader.opacity) * -Appearance.sizes.elevationMargin * 3
