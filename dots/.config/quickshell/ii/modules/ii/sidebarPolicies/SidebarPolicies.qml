@@ -53,6 +53,10 @@ Scope { // Scope
     // A pinned dock on the sidebar's own edge lies beside the bar, so the open content
     // stops beside the dock too instead of covering it.
     readonly property real sideDockInset: root.ignoresZones ? root.dockZoneAt(root.isOnLeft ? "left" : "right") : 0
+    // Respecting the zones, the surface began beside a pinned dock on this edge and slid
+    // out from under it. It takes the dock's strip back (a negative margin) so the slide
+    // starts at the screen edge like it does with no dock, and the content stops beside it.
+    readonly property real dockReclaim: (!root.pin && !root.ignoresZones) ? root.dockZoneAt(root.isOnLeft ? "left" : "right") : 0
     readonly property bool barReservesSpace: !(Config.options?.bar?.autoHide?.enable && !Config.options?.bar?.autoHide?.pushWindows)
 
     function togglePoliciesExtended() {
@@ -249,7 +253,7 @@ Scope { // Scope
             }
 
             // The surface starts at the screen edge; the open content stops beside the bar.
-            readonly property real effectiveBarOffset: root.pin ? 0 : (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset) + root.sideDockInset
+            readonly property real effectiveBarOffset: root.pin ? 0 : (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset) + root.sideDockInset + root.dockReclaim
 
             // Setting exclusiveZone resets exclusionMode to Normal. Use the Wayland
             // sentinel directly for floating sidebars; preserve the pinned reservation.
@@ -330,8 +334,8 @@ Scope { // Scope
             margins {
                 top: root.pin ? root.topBarOffset : 0
                 bottom: root.pin ? root.bottomBarOffset : 0
-                left: root.pin ? (root.barReservesSpace ? 0 : root.leftBarOffset) : 0
-                right: root.pin ? (root.barReservesSpace ? 0 : root.rightBarOffset) : 0
+                left: root.pin ? (root.barReservesSpace ? 0 : root.leftBarOffset) : (root.isOnLeft ? -root.dockReclaim : 0)
+                right: root.pin ? (root.barReservesSpace ? 0 : root.rightBarOffset) : (root.isOnLeft ? 0 : -root.dockReclaim)
             }
 
             // The embedded phone mirror's cut-out. A real scrcpy window sits
