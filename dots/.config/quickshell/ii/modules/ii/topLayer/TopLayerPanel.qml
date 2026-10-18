@@ -127,7 +127,11 @@ PanelWindow {
     Behavior on dockBottomBand {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(topPanel)
     }
-    readonly property bool dockOnFrameBand: frameLoader.active && dockShapesShell
+    // While search is open this layer climbs to Overlay and Hyprland stacks it over the
+    // dock: the band would cover the dock's content. The dock paints its own tray then,
+    // switched at once both ways so there is no frame with neither.
+    readonly property bool dockUnderThisLayer: !topPanel.searchOpenOnMonitor
+    readonly property bool dockOnFrameBand: frameLoader.active && dockShapesShell && dockUnderThisLayer
     onDockOnFrameBandChanged: GlobalStates.setDockBand(topPanel.screen.name, topPanel.dockOnFrameBand)
     // The dock sits inside the frame's ring when nothing else holds that edge.
     readonly property real ringThickness: usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0
@@ -341,10 +345,10 @@ PanelWindow {
 
             sidebarTopOffset: topPanel.sidebarTopOffset
             sidebarBottomOffset: topPanel.sidebarBottomOffset
-            dockTopInset: topPanel.dockTopBand
-            dockBottomInset: topPanel.dockBottomBand
-            dockLeftInset: topPanel.dockLeftBand
-            dockRightInset: topPanel.dockRightBand
+            dockTopInset: topPanel.dockUnderThisLayer ? topPanel.dockTopBand : 0
+            dockBottomInset: topPanel.dockUnderThisLayer ? topPanel.dockBottomBand : 0
+            dockLeftInset: topPanel.dockUnderThisLayer ? topPanel.dockLeftBand : 0
+            dockRightInset: topPanel.dockUnderThisLayer ? topPanel.dockRightBand : 0
         }
     }
 
