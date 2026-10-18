@@ -226,6 +226,12 @@ Item {
     // SearchBar's own inset. Account for it in the outer width so their
     // declared panel width remains the usable width, not the clipped width.
     readonly property real hostedPanelSideMargin: Appearance.sizes.elevationMargin
+    /**
+     * The side inset connect mode puts around the whole column (24 px each side; in
+     * notch mode the island already spaces it). It is part of `contentTargetWidth`, so
+     * anything sized from that target must take it back out.
+     */
+    readonly property real connectSideInset: (GlobalStates.searchConnectActive && !root.inNotchMode) ? 24 : 0
     readonly property bool activePanelUsesHost: root.activePanel?.hosted === true
     // Panels normally share SearchBar as their local filter. A panel can
     // explicitly own the primary TextInput (Typing Test) without requiring a
@@ -674,8 +680,7 @@ Item {
 
         // In notch mode, the DI container already provides horizontal spacing.
         // Only add the 48px offset in non-notch connect mode.
-        if (GlobalStates.searchConnectActive && !root.inNotchMode)
-            baseW += 48;
+        baseW += root.connectSideInset * 2;
         return Math.min(baseW, root.maximumSurfaceWidth);
     }
 
@@ -1648,8 +1653,8 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             // In notch mode the DI container provides spacing — adding margins here would double-pad
-            anchors.leftMargin: (GlobalStates.searchConnectActive && !root.inNotchMode) ? 24 : 0
-            anchors.rightMargin: (GlobalStates.searchConnectActive && !root.inNotchMode) ? 24 : 0
+            anchors.leftMargin: root.connectSideInset
+            anchors.rightMargin: root.connectSideInset
             anchors.top: parent.top
             columns: 1
             rowSpacing: 0
@@ -3695,7 +3700,7 @@ Item {
                             searchQuery: root.searchingText
                             inNotchMode: root.inNotchMode
                             settledWidth: (root.hostDrivesSize && root.activePanelUsesHost)
-                                ? Math.max(0, root.contentTargetWidth - root.hostedPanelSideMargin * 2) : 0
+                                ? Math.max(0, root.contentTargetWidth - root.connectSideInset * 2 - root.hostedPanelSideMargin * 2) : 0
                         }
                     }
                 }

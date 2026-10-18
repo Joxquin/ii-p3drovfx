@@ -308,7 +308,7 @@ Item {
         heldProgress: GlobalStates.gestureDragProgress
         animationsEnabled: root.animStyle !== "none"
         openDuration: Math.round(600 * Appearance.animMultiplier)
-        closeDuration: Math.round(360 * Appearance.animMultiplier)
+        closeDuration: Math.round(260 * Appearance.animMultiplier)
         targetWidth: root.dropW
         targetHeight: root.dropH
         shoulderRadius: Appearance.rounding.windowRounding
@@ -440,7 +440,7 @@ Item {
         heldProgress: GlobalStates.gestureDragProgress
         animationsEnabled: root.animStyle !== "none"
         openDuration: Math.round(700 * Appearance.animMultiplier)
-        closeDuration: Math.round(340 * Appearance.animMultiplier)
+        closeDuration: Math.round(240 * Appearance.animMultiplier)
 
         barEdgeY: root.barEdgeY
         away: root.isBottomBar ? -1 : 1

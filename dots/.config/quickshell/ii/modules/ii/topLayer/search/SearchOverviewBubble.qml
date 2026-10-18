@@ -6,12 +6,12 @@ import qs.modules.common
 /**
  * The connect-mode overview, pulled out of the search drop as a second drop.
  *
- * The island's AuxiliaryBubbleSurface turned downwards. One linear clock drives
- * everything through damped responses: a small pill hidden in the search's lower edge
+ * The island's AuxiliaryBubbleSurface turned downwards. One linear clock drives the
+ * opening through damped responses: a small pill hidden in the search's lower edge
  * travels out with a liquid neck still joining it to the search, the neck pinches off
- * as it reaches its place, and only then does it spread into the overview's card. Every
- * value is a pure function of the clock, so calling it back half way retraces the same
- * path, and the resting pose is exact.
+ * as it reaches its place, and only then does it spread into the overview's card. The
+ * resting pose is exact. A recall starts from the pose on screen and takes its own,
+ * quicker path back (see `closeAmount`).
  *
  * Nothing here fades. The topLayer is blurred by the compositor with an `ignore_alpha`
  * threshold, and a fade sweeps every pixel's alpha across it: the blur behind the grid
@@ -61,22 +61,29 @@ Item {
 
     // ── The clock ────────────────────────────────────────────────────────────
     property real clock: 0
+    property bool opening: true
     readonly property bool active: root.open || root.clock > 0.001
     readonly property bool atRest: !root.held && !clockAnim.running && (root.clock <= 0 || root.clock >= 1)
 
-    /**
-     * The earliest clock at which the drop looks settled: the neck has let go, the
-     * travel is within a pixel and the card has spread. A recall starts from here, not
-     * from 1, so there is no dead time before it moves.
-     */
-    readonly property real settledClock: 0.86
+    // Where a change of direction started, and the pose on screen at that moment.
+    property real _fromClock: 0
+    property real _fromWidth: 0
+    property real _fromHeight: 0
+    property real _fromRadius: 0
+    property real _fromTop: 0
+    property real _fromCenterX: 0
+    property real _fromReveal: 0
+    property real _fromRelease: 1
 
     onOpenChanged: root._restart()
     onHeldChanged: {
-        if (root.held)
+        if (root.held) {
             clockAnim.stop();
-        else
+            root.opening = true;
+            root._fromClock = 0;
+        } else {
             root._restart();
+        }
     }
 
     function _restart() {
@@ -84,19 +91,36 @@ Item {
             return;
         clockAnim.stop();
         if (!root.animationsEnabled) {
+            root.opening = root.open;
+            root._fromClock = 0;
             root.clock = root.open ? 1 : 0;
             return;
         }
-        if (!root.open)
-            root.clock = Math.min(root.clock, root.settledClock);
-        const target = root.open ? 1 : 0;
-        const span = Math.abs(target - root.clock);
-        if (span <= 0.0001) {
-            root.clock = target;
+        if (!root.open && root.clock <= 0.001)
             return;
-        }
-        clockAnim.to = target;
-        clockAnim.duration = Math.max(1, Math.round((root.open ? root.openDuration : root.closeDuration * (1 / root.settledClock)) * span));
+        // The pose on screen, before the direction flips.
+        const pose = [root.liveWidth, root.liveHeight, root.liveRadius, root.liveTop, root.liveCenterX,
+            root.contentReveal, root.release];
+        // Reopened while tucking away: pick up the opening where the card is as spread
+        // as it still is, and blend the rest of the pose across.
+        const share = (pose[0] - root.seedWidth) / Math.max(1, root.overviewWidth - root.seedWidth);
+        const fromClock = !root.open ? root.clock : (root.clock <= 0.001 ? 0 : root.clockForSpread(share));
+        // The mode and the snapshot change before the clock does, so no binding ever
+        // reads the new clock against the old pose.
+        root.opening = root.open;
+        root._fromClock = fromClock;
+        root._fromWidth = pose[0];
+        root._fromHeight = pose[1];
+        root._fromRadius = pose[2];
+        root._fromTop = pose[3];
+        root._fromCenterX = pose[4];
+        root._fromReveal = pose[5];
+        root._fromRelease = pose[6];
+        root.clock = fromClock;
+        clockAnim.to = root.open ? 1 : 0;
+        clockAnim.duration = Math.max(1, Math.round(root.open
+            ? root.openDuration * (1 - root.clock)
+            : root.closeDuration * Math.min(1, root.clock / 0.6)));
         clockAnim.start();
     }
 
@@ -120,17 +144,22 @@ Item {
         const t = Math.max(0, Math.min(1, value));
         return t * t * (3 - 2 * t);
     }
-    function stage(start, end) {
-        return root.smoothstep((root.clock - start) / (end - start));
+    /** Fast out of the start, gentle at the end: what a recall wants. */
+    function easeOut(value) {
+        const t = Math.max(0, Math.min(1, value));
+        return 1 - (1 - t) * (1 - t);
+    }
+    function stageAt(clock, start, end) {
+        return root.smoothstep((clock - start) / (end - start));
     }
     function mix(from, to, amount) {
         return from + (to - from) * amount;
     }
     // A damped response normalised at the end point (see AuxiliaryBubbleSurface).
     // overshoot = exp(-pi * decay / frequency).
-    function response(delay, decay, frequency) {
+    function responseAt(clock, delay, decay, frequency) {
         const phase = decay / frequency;
-        const time = Math.max(0, Math.min(1, root.clock) - delay);
+        const time = Math.max(0, Math.min(1, clock) - delay);
         const end = 1 - delay;
         const value = 1 - Math.exp(-decay * time) * (Math.cos(frequency * time) + phase * Math.sin(frequency * time));
         const terminal = 1 - Math.exp(-decay * end) * (Math.cos(frequency * end) + phase * Math.sin(frequency * end));
@@ -141,29 +170,78 @@ Item {
     readonly property real seedHeight: Math.min(root.overviewHeight, 40)
     readonly property real seedWidth: Math.min(root.overviewWidth, Math.max(140, root.searchBodyWidth * 0.5))
 
-    /** Grows out of nothing inside the search before it shows, so it never pops. */
-    readonly property real appear: root.stage(0, 0.14)
-    /** Out of the search to its place, about 2% past it. */
-    readonly property real travel: root.response(0.02, 6.6, 5.6)
-    /** The neck lets go as the drop arrives; the card spreads once it is free. */
-    readonly property real release: root.stage(0.3, 0.5)
-    readonly property real spread: root.response(0.3, 6.8, 5.8)
-
     /** Distance from the bar's edge to the drop's near edge. */
     readonly property real restTop: root.searchRestHeight + root.gap
     readonly property real startTop: root.searchHeight - root.seedHeight * 0.85
-    readonly property real liveTop: root.mix(root.startTop, root.restTop, root.travel)
-    readonly property real liveCenterX: root.mix(root.searchCenterX, root.overviewCenterX, root.travel)
-    readonly property real liveWidth: Math.max(0, root.mix(root.seedWidth, root.overviewWidth, root.spread) * root.appear)
-    readonly property real liveHeight: Math.max(0, root.mix(root.seedHeight, root.overviewHeight, root.spread) * root.appear)
-    readonly property real liveRadius: Math.min(root.mix(root.seedHeight / 2, root.overviewRadius, root.spread),
-        root.liveHeight / 2, root.liveWidth / 2)
+
+    // Opening, a pure function of the clock: grows out of nothing inside the search,
+    // travels to its place about 2% past it, the neck lets go as it arrives, and the
+    // card spreads once it is free.
+    function spreadAt(clock) {
+        return root.responseAt(clock, 0.3, 6.8, 5.8);
+    }
+    function clockForSpread(share) {
+        if (share <= 0)
+            return 0.3;
+        let low = 0.3;
+        let high = 1;
+        for (let step = 0; step < 14; step++) {
+            const middle = (low + high) / 2;
+            if (root.spreadAt(middle) < share)
+                low = middle;
+            else
+                high = middle;
+        }
+        return (low + high) / 2;
+    }
+    readonly property real openAppear: root.stageAt(root.clock, 0, 0.14)
+    readonly property real openTravel: root.responseAt(root.clock, 0.02, 6.6, 5.6)
+    readonly property real openSpread: root.spreadAt(root.clock)
+
+    /** 0 → 1 over a reopening's first stretch, blending from the pose that was there. */
+    readonly property real reopenBlend: root._fromClock > 0
+        ? root.smoothstep((root.clock - root._fromClock) / 0.2) : 1
+
+    /**
+     * 0 → 1 over a recall. It does not retrace the opening: the spread settles well
+     * before the clock ends, so running it backwards held the card still for a tenth
+     * of a second before anything moved. The recall starts at once - the contents
+     * close and the card draws in to the pill - then the pill slips back into the
+     * search and the neck forms again on the way.
+     */
+    readonly property real closeAmount: root.opening ? 0 : 1 - root.clock / Math.max(0.001, root._fromClock)
+    readonly property real closeShrink: root.easeOut(root.closeAmount / 0.55)
+    readonly property real closeBack: root.smoothstep((root.closeAmount - 0.3) / 0.6)
+
+    readonly property real liveTop: root.opening
+        ? root.mix(root._fromTop, root.mix(root.startTop, root.restTop, root.openTravel), root.reopenBlend)
+        : root.mix(root._fromTop, root.startTop, root.closeBack)
+    readonly property real liveCenterX: root.opening
+        ? root.mix(root._fromCenterX, root.mix(root.searchCenterX, root.overviewCenterX, root.openTravel), root.reopenBlend)
+        : root.mix(root._fromCenterX, root.searchCenterX, root.closeBack)
+    readonly property real liveWidth: Math.max(0, root.opening
+        ? root.mix(root._fromWidth, root.mix(root.seedWidth, root.overviewWidth, root.openSpread) * root.openAppear, root.reopenBlend)
+        : root.mix(root._fromWidth, root.seedWidth, root.closeShrink) * (1 - root.smoothstep((root.closeAmount - 0.75) / 0.25)))
+    readonly property real liveHeight: Math.max(0, root.opening
+        ? root.mix(root._fromHeight, root.mix(root.seedHeight, root.overviewHeight, root.openSpread) * root.openAppear, root.reopenBlend)
+        : root.mix(root._fromHeight, root.seedHeight, root.closeShrink) * (1 - root.smoothstep((root.closeAmount - 0.75) / 0.25)))
+    readonly property real liveRadius: Math.max(0, Math.min(root.opening
+        ? root.mix(root._fromRadius, root.mix(root.seedHeight / 2, root.overviewRadius, root.openSpread), root.reopenBlend)
+        : root.mix(root._fromRadius, root.seedHeight / 2, root.closeShrink),
+        root.liveHeight / 2, root.liveWidth / 2))
+
+    /** The neck lets go as the drop arrives, and forms again as it is called back. */
+    readonly property real release: root.opening
+        ? root.mix(root._fromRelease, root.stageAt(root.clock, 0.3, 0.5), root.reopenBlend)
+        : root._fromRelease * (1 - root.smoothstep((root.closeAmount - 0.45) / 0.3))
 
     /**
      * The contents open from the drop's middle as it spreads: a slice of the grid in
      * a travelling pill read as a clipped window, not as a drop. An inset, not a fade.
      */
-    readonly property real contentReveal: root.stage(0.26, 0.62)
+    readonly property real contentReveal: root.opening
+        ? root.mix(root._fromReveal, root.stageAt(root.clock, 0.26, 0.62), root.reopenBlend)
+        : root._fromReveal * (1 - root.easeOut(root.closeAmount / 0.35))
     readonly property real contentInset: (1 - root.contentReveal) * Math.max(root.liveWidth, root.liveHeight) / 2
 
     readonly property real neckBlend: {

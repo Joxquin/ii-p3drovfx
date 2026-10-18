@@ -79,27 +79,22 @@ Item {
         const bulge = root.liveBulge;
         const fillet = root.liveFillet;
         const content = root.contentOpacity;
-        if (root.open) {
-            if (root.clock <= 0.001) {
-                root._fromClock = 0;
-                root.clock = 0;
-            } else {
-                // Reopened while closing: pick up the opening where it is as tall as
-                // the drop already is, and blend the rest of the shape across.
-                root._fromClock = root.clockForHeight(height / Math.max(1, root.targetHeight));
-                root.clock = root._fromClock;
-            }
-        } else {
-            if (root.clock <= 0.001)
-                return;
-            root._fromClock = root.clock;
-        }
+        if (!root.open && root.clock <= 0.001)
+            return;
+        // Reopened while closing: pick up the opening where it is as tall as the drop
+        // already is, and blend the rest of the shape across.
+        const fromClock = !root.open ? root.clock
+            : (root.clock <= 0.001 ? 0 : root.clockForHeight(height / Math.max(1, root.targetHeight)));
+        // The mode and the snapshot change before the clock does, so no binding ever
+        // reads the new clock against the old shape.
+        root.opening = root.open;
+        root._fromClock = fromClock;
         root._fromHeight = height;
         root._fromWidth = width;
         root._fromBulge = bulge;
         root._fromFillet = fillet;
         root._fromContent = content;
-        root.opening = root.open;
+        root.clock = fromClock;
         clockAnim.to = root.open ? 1 : 0;
         clockAnim.duration = Math.max(1, Math.round(root.open
             ? root.openDuration * (1 - root.clock)
@@ -188,15 +183,16 @@ Item {
 
     readonly property real liveHeight: {
         if (!root.opening) {
-            const u = root.closeAmount;
-            // Eases away, then accelerates into the bar.
-            return root._fromHeight * (1 - u * u * (2.2 - 1.2 * u));
+            // Moves from the first frame and lands gently in the bar. The old curve
+            // started at zero speed and held the drop still for its first frames,
+            // which read as a slow close.
+            return root._fromHeight * Math.pow(1 - root.closeAmount, 1.7);
         }
         return root.mix(root._fromHeight, root.targetHeight * root.openHeightAt(root.clock), root.reopenBlend);
     }
     readonly property real liveBodyWidth: {
         if (!root.opening) {
-            const narrow = root.smoothstep(root.closeAmount / 0.7);
+            const narrow = root.smoothstep(root.closeAmount / 0.6);
             return root.mix(root._fromWidth, Math.min(root._fromWidth, root.seedWidth), narrow);
         }
         const open = root.seedWidth + (root.bodyWidth - root.seedWidth) * root.openWidenAt(root.clock);
@@ -220,7 +216,7 @@ Item {
 
     readonly property real contentOpacity: {
         if (!root.opening)
-            return root._fromContent * (1 - root.smoothstep(root.closeAmount / 0.4));
+            return root._fromContent * (1 - root.smoothstep(root.closeAmount / 0.3));
         return root.mix(root._fromContent, root.smoothstep((root.clock - 0.2) / 0.38), root.reopenBlend);
     }
 
