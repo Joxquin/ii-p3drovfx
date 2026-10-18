@@ -54,7 +54,9 @@ AbstractBackgroundWidget {
     ResourceMetricSource {
         id: metrics
         keys: root.options?.items ?? ["cpu", "ram", "disk"]
-        active: root.visible
+        // Not `visible`: a covered desktop must not keep sampling and redrawing.
+        active: root.live
+        frozen: !root.live
     }
 
     Item {

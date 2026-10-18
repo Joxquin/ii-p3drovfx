@@ -25,6 +25,38 @@ Item {
     // A load past this reads as "hot": warning colour and the loud shape.
     readonly property real hotThreshold: 0.85
 
+    // What the widget shows. `frozen` stops it following ResourceUsage, so a
+    // covered widget neither redraws nor replays its bar animations each sample.
+    property bool frozen: false
+    readonly property var liveReadings: ({
+        cpuTemp: ResourceUsage.cpuTemp,
+        cpuUsage: ResourceUsage.cpuUsage,
+        diskTotal: ResourceUsage.diskTotal,
+        diskUsed: ResourceUsage.diskUsed,
+        diskUsedPercentage: ResourceUsage.diskUsedPercentage,
+        gpuTemp: ResourceUsage.gpuTemp,
+        gpuUsage: ResourceUsage.gpuUsage,
+        memoryTotal: ResourceUsage.memoryTotal,
+        memoryUsed: ResourceUsage.memoryUsed,
+        memoryUsedPercentage: ResourceUsage.memoryUsedPercentage,
+        swapTotal: ResourceUsage.swapTotal,
+        swapUsed: ResourceUsage.swapUsed,
+        swapUsedPercentage: ResourceUsage.swapUsedPercentage,
+        batteryIsCharging: Battery.isCharging,
+        batteryIsPluggedIn: Battery.isPluggedIn,
+        batteryPercentage: Battery.percentage
+    })
+    // Assigned, never bound: a binding would keep following while frozen.
+    property var m: ({})
+    onLiveReadingsChanged: {
+        if (!root.frozen)
+            root.m = root.liveReadings;
+    }
+    onFrozenChanged: {
+        if (!root.frozen)
+            root.m = root.liveReadings;
+    }
+
     function label(key) {
         switch (key) {
         case "cpu": return Translation.tr("CPU");
@@ -48,7 +80,7 @@ Item {
         case "gpu": return "developer_board";
         case "cpuTemp": return "device_thermostat";
         case "gpuTemp": return "thermostat";
-        case "battery": return Battery.isPluggedIn ? "battery_charging_full" : "battery_full";
+        case "battery": return root.m.batteryIsPluggedIn ? "battery_charging_full" : "battery_full";
         }
         return "monitoring";
     }
@@ -72,14 +104,14 @@ Item {
     function value(key) {
         let v = 0;
         switch (key) {
-        case "cpu": v = ResourceUsage.cpuUsage; break;
-        case "ram": v = ResourceUsage.memoryUsedPercentage; break;
-        case "swap": v = ResourceUsage.swapUsedPercentage; break;
-        case "disk": v = ResourceUsage.diskUsedPercentage; break;
-        case "gpu": v = ResourceUsage.gpuUsage; break;
-        case "cpuTemp": v = ResourceUsage.cpuTemp / 100; break;
-        case "gpuTemp": v = ResourceUsage.gpuTemp / 100; break;
-        case "battery": v = Battery.percentage; break;
+        case "cpu": v = root.m.cpuUsage; break;
+        case "ram": v = root.m.memoryUsedPercentage; break;
+        case "swap": v = root.m.swapUsedPercentage; break;
+        case "disk": v = root.m.diskUsedPercentage; break;
+        case "gpu": v = root.m.gpuUsage; break;
+        case "cpuTemp": v = root.m.cpuTemp / 100; break;
+        case "gpuTemp": v = root.m.gpuTemp / 100; break;
+        case "battery": v = root.m.batteryPercentage; break;
         }
         return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
     }
@@ -87,7 +119,7 @@ Item {
     // Battery is "hot" when it runs low, everything else when it runs high.
     function isHot(key) {
         if (key === "battery")
-            return !Battery.isPluggedIn && root.value(key) <= 0.15;
+            return !root.m.batteryIsPluggedIn && root.value(key) <= 0.15;
         return root.value(key) >= root.hotThreshold;
     }
 
@@ -98,9 +130,9 @@ Item {
     // The number itself, without its unit.
     function figure(key) {
         if (key === "cpuTemp")
-            return String(Math.round(ResourceUsage.cpuTemp));
+            return String(Math.round(root.m.cpuTemp));
         if (key === "gpuTemp")
-            return String(Math.round(ResourceUsage.gpuTemp));
+            return String(Math.round(root.m.gpuTemp));
         return String(Math.round(root.value(key) * 100));
     }
 
@@ -116,21 +148,21 @@ Item {
     function detail(key) {
         switch (key) {
         case "cpu":
-            return ResourceUsage.cpuTemp > 0 ? Translation.tr("%1 °C").arg(Math.round(ResourceUsage.cpuTemp)) : Translation.tr("Processor");
+            return root.m.cpuTemp > 0 ? Translation.tr("%1 °C").arg(Math.round(root.m.cpuTemp)) : Translation.tr("Processor");
         case "ram":
-            return Translation.tr("%1 / %2 GB").arg(root.gb(ResourceUsage.memoryUsed)).arg(root.gb(ResourceUsage.memoryTotal));
+            return Translation.tr("%1 / %2 GB").arg(root.gb(root.m.memoryUsed)).arg(root.gb(root.m.memoryTotal));
         case "swap":
-            return Translation.tr("%1 / %2 GB").arg(root.gb(ResourceUsage.swapUsed)).arg(root.gb(ResourceUsage.swapTotal));
+            return Translation.tr("%1 / %2 GB").arg(root.gb(root.m.swapUsed)).arg(root.gb(root.m.swapTotal));
         case "disk":
-            return Translation.tr("%1 / %2 GB").arg(Math.round(ResourceUsage.diskUsed / (1024 * 1024 * 1024))).arg(Math.round(ResourceUsage.diskTotal / (1024 * 1024 * 1024)));
+            return Translation.tr("%1 / %2 GB").arg(Math.round(root.m.diskUsed / (1024 * 1024 * 1024))).arg(Math.round(root.m.diskTotal / (1024 * 1024 * 1024)));
         case "gpu":
-            return ResourceUsage.gpuTemp > 0 ? Translation.tr("%1 °C").arg(Math.round(ResourceUsage.gpuTemp)) : Translation.tr("Graphics");
+            return root.m.gpuTemp > 0 ? Translation.tr("%1 °C").arg(Math.round(root.m.gpuTemp)) : Translation.tr("Graphics");
         case "cpuTemp":
             return Translation.tr("Processor");
         case "gpuTemp":
             return Translation.tr("Graphics");
         case "battery":
-            return Battery.isCharging ? Translation.tr("Charging") : (Battery.isPluggedIn ? Translation.tr("Plugged in") : Translation.tr("On battery"));
+            return root.m.batteryIsCharging ? Translation.tr("Charging") : (root.m.batteryIsPluggedIn ? Translation.tr("Plugged in") : Translation.tr("On battery"));
         }
         return "";
     }
@@ -168,7 +200,10 @@ Item {
     onWantDiskChanged: root.sync()
     onWantSwapChanged: root.sync()
     onWantGpuChanged: root.sync()
-    Component.onCompleted: root.sync()
+    Component.onCompleted: {
+        root.m = root.liveReadings;
+        root.sync();
+    }
     Component.onDestruction: {
         if (root._temperature)
             ResourceUsage.requestMetric("temperature", false);

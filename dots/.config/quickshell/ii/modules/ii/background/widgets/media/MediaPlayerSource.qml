@@ -41,8 +41,23 @@ Item {
     // ── Position ──
     readonly property real length: MprisController.trackLengthOf(root.player)
     readonly property bool hasLength: MprisController.hasTrackLength(root.player)
-    readonly property real position: MprisController.trackPositionOf(root.player)
-    readonly property real progress: MprisController.trackProgressOf(root.player)
+    // Held while the widget is covered: the bar, the island and the lyrics keep
+    // emitting positionChanged on the shared player, and each one redrew the
+    // covered widget's seek bar (~1 frame burst per second per screen).
+    readonly property real livePosition: MprisController.trackPositionOf(root.player)
+    readonly property real liveProgress: MprisController.trackProgressOf(root.player)
+    property real position: 0
+    property real progress: 0
+    function syncPosition() {
+        if (!root.onScreen)
+            return;
+        root.position = root.livePosition;
+        root.progress = root.liveProgress;
+    }
+    onLivePositionChanged: root.syncPosition()
+    onLiveProgressChanged: root.syncPosition()
+    onOnScreenChanged: root.syncPosition()
+    Component.onCompleted: root.syncPosition()
     readonly property string positionText: StringUtils.friendlyTimeForSeconds(root.position)
     readonly property string lengthText: root.hasLength ? StringUtils.friendlyTimeForSeconds(root.length) : "–:––"
 
