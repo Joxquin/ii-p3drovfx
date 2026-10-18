@@ -282,6 +282,65 @@ Item {
         color: ColorUtils.applyAlpha(root.foreground, 0.24)
     }
 
+    // Visualizers over the artwork, under the glass and controls. Same mode as the
+    // classic frontend (0 off, 1 waves, 2 bars, 3 radial).
+    readonly property int visualizerMode: context.visualizerMode
+    readonly property bool visualizerPlaying: context.player?.isPlaying ?? false
+
+    WaveVisualizer {
+        anchors.fill: parent
+        visible: root.visualizerMode === 1
+        opacity: root.introArt
+        live: root.visualizerPlaying && visible
+        color: root.foreground
+        points: root.context.visualizerPoints
+    }
+
+    Row {
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        height: 120
+        spacing: 12
+        visible: root.visualizerMode === 2
+        opacity: root.introArt * 0.85
+
+        Repeater {
+            model: root.context.visualizerPoints.length > 0 ? root.context.visualizerPoints.length : 16
+            delegate: ModernVisualizerBar {
+                required property int index
+                barWidth: 12
+                maxHeight: 110
+                minHeight: 12
+                color: ColorUtils.applyAlpha(root.foreground, 0.5)
+                fgColor: root.foreground
+                playing: root.visualizerPlaying
+                amplitude: Math.max(0.1, Math.min(1.0, (root.context.visualizerPoints[index] ?? 100) / 900.0))
+                bgAmplitude: amplitude * 0.8
+            }
+        }
+    }
+
+    // The circle lives in the lyrics column; with the panels hidden it slides to
+    // the middle of the stage. The instrumental lyrics state draws its own ring.
+    Item {
+        readonly property real columnWidth: root.width - root.columnX - root.gutter
+        readonly property real centerX: (root.columnX * root.panelProgress + root.width) / 2
+        width: Math.max(0, Math.min(columnWidth, panels.height) * 0.82)
+        height: width
+        x: centerX - width / 2
+        y: panels.y + (panels.height - height) / 2
+        visible: root.visualizerMode === 3 && !(root.context.rightPanelVisible && root.activeTab === "lyrics"
+                                                 && (lyricsLoader.item?.instrumental ?? false))
+        opacity: root.introPanels
+
+        RadialWaveVisualizer {
+            anchors.fill: parent
+            live: root.visualizerPlaying && parent.visible
+            color: root.foreground
+            points: root.context.visualizerPoints
+        }
+    }
+
     // Frosted surfaces share the artwork's coordinate space and sit under their content.
     MediaModeImmersiveGlass {
         x: sourceChip.x
@@ -394,6 +453,16 @@ Item {
                                                       Translation.tr("Fill the screen with the cover")
                 onClicked: Persistent.states.background.mediaMode.immersiveArtLayout = root.artLayout === "cover"
                            ? "side" : "cover"
+            }
+            MediaModeImmersiveButton {
+                symbol: ["equalizer", "waves", "bar_chart", "blur_circular"][root.visualizerMode] ?? "equalizer"
+                quiet: true
+                foreground: root.foreground
+                highlighted: root.visualizerMode > 0
+                tooltip: Translation.tr("Visualizer Mode: ") + [Translation.tr("Off"), Translation.tr("Waves"),
+                                                                 Translation.tr("Bars"), Translation.tr("Radial")][
+                             root.visualizerMode]
+                onClicked: Config.options.background.mediaMode.visualizerMode = (root.visualizerMode + 1) % 4
             }
             MediaModeImmersiveButton {
                 symbol: "headphones"
