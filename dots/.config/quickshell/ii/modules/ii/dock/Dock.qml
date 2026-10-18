@@ -17,7 +17,9 @@ pragma ComponentBehavior: Bound
 Scope {
     id: dock
 
-    property bool pinned: Config.options?.dock.pinnedOnStartup ?? false
+    // The pin button writes the same option the "Pinned on startup" switches show, so the
+    // last state survives a shell or machine restart.
+    readonly property bool pinned: Config.options?.dock.pinnedOnStartup ?? false
 
     readonly property string dockEffectivePosition: {
         const pos = Config.options?.dock.position ?? "bottom"
@@ -915,7 +917,7 @@ Scope {
                         dockRevealed: dockRoot.reveal
                         dockWindowVisible: dockRoot.visible
                         onTogglePinRequested: {
-                            dock.pinned = !dock.pinned
+                            Config.options.dock.pinnedOnStartup = !dock.pinned
                         }
                     }
                 }
