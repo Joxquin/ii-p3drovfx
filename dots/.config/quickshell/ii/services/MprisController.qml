@@ -305,7 +305,139 @@ Singleton {
 		}
 	}
 
+	// ── Selection policy ─────────────────────────────────────────────────────
+	/**
+	 * Which player the shell follows when it picks one on its own.
+	 *
+	 * A pinned player (`media.priorityPlayer`) outranks everything while it runs;
+	 * with `media.preferMusicPlayers` music apps outrank browsers, KDE Connect and
+	 * video players; inside a tier the old rule holds — the player that started
+	 * playing last takes over. With neither option set every player is tier 0 and
+	 * the behaviour is exactly the historical one.
+	 *
+	 * The pin used to be honoured only when nothing was tracked, so the first
+	 * player that changed state took the focus back, and it had to equal the
+	 * desktop entry byte for byte (`spotify` never matched the Flatpak's
+	 * `com.spotify.Client`). It is now matched leniently against the desktop
+	 * entry, the identity and the bus name, and every automatic switch goes
+	 * through `tierOf`.
+	 */
 	property string priorityPlayer: Config.options.media.priorityPlayer;
+	readonly property bool preferMusicPlayers: Config.options.media.preferMusicPlayers ?? false;
+
+	readonly property var _nonMusicPattern: /firefox|chrom|brave|vivaldi|opera|edge|zen|librewolf|floorp|waterfox|epiphany|falkon|qutebrowser|midori|plasma-browser-integration|kdeconnect|valent|gsconnect|vlc|mpv|celluloid|totem|showtime|haruna|smplayer|dragon|clapper|kodi|jellyfin|plex|stremio|obs|discord|telegram|zoom|teams/;
+	readonly property var _musicPattern: /spotify|spot\b|psst|ncspot|youtube.?music|youtube_music|pear.?desktop|ytmdesktop|cider|tidal|deezer|apple.?music|amazon.?music|soundcloud|feishin|sonixd|supersonic|sublime.?music|high.?tide|elisa|rhythmbox|lollypop|strawberry|clementine|audacious|deadbeef|cmus|mpd|mopidy|ncmpcpp|amberol|g4music|gapless|tauon|quodlibet|quod.?libet|amarok|juk|musikcube|harmonoid|cantata|gnome-music|music|euphonica|resonance|museeks|nuclear|tuxguitar|foobar|musicbee|aimp|winamp|qmmp|guayadeque|exaile|pragha|kasts|gpodder|shortwave|goodvibes/;
+
+	/** Lower-case names a player answers to: desktop entry (and its last segment), identity, bus name. */
+	function playerNames(player: MprisPlayer): var {
+		if (!player)
+			return [];
+		const names = [];
+		const add = value => {
+			const name = String(value ?? "").trim().toLowerCase();
+			if (name !== "" && names.indexOf(name) === -1)
+				names.push(name);
+		};
+		const entry = player.desktopEntry ?? "";
+		add(entry);
+		add(entry.split(".").pop());
+		add(player.identity);
+		// org.mpris.MediaPlayer2.<name>[.instance123]
+		const bus = (player.dbusName ?? "").replace(/^org\.mpris\.MediaPlayer2\./, "").replace(/\.instance[_0-9]+$/, "");
+		add(bus);
+		add(bus.split(".")[0]);
+		return names;
+	}
+
+	/** The value the settings picker stores to pin this player. */
+	function playerKey(player: MprisPlayer): string {
+		if (!player)
+			return "";
+		return player.desktopEntry || player.identity
+			|| (player.dbusName ?? "").replace(/^org\.mpris\.MediaPlayer2\./, "").replace(/\.instance[_0-9]+$/, "");
+	}
+
+	function playerMatchesKey(player: MprisPlayer, key: string): bool {
+		const wanted = String(key ?? "").trim().toLowerCase();
+		if (!player || wanted === "")
+			return false;
+		const short = wanted.replace(/\.desktop$/, "").split(".").pop();
+		const names = root.playerNames(player);
+		return names.indexOf(wanted) !== -1 || names.indexOf(short) !== -1;
+	}
+
+	function isPinnedPlayer(player: MprisPlayer): bool {
+		return root.playerMatchesKey(player, root.priorityPlayer);
+	}
+
+	/**
+	 * A music app, as opposed to a browser, a phone bridge or a video player.
+	 * Known names first, then the desktop entry's categories (Audio/Music but not
+	 * Video or WebBrowser) for players the lists do not know.
+	 */
+	function isMusicPlayer(player: MprisPlayer): bool {
+		const names = root.playerNames(player);
+		if (names.length === 0)
+			return false;
+		const joined = names.join(" ");
+		if (root._nonMusicPattern.test(joined))
+			return false;
+		if (root._musicPattern.test(joined))
+			return true;
+		const entry = player.desktopEntry ? DesktopEntries.heuristicLookup(player.desktopEntry) : null;
+		const categories = entry?.categories ?? [];
+		return (categories.indexOf("Audio") !== -1 || categories.indexOf("Music") !== -1)
+			&& categories.indexOf("Video") === -1 && categories.indexOf("WebBrowser") === -1;
+	}
+
+	/** 2 = pinned, 1 = music app while music is preferred, 0 = anything else. */
+	function tierOf(player: MprisPlayer): int {
+		if (!player)
+			return -1;
+		if (root.isPinnedPlayer(player))
+			return 2;
+		if (root.preferMusicPlayers && root.isMusicPlayer(player))
+			return 1;
+		return 0;
+	}
+
+	/** Whether an automatic switch from the tracked player to `player` is allowed. */
+	function mayTakeOver(player: MprisPlayer): bool {
+		const current = root.trackedPlayer;
+		if (!current || Mpris.players.values.indexOf(current) === -1)
+			return true;
+		const diff = root.tierOf(player) - root.tierOf(current);
+		if (diff !== 0)
+			return diff > 0;
+		return player.isPlaying || !current.isPlaying;
+	}
+
+	/** The player the policy would pick right now: tier, then playing, then the tracked one. */
+	function bestApplicationPlayer(): MprisPlayer {
+		let best = null;
+		for (const player of root.applicationPlayers) {
+			if (!best) {
+				best = player;
+				continue;
+			}
+			const diff = root.tierOf(player) - root.tierOf(best);
+			if (diff > 0 || (diff === 0 && player.isPlaying && !best.isPlaying)
+				|| (diff === 0 && player.isPlaying === best.isPlaying && player === root.trackedPlayer))
+				best = player;
+		}
+		return best;
+	}
+
+	function applySelectionPolicy(): void {
+		if (root.localPlayerSelected)
+			return;
+		const best = root.bestApplicationPlayer();
+		if (best && best !== root.trackedPlayer && root.mayTakeOver(best))
+			root.trackedPlayer = best;
+	}
+
+	onPriorityPlayerChanged: applySelectionPolicy()
+	onPreferMusicPlayersChanged: applySelectionPolicy()
 
 	property bool __reverse: false;
 
@@ -326,21 +458,10 @@ Singleton {
 			if (!stillExists)
 				root.trackedPlayer = null;
 		}
-		if (root.trackedPlayer == null) {
-			const priority = applicationPlayers.find(player => player.desktopEntry === root.priorityPlayer);
-			if (priority) {
-				root.trackedPlayer = priority;
-			} else {
-				const playing = applicationPlayers.find(player => player && player.isPlaying);
-				if (playing) {
-					root.trackedPlayer = playing;
-				} else if (applicationPlayers.length > 0) {
-					root.trackedPlayer = applicationPlayers[0];
-				} else if (players.length > 0) {
-					root.trackedPlayer = players[0];
-				}
-			}
-		}
+		if (root.trackedPlayer == null)
+			root.trackedPlayer = root.bestApplicationPlayer() ?? players[0] ?? null;
+		else
+			root.applySelectionPolicy();
 	}
 
 	property bool hasActivePlasmaIntegration: false
@@ -378,10 +499,11 @@ Singleton {
 					root.updatePlayersList();
 					return;
 				}
-				if (root.trackedPlayer == null || modelData.isPlaying) {
-					root.trackedPlayer = modelData;
-				}
 				root.updatePlayersList();
+				if (root.isRealPlayer(modelData) && root.mayTakeOver(modelData))
+					root.trackedPlayer = modelData;
+				else if (root.trackedPlayer == null)
+					root.trackedPlayer = modelData;
 			}
 
 			Component.onDestruction: {
@@ -399,25 +521,21 @@ Singleton {
 					Qt.callLater(() => root.updatePlayersList());
 					return;
 				}
-				if (root.trackedPlayer == null || !root.trackedPlayer.isPlaying) {
-					for (const player of Mpris.players.values) {
-						if (!root.isLocalPlayer(player) && player.playbackState.isPlaying) {
-							root.trackedPlayer = player;
-							break;
-						}
-					}
-
-					if (root.trackedPlayer == null && root.applicationPlayers.length != 0) {
-						root.trackedPlayer = root.applicationPlayers[0];
-					}
-				}
-				Qt.callLater(() => root.updatePlayersList());
+				// Picked once the list no longer holds the player going away.
+				Qt.callLater(() => {
+					root.updatePlayersList();
+					if (root.localPlayerSelected)
+						return;
+					if (root.trackedPlayer == null || !root.trackedPlayer.isPlaying)
+						root.trackedPlayer = root.bestApplicationPlayer() ?? root.trackedPlayer;
+				});
 			}
 
 			function onPlaybackStateChanged() {
 				if (root.localPlayerSelected && !root.isLocalPlayer(modelData))
 					return;
-				if (root.trackedPlayer !== modelData) root.trackedPlayer = modelData;
+				if (root.trackedPlayer !== modelData && root.isRealPlayer(modelData) && root.mayTakeOver(modelData))
+					root.trackedPlayer = modelData;
 			}
 		}
 	}

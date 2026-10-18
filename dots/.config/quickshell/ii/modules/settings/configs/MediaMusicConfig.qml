@@ -25,15 +25,7 @@ Item {
             icon: "album"
             title: Translation.tr("Media Integrations")
 
-            MaterialTextArea {
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Prioritized player (e.g. spotify)")
-                text: Config.options.media.priorityPlayer
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    Config.options.media.priorityPlayer = text;
-                }
-            }
+            MediaPlayerPriorityPicker {}
 
             ConfigSwitch {
                 buttonIcon: "filter_list"

@@ -6271,6 +6271,7 @@ Singleton {
             property JsonObject media: JsonObject {
                 property bool filterDuplicatePlayers: true
                 property string priorityPlayer: ""
+                property bool preferMusicPlayers: false
                 property bool dynamicAlbumColors: true
                 property bool albumArtBlurAnimations: true
             }
