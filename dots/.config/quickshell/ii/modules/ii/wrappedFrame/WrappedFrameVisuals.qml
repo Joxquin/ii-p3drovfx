@@ -124,6 +124,13 @@ Item {
     readonly property bool barWeldedToFrame: !isFloatingOrIsland && Config.options.bar.barBackgroundStyle !== 3
     readonly property bool leftPlateShown: barWeldedToFrame && !hasLeftFrame
     readonly property bool rightPlateShown: barWeldedToFrame && !hasRightFrame
+    // A side strip riding on an open sidebar runs on to the screen edge (to meet the
+    // sidebar); the top or bottom strip then starts past it instead of under it, or the
+    // overlap paints the translucent colour twice - a dark block once a dock band widens it.
+    readonly property real leftStripAtTop: (leftSidebarOffset > 0 && !barBottom && (hasLeftFrame || dockLeftBand > 0)) ? leftFrame.width : 0
+    readonly property real rightStripAtTop: (rightSidebarOffset > 0 && !barBottom && (hasRightFrame || dockRightBand > 0)) ? rightFrame.width : 0
+    readonly property real leftStripAtBottom: (leftSidebarOffset > 0 && barBottom && (hasLeftFrame || dockLeftBand > 0)) ? leftFrame.width : 0
+    readonly property real rightStripAtBottom: (rightSidebarOffset > 0 && barBottom && (hasRightFrame || dockRightBand > 0)) ? rightFrame.width : 0
 
     // Inner corner radius of wrapped frame always respects windowRounding
     readonly property real frameInnerCornerRadius: Appearance.rounding.windowRounding
@@ -198,8 +205,8 @@ Item {
             // a bar plate already runs to the screen edge: with transparency every overlap
             // paints the translucent colour twice and reads as a second shade.
             topMargin: (!hasTopFrame) ? (visualsRoot.dockTopBand > 0 ? visualsRoot.totalTopPush : -Math.max(0, frameThickness - visualsRoot.hBarHiddenAmount)) : 0
-            leftMargin: (visualsRoot.dockTopBand > 0 && !visualsRoot.leftPlateShown) ? 0 : visualsRoot.totalLeftPush
-            rightMargin: (visualsRoot.dockTopBand > 0 && !visualsRoot.rightPlateShown) ? 0 : visualsRoot.totalRightPush
+            leftMargin: ((visualsRoot.dockTopBand > 0 && !visualsRoot.leftPlateShown) ? 0 : visualsRoot.totalLeftPush) + visualsRoot.leftStripAtTop
+            rightMargin: ((visualsRoot.dockTopBand > 0 && !visualsRoot.rightPlateShown) ? 0 : visualsRoot.totalRightPush) + visualsRoot.rightStripAtTop
         }
         height: hasTopFrame ? frameThickness + visualsRoot.dockTopBand : (visualsRoot.dockTopBand > 0 ? visualsRoot.dockTopBand : frameThickness)
         color: visualsRoot.baseColor
@@ -213,8 +220,8 @@ Item {
             left: parent.left
             right: parent.right
             bottomMargin: (!hasBottomFrame) ? (visualsRoot.dockBottomBand > 0 ? visualsRoot.totalBottomPush : -Math.max(0, frameThickness - visualsRoot.hBarHiddenAmount)) : 0
-            leftMargin: (visualsRoot.dockBottomBand > 0 && !visualsRoot.leftPlateShown) ? 0 : visualsRoot.totalLeftPush
-            rightMargin: (visualsRoot.dockBottomBand > 0 && !visualsRoot.rightPlateShown) ? 0 : visualsRoot.totalRightPush
+            leftMargin: ((visualsRoot.dockBottomBand > 0 && !visualsRoot.leftPlateShown) ? 0 : visualsRoot.totalLeftPush) + visualsRoot.leftStripAtBottom
+            rightMargin: ((visualsRoot.dockBottomBand > 0 && !visualsRoot.rightPlateShown) ? 0 : visualsRoot.totalRightPush) + visualsRoot.rightStripAtBottom
         }
         height: hasBottomFrame ? frameThickness + visualsRoot.dockBottomBand : (visualsRoot.dockBottomBand > 0 ? visualsRoot.dockBottomBand : frameThickness)
         color: visualsRoot.baseColor

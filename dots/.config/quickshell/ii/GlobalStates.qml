@@ -835,14 +835,16 @@ Singleton {
     // compositor's zones reads it to stay clear of the dock the way zone-respecting
     // ones do. `shown` is the thickness a full-width tray covers right now, pinned
     // or not: the top layer paints that tray as part of the wrapped frame.
-    function setDockInset(screenName, side, thickness, reserved, shown) {
+    // `concave` is the radius of the full-width rounded style's inward corners, which the
+    // top layer draws at the ends of that tray.
+    function setDockInset(screenName, side, thickness, reserved, shown, concave) {
         if (!screenName)
             return;
         const next = Object.assign({}, root.dockInsets);
         if (!side || !(thickness > 0))
             delete next[screenName];
         else
-            next[screenName] = { "side": side, "thickness": thickness, "reserved": reserved > 0 ? reserved : 0, "shown": shown > 0 ? shown : 0 };
+            next[screenName] = { "side": side, "thickness": thickness, "reserved": reserved > 0 ? reserved : 0, "shown": shown > 0 ? shown : 0, "concave": concave > 0 ? concave : 0 };
         root.dockInsets = next;
     }
 

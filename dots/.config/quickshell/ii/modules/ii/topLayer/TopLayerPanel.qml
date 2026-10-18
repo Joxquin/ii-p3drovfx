@@ -107,10 +107,12 @@ PanelWindow {
     readonly property real dockBottomZone: (dockShapesShell && dockInset && dockInset.side === "bottom") ? (dockInset.reserved ?? 0) : 0
     // The frame's band under the dock: the reserved zone, or a full-width tray while it shows.
     // It follows the tray's reveal slide, which is what the dock no longer paints.
-    readonly property real dockTopBandTarget: (dockShapesShell && dockInset && dockInset.side === "top") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
-    readonly property real dockBottomBandTarget: (dockShapesShell && dockInset && dockInset.side === "bottom") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
-    readonly property real dockLeftBandTarget: (dockShapesShell && dockInset && dockInset.side === "left") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
-    readonly property real dockRightBandTarget: (dockShapesShell && dockInset && dockInset.side === "right") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
+    // Only a full-width dock joins the frame: `shown` is its tray while it shows. Any other
+    // style keeps its own design and only gets pushed.
+    readonly property real dockTopBandTarget: (dockShapesShell && dockInset && dockInset.side === "top") ? (dockInset.shown ?? 0) : 0
+    readonly property real dockBottomBandTarget: (dockShapesShell && dockInset && dockInset.side === "bottom") ? (dockInset.shown ?? 0) : 0
+    readonly property real dockLeftBandTarget: (dockShapesShell && dockInset && dockInset.side === "left") ? (dockInset.shown ?? 0) : 0
+    readonly property real dockRightBandTarget: (dockShapesShell && dockInset && dockInset.side === "right") ? (dockInset.shown ?? 0) : 0
     property real dockLeftBand: dockLeftBandTarget
     property real dockRightBand: dockRightBandTarget
     Behavior on dockLeftBand {
@@ -131,7 +133,8 @@ PanelWindow {
     // dock: the band would cover the dock's content. The dock paints its own tray then,
     // switched at once both ways so there is no frame with neither.
     readonly property bool dockUnderThisLayer: !topPanel.searchOpenOnMonitor
-    readonly property bool dockOnFrameBand: frameLoader.active && dockShapesShell && dockUnderThisLayer
+    // Without the wrapped frame the band is a plain strip (dockBandPlain) in the sidebar's colour.
+    readonly property bool dockOnFrameBand: (frameLoader.active || !usingWrappedFrame) && dockShapesShell && dockUnderThisLayer
     onDockOnFrameBandChanged: GlobalStates.setDockBand(topPanel.screen.name, topPanel.dockOnFrameBand)
     // The dock sits inside the frame's ring when nothing else holds that edge.
     readonly property real ringThickness: usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0
@@ -816,6 +819,67 @@ PanelWindow {
         exclusiveZone: implicitWidth - ((topPanel.barVertical && ((topPanel.barOnLeft && topPanel.policiesOnLeft) || (topPanel.barOnRight && !topPanel.policiesOnLeft))) ? 0 : (Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin))
     }
 
+    // The dock's tray without the wrapped frame: painted here, like the frame's band, so it
+    // blurs with the sidebars instead of on its own surface, rides on a sidebar pushing the
+    // dock in the same frames, and leaves the screen corners above it (the dock's own tray
+    // covered them). It starts past the bar's zone on that edge, as the dock's window does.
+    readonly property bool barHoldsZones: hasBarOnThisMonitor && GlobalStates.barOpen
+        && !(Config.options.bar.autoHide.enable && !Config.options.bar.autoHide.pushWindows)
+    readonly property real hBarZone: (barHoldsZones && !barVertical) ? Math.max(0, Appearance.sizes.baseBarHeight + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0) - hBarHiddenAmount) : 0
+    readonly property real vBarZone: (barHoldsZones && barVertical) ? Math.max(0, Appearance.sizes.baseVerticalBarWidth + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0) - vBarHiddenAmount) : 0
+    readonly property real leftCornerShift: dockBandPlain.side === "left" ? dockBandPlain.cornerShift : 0
+    readonly property real rightCornerShift: dockBandPlain.side === "right" ? dockBandPlain.cornerShift : 0
+    Rectangle {
+        id: dockBandPlain
+        readonly property string side: topPanel.dockInset ? topPanel.dockInset.side : ""
+        readonly property real band: side === "left" ? topPanel.dockLeftBand
+            : side === "right" ? topPanel.dockRightBand
+            : side === "top" ? topPanel.dockTopBand
+            : side === "bottom" ? topPanel.dockBottomBand : 0
+        readonly property real zoneLeft: topPanel.barOnLeft ? topPanel.vBarZone : 0
+        readonly property real zoneRight: topPanel.barOnRight ? topPanel.vBarZone : 0
+        readonly property real zoneTop: (!topPanel.barVertical && !topPanel.barBottom) ? topPanel.hBarZone : 0
+        readonly property real zoneBottom: (!topPanel.barVertical && topPanel.barBottom) ? topPanel.hBarZone : 0
+        readonly property real pushLeft: topPanel.leftSidebarActiveOnMonitor ? Math.round(GlobalStates.animatedLeftSidebarWidth) : 0
+        readonly property real pushRight: topPanel.rightSidebarActiveOnMonitor ? Math.round(GlobalStates.animatedRightSidebarWidth) : 0
+        visible: !topPanel.usingWrappedFrame && topPanel.dockOnFrameBand && band > 0 && !topPanel.hasFullscreenWindowOnMonitor
+        // Where a sidebar pushes the dock, the band sits against the sidebar's edge: the
+        // sidebar's outer corners move past it, or they paint over the band - a darker wedge.
+        readonly property real cornerShift: visible ? band + ((side === "left") ? zoneLeft : zoneRight) : 0
+        color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+        x: side === "left" ? zoneLeft + pushLeft
+            : side === "right" ? topPanel.width - zoneRight - pushRight - band
+            : zoneLeft
+        y: side === "top" ? zoneTop
+            : side === "bottom" ? topPanel.height - zoneBottom - band
+            : zoneTop
+        width: (side === "left" || side === "right") ? band : Math.max(0, topPanel.width - zoneLeft - zoneRight)
+        height: (side === "left" || side === "right") ? Math.max(0, topPanel.height - zoneTop - zoneBottom) : band
+    }
+
+    // The full-width rounded style curves into the screen at both ends of its tray; the
+    // dock drew those in its own tray colour, which is empty on the band.
+    Repeater {
+        model: (dockBandPlain.visible && (topPanel.dockInset?.concave ?? 0) > 0) ? 2 : 0
+        delegate: RoundCorner {
+            required property int index
+            readonly property string pos: dockBandPlain.side
+            readonly property bool startEnd: index === 0
+            implicitSize: Math.max(1, topPanel.dockInset?.concave ?? 0)
+            color: dockBandPlain.color
+            corner: pos === "top" ? (startEnd ? RoundCorner.CornerEnum.TopLeft : RoundCorner.CornerEnum.TopRight)
+                : pos === "left" ? (startEnd ? RoundCorner.CornerEnum.TopLeft : RoundCorner.CornerEnum.BottomLeft)
+                : pos === "right" ? (startEnd ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.BottomRight)
+                : (startEnd ? RoundCorner.CornerEnum.BottomLeft : RoundCorner.CornerEnum.BottomRight)
+            x: pos === "left" ? dockBandPlain.x + dockBandPlain.width
+                : pos === "right" ? dockBandPlain.x - width
+                : (startEnd ? dockBandPlain.x : dockBandPlain.x + dockBandPlain.width - width)
+            y: pos === "bottom" ? dockBandPlain.y - height
+                : pos === "top" ? dockBandPlain.y + dockBandPlain.height
+                : (startEnd ? dockBandPlain.y : dockBandPlain.y + dockBandPlain.height - height)
+        }
+    }
+
     // Left Sidebar Policies Content
     // Disabled in Float+Connect mode (cornerStyle 1) — sidebars remain separate PanelWindows
     Rectangle {
@@ -996,7 +1060,7 @@ PanelWindow {
         id: leftSidebarTopCornerLoader
         active: topPanel.leftSidebarActiveOnMonitor && BarInteraction.cornerStyle !== 1 && !topPanel.isDynamicIslandTop && !topPanel.usingWrappedFrame && (topPanel.barBottom || BarInteraction.cornerStyle !== 0 || !hasBarOnThisMonitor)
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
-        x: GlobalStates.animatedLeftSidebarWidth
+        x: GlobalStates.animatedLeftSidebarWidth + topPanel.leftCornerShift
         y: topPanel.sidebarTopOffset
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
@@ -1039,7 +1103,7 @@ PanelWindow {
         id: leftSidebarBottomCornerLoader
         active: topPanel.leftSidebarActiveOnMonitor && (!topPanel.barBottom || !hasBarOnThisMonitor) && BarInteraction.cornerStyle !== 1 && !topPanel.usingWrappedFrame && (topPanel.barVertical === topPanel.barBottom || BarInteraction.cornerStyle !== 0 || !hasBarOnThisMonitor)
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
-        x: GlobalStates.animatedLeftSidebarWidth
+        x: GlobalStates.animatedLeftSidebarWidth + topPanel.leftCornerShift
         anchors.bottom: parent.bottom
         anchors.bottomMargin: topPanel.sidebarBottomOffset
         width: Appearance.rounding.screenRounding
@@ -1056,7 +1120,7 @@ PanelWindow {
         active: topPanel.rightSidebarActiveOnMonitor && BarInteraction.cornerStyle !== 1 && !topPanel.isDynamicIslandTop && !topPanel.usingWrappedFrame && (topPanel.barVertical !== topPanel.barBottom || BarInteraction.cornerStyle !== 0 || !hasBarOnThisMonitor)
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor
         anchors.right: parent.right
-        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
+        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth + topPanel.rightCornerShift
         y: topPanel.sidebarTopOffset
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
@@ -1100,7 +1164,7 @@ PanelWindow {
         active: topPanel.rightSidebarActiveOnMonitor && (!topPanel.barBottom || !hasBarOnThisMonitor) && BarInteraction.cornerStyle !== 1 && !topPanel.usingWrappedFrame
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor
         anchors.right: parent.right
-        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
+        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth + topPanel.rightCornerShift
         anchors.bottom: parent.bottom
         anchors.bottomMargin: topPanel.sidebarBottomOffset
         width: Appearance.rounding.screenRounding
@@ -1116,7 +1180,7 @@ PanelWindow {
         id: leftSidebarBottomBarCornerLoader
         active: topPanel.leftSidebarActiveOnMonitor && !topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && !topPanel.usingWrappedFrame && hasBarOnThisMonitor
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
-        x: GlobalStates.animatedLeftSidebarWidth
+        x: GlobalStates.animatedLeftSidebarWidth + topPanel.leftCornerShift
         y: parent.height - topPanel.sidebarBottomOffset - Appearance.rounding.screenRounding
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
@@ -1132,7 +1196,7 @@ PanelWindow {
         active: topPanel.rightSidebarActiveOnMonitor && !topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && !topPanel.usingWrappedFrame && hasBarOnThisMonitor
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor
         anchors.right: parent.right
-        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
+        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth + topPanel.rightCornerShift
         y: parent.height - topPanel.sidebarBottomOffset - Appearance.rounding.screenRounding
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding

@@ -187,15 +187,17 @@ Scope {
                 readonly property real thickness: dockRoot.unmagnifiedThickness
                 readonly property real reserved: dockRoot.exclusiveZone
                 readonly property real shown: (dockRoot.isFullWidth && dockRoot.reveal) ? dockRoot.unmagnifiedThickness : 0
+                readonly property real concave: dockRoot.isFullWidthConcave ? dockRoot.concaveCornerRadius : 0
 
                 function publish() {
-                    GlobalStates.setDockInset(editInsetPublisher.screenName, editInsetPublisher.side, editInsetPublisher.thickness, editInsetPublisher.reserved, editInsetPublisher.shown);
+                    GlobalStates.setDockInset(editInsetPublisher.screenName, editInsetPublisher.side, editInsetPublisher.thickness, editInsetPublisher.reserved, editInsetPublisher.shown, editInsetPublisher.concave);
                 }
 
                 onSideChanged: publish()
                 onThicknessChanged: publish()
                 onReservedChanged: publish()
                 onShownChanged: publish()
+                onConcaveChanged: publish()
                 Component.onCompleted: publish()
                 Component.onDestruction: GlobalStates.setDockInset(editInsetPublisher.screenName, "", 0)
             }
@@ -358,12 +360,12 @@ Scope {
             readonly property bool isDynamicIsland: dockContent.isDynamicIsland
             readonly property bool isHug: dockContent.isHug
             readonly property bool isTransparent: dockContent.isTransparent
-            // The top layer's frame band fills this edge in the frame's colour: a full-width
-            // tray whenever it shows, any tray while pinned. A fullscreen window folds the
+            // The top layer's band fills this edge in the frame's colour - for the full-width
+            // styles only; the others keep their own tray. A fullscreen window folds the
             // frame away, band included, so the dock paints its own tray over it.
             readonly property bool onFrameBand: !!GlobalStates.dockBandScreens[dockRoot.screen?.name ?? ""]
                 && !dockRoot.hasFullscreenWindow
-                && (dockRoot.isFullWidth || dockRoot.pinnedShown)
+                && dockRoot.isFullWidth
             // Its compositor blur follows: nothing of its own to blur on the band.
             onOnFrameBandChanged: Appearance.dockOnFrameBand = dockRoot.onFrameBand
             Component.onCompleted: Appearance.dockOnFrameBand = dockRoot.onFrameBand
