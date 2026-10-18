@@ -338,7 +338,10 @@ Scope {
             readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(dockRoot.screen?.name ?? "")
             readonly property bool realGnomeOverviewOpen: GlobalStates.overviewOpen && !GlobalStates.editMode
                 && !!dockRoot.overviewController && dockRoot.overviewController.isRealGnome
-            property bool reveal: !GlobalStates.presetBarHidden && !dockRoot.realGnomeOverviewOpen && (dock.pinned || GlobalStates.editMode || DockPresets.isSwitchingPreset || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor)))))
+            // A fullscreen window takes the screen even from a pinned dock: it hides, holds no
+            // zone, and shows on hover like an unpinned one (when hover is allowed there).
+            readonly property bool pinnedShown: dock.pinned && !dockRoot.hasFullscreenWindow
+            property bool reveal: !GlobalStates.presetBarHidden && !dockRoot.realGnomeOverviewOpen && (dockRoot.pinnedShown || GlobalStates.editMode || DockPresets.isSwitchingPreset || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor)))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations
@@ -356,9 +359,11 @@ Scope {
             readonly property bool isHug: dockContent.isHug
             readonly property bool isTransparent: dockContent.isTransparent
             // The top layer's frame band fills this edge in the frame's colour: a full-width
-            // tray whenever it shows, any tray while pinned.
+            // tray whenever it shows, any tray while pinned. A fullscreen window folds the
+            // frame away, band included, so the dock paints its own tray over it.
             readonly property bool onFrameBand: !!GlobalStates.dockBandScreens[dockRoot.screen?.name ?? ""]
-                && (dockRoot.isFullWidth || dock.pinned)
+                && !dockRoot.hasFullscreenWindow
+                && (dockRoot.isFullWidth || dockRoot.pinnedShown)
             // Its compositor blur follows: nothing of its own to blur on the band.
             onOnFrameBandChanged: Appearance.dockOnFrameBand = dockRoot.onFrameBand
             Component.onCompleted: Appearance.dockOnFrameBand = dockRoot.onFrameBand
@@ -427,7 +432,7 @@ Scope {
                 const atFar = dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "right";
                 // A pinned dock shortens the bar's window from its own side, which
                 // moves the pill's centre away from the dock by half the zone.
-                const pinZone = (dock.pinned && dockRoot.reveal) ? dockRoot.unmagnifiedThickness : 0;
+                const pinZone = (dockRoot.pinnedShown && dockRoot.reveal) ? dockRoot.unmagnifiedThickness : 0;
                 const centre = crossLen / 2 + (atFar ? -pinZone : pinZone) / 2;
                 // The band the dock fills across the screen: its tray plus the room its
                 // concave corners keep, inside the frame's ring.
@@ -471,7 +476,7 @@ Scope {
             readonly property real actualWindowWidth: width
             readonly property real actualWindowHeight: height
 
-            exclusiveZone: (dock.pinned && reveal) ? unmagnifiedThickness : 0
+            exclusiveZone: (pinnedShown && reveal) ? unmagnifiedThickness : 0
             WlrLayershell.namespace: "quickshell:dock"
             WlrLayershell.layer: WlrLayer.Overlay
             color: "transparent"
@@ -491,7 +496,7 @@ Scope {
             // strip took the pointer again, and it showed: a loop at that spot.
             readonly property bool fullInputMask: !dockRoot.reveal
                 || dockContent.dragging
-                || (dockMouseArea.containsMouse && (dockRoot.enableMagnification || !dock.pinned))
+                || (dockMouseArea.containsMouse && (dockRoot.enableMagnification || !dockRoot.pinnedShown))
             mask: Region {
                 item: dockRoot.fullInputMask ? dockMouseArea : trayInputArea
             }
