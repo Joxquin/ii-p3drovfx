@@ -109,6 +109,16 @@ PanelWindow {
     // It follows the tray's reveal slide, which is what the dock no longer paints.
     readonly property real dockTopBandTarget: (dockShapesShell && dockInset && dockInset.side === "top") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
     readonly property real dockBottomBandTarget: (dockShapesShell && dockInset && dockInset.side === "bottom") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
+    readonly property real dockLeftBandTarget: (dockShapesShell && dockInset && dockInset.side === "left") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
+    readonly property real dockRightBandTarget: (dockShapesShell && dockInset && dockInset.side === "right") ? Math.max(dockInset.reserved ?? 0, dockInset.shown ?? 0) : 0
+    property real dockLeftBand: dockLeftBandTarget
+    property real dockRightBand: dockRightBandTarget
+    Behavior on dockLeftBand {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(topPanel)
+    }
+    Behavior on dockRightBand {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(topPanel)
+    }
     property real dockTopBand: dockTopBandTarget
     property real dockBottomBand: dockBottomBandTarget
     Behavior on dockTopBand {
@@ -333,6 +343,8 @@ PanelWindow {
             sidebarBottomOffset: topPanel.sidebarBottomOffset
             dockTopInset: topPanel.dockTopBand
             dockBottomInset: topPanel.dockBottomBand
+            dockLeftInset: topPanel.dockLeftBand
+            dockRightInset: topPanel.dockRightBand
         }
     }
 

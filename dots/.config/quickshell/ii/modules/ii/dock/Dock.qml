@@ -357,7 +357,7 @@ Scope {
             readonly property bool isTransparent: dockContent.isTransparent
             // The top layer's frame band fills this edge in the frame's colour: a full-width
             // tray whenever it shows, any tray while pinned.
-            readonly property bool onFrameBand: !dock.isVertical && !!GlobalStates.dockBandScreens[dockRoot.screen?.name ?? ""]
+            readonly property bool onFrameBand: !!GlobalStates.dockBandScreens[dockRoot.screen?.name ?? ""]
                 && (dockRoot.isFullWidth || dock.pinned)
             // Its compositor blur follows: nothing of its own to blur on the band.
             onOnFrameBandChanged: Appearance.dockOnFrameBand = dockRoot.onFrameBand
