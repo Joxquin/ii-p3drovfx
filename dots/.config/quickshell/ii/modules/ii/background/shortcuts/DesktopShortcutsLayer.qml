@@ -557,11 +557,12 @@ Item {
             const entry = iconModel.get(i).entry;
             if (ids.indexOf(entry.id) === -1)
                 continue;
-            const s = root.positionAt(entry.x, entry.y);
+            const span = DesktopShortcuts.spanOf(entry);
+            const s = root.positionAt(entry.x, entry.y, span);
             minX = Math.max(minX, -s.x);
-            maxX = Math.min(maxX, root.width - root.cellWidth - s.x);
+            maxX = Math.min(maxX, root.width - root.cellWidth * span - s.x);
             minY = Math.max(minY, -s.y);
-            maxY = Math.min(maxY, root.height - root.cellHeight - s.y);
+            maxY = Math.min(maxY, root.height - root.cellHeight * span - s.y);
         }
         return Qt.point(Math.max(minX, Math.min(maxX, dx)), Math.max(minY, Math.min(maxY, dy)));
     }
@@ -714,9 +715,40 @@ Item {
         root.popupId = "";
     }
 
-    function positionAt(x, y) {
-        return Qt.point(Math.max(0, Math.min(width - cellWidth, Math.round(x / 10) * 10)),
-                        Math.max(0, Math.min(height - cellHeight, Math.round(y / 10) * 10)));
+    // An app group's look: its own override, else the Edit Mode default,
+    // else (auto) what the icon background does for every other icon.
+    function groupShapeOf(entry) {
+        const v = entry.shape || (root.options.groupShape ?? "auto");
+        if (v !== "auto")
+            return v;
+        const bg = root.options.iconBackground ?? "none";
+        return bg === "circle" ? "circle" : bg === "squircle" ? "squircle" : "rounded";
+    }
+    function groupFillOf(entry) {
+        const v = entry.color || (root.options.groupColor ?? "auto");
+        const bg = root.options.iconBackground ?? "none";
+        if (v === "primary" || (v === "auto" && (bg === "circle" || bg === "squircle")))
+            return Appearance.colors.colPrimaryContainer;
+        if (v === "secondary")
+            return Appearance.colors.colSecondaryContainer;
+        if (v === "tertiary")
+            return Appearance.colors.colTertiaryContainer;
+        return Appearance.m3colors.m3surfaceContainerHigh;
+    }
+    function groupOnFillOf(entry) {
+        const v = entry.color || (root.options.groupColor ?? "auto");
+        const bg = root.options.iconBackground ?? "none";
+        if (v === "primary" || (v === "auto" && (bg === "circle" || bg === "squircle")))
+            return Appearance.colors.colOnPrimaryContainer;
+        if (v === "secondary")
+            return Appearance.colors.colOnSecondaryContainer;
+        if (v === "tertiary")
+            return Appearance.colors.colOnTertiaryContainer;
+        return Appearance.m3colors.m3onSurface;
+    }
+    function positionAt(x, y, span = 1) {
+        return Qt.point(Math.max(0, Math.min(width - cellWidth * span, Math.round(x / 10) * 10)),
+                        Math.max(0, Math.min(height - cellHeight * span, Math.round(y / 10) * 10)));
     }
 
     // The merge target under (x, y). With autoArrange only the middle of a
@@ -726,10 +758,11 @@ Item {
         const insetY = root.autoArrange ? root.cellHeight * 0.22 : 0;
         for (let i = 0; i < iconModel.count; ++i) {
             const item = iconModel.get(i).entry;
-            const s = root.positionAt(item.x, item.y);
+            const span = DesktopShortcuts.spanOf(item);
+            const s = root.positionAt(item.x, item.y, span);
             if (item.id !== exceptId && DesktopShortcuts.isGroupable(item)
-                && x >= s.x + insetX && x < s.x + root.cellWidth - insetX
-                && y >= s.y + insetY && y < s.y + root.cellHeight - insetY)
+                && x >= s.x + insetX && x < s.x + root.cellWidth * span - insetX
+                && y >= s.y + insetY && y < s.y + root.cellHeight * span - insetY)
                 return item.id;
         }
         return "";
@@ -888,9 +921,9 @@ Item {
             return [];
         const out = [];
         const inset = root.plateInset;
-        const push = (id, x, y, kind) => {
+        const push = (id, x, y, kind, span = 1) => {
             const p = root.mapToItem(null, x + inset, y + inset);
-            out.push({ "id": id, "x": p.x, "y": p.y, "w": root.cellWidth - inset * 2, "h": root.cellHeight - inset * 2, "kind": kind });
+            out.push({ "id": id, "x": p.x, "y": p.y, "w": root.cellWidth * span - inset * 2, "h": root.cellHeight * span - inset * 2, "kind": kind });
         };
         for (let i = 0; i < iconRepeater.count; ++i) {
             const tile = iconRepeater.itemAt(i);
@@ -902,17 +935,17 @@ Item {
                 // A selection handed to the system is hidden: each member's
                 // landing spot stands in for it (a single drag has the ghost).
                 if (groupDrag.active)
-                    push(tile.entry.id, tile.x + follow.x, tile.y + follow.y, "ghost");
+                    push(tile.entry.id, tile.x + follow.x, tile.y + follow.y, "ghost", tile.span);
                 continue;
             }
             if (tile.selected)
                 push(tile.entry.id, tile.x + follow.x, tile.y + follow.y,
-                    root.focusId === tile.entry.id && root.selectedIds.length > 1 ? "focus" : "selected");
+                    root.focusId === tile.entry.id && root.selectedIds.length > 1 ? "focus" : "selected", tile.span);
             else if (tile.hovered && !tile.dragging && root.dropTargetId !== tile.entry.id)
-                push(tile.entry.id, tile.x, tile.y, "hover");
+                push(tile.entry.id, tile.x, tile.y, "hover", tile.span);
         }
         if (dropGhost.shown)
-            push("__ghost__", dropGhost.x, dropGhost.y, "ghost");
+            push("__ghost__", dropGhost.x, dropGhost.y, "ghost", dropGhost.span);
         return out;
     }
     onPlateEntriesChanged: DesktopShortcuts.setPlates(root.screenName, root.plateEntries)
@@ -956,9 +989,23 @@ Item {
         }
         return best;
     }
+    // A click on an extended group at (x, y) in its tile: spots 0-2 launch
+    // their app, the last one (or a spot with no app) opens the mini group.
+    function openGroupSpot(tile, x, y) {
+        const spot = (y >= tile.height / 2 ? 2 : 0) + (x >= tile.width / 2 ? 1 : 0);
+        const app = spot < 3 ? (tile.entry.apps ?? [])[spot] : null;
+        if (app) {
+            root.selectedIds = [];
+            DesktopShortcuts.launch(app);
+        } else if (spot === 3) {
+            root.openEntry(tile.entry);
+        }
+    }
     function openEntry(entry) {
         const tile = root.tileFor(entry.id);
-        if (entry.type === "group" && tile)
+        if (entry.type === "group" && tile && tile.span > 1)
+            root.openPopup(entry.id, tile.x + tile.width / 2, tile.y + tile.height / 2, tile.width / 2, tile.height / 2);
+        else if (entry.type === "group" && tile)
             root.openPopup(entry.id, tile.x, tile.y, tile.width, tile.height);
         else
             DesktopShortcuts.launch(entry);
@@ -1067,8 +1114,9 @@ Item {
         // Placed by onDragPlanChanged: it keeps its last cell while fading
         // out, and jumps (rather than slides) to the first one of a drag.
         property bool snapping: false
-        width: root.cellWidth
-        height: root.cellHeight
+        readonly property int span: root.dragId !== "" ? DesktopShortcuts.spanOf(root.items.find(e => e.id === root.dragId)) : 1
+        width: root.cellWidth * span
+        height: root.cellHeight * span
         radius: root.plateRadius
         color: Qt.alpha(root.colGhost, root.ghostAlpha)
         opacity: dropGhost.shown && !root.platesOnWallpaper ? 1 : 0
@@ -1399,7 +1447,8 @@ Item {
             id: tile
             required property var entry
             required property int mergePulse
-            readonly property point settled: root.positionAt(entry.x, entry.y)
+            readonly property int span: DesktopShortcuts.spanOf(entry)
+            readonly property point settled: root.positionAt(entry.x, entry.y, tile.span)
             property bool dragging: false
             property bool suppressClick: false
             property point pressPoint: Qt.point(0, 0)
@@ -1495,8 +1544,8 @@ Item {
 
             x: settled.x + offX
             y: settled.y + offY
-            width: root.cellWidth
-            height: root.cellHeight
+            width: root.cellWidth * tile.span
+            height: root.cellHeight * tile.span
             z: dragging || merging ? 2 : (glideMotion.running ? 1 : 0)
 
             // ── Entrance ───────────────────────────────────────────────────
@@ -1619,7 +1668,7 @@ Item {
                     }
                 }
                 tile.suppressClick = true;
-                tile.pending = root.positionAt(tile.origin.x + dx, tile.origin.y + dy);
+                tile.pending = root.positionAt(tile.origin.x + dx, tile.origin.y + dy, tile.span);
                 if (groupDrag.leaderId === tile.entry.id) {
                     // Re-clamp the leader's own snapped position to what
                     // the cluster's tightest member allows, so the whole
@@ -1778,7 +1827,22 @@ Item {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                 }
+                // An extended group draws its own 2x2 spots instead.
+                Loader {
+                    anchors.fill: parent
+                    active: tile.span > 1
+                    sourceComponent: DesktopGroupLarge {
+                        host: root
+                        entry: tile.entry
+                        shape: root.groupShapeOf(tile.entry)
+                        fill: root.groupFillOf(tile.entry)
+                        onFill: root.groupOnFillOf(tile.entry)
+                        hovering: tile.hovered
+                        hoverPoint: tileHover.point.position
+                    }
+                }
                 ColumnLayout {
+                    visible: tile.span === 1
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
@@ -2043,26 +2107,10 @@ Item {
                 }
                 Component {
                     id: groupIcon
-                    Rectangle {
-                        id: groupPlate
-                        readonly property string style: root.options.iconBackground ?? "none"
-                        radius: style === "circle" ? width / 2 : style === "squircle" ? width * 0.3 : Appearance.rounding.normal
-                        color: style === "circle" || style === "squircle" ? Appearance.colors.colPrimaryContainer
-                            : Appearance.m3colors.m3surfaceContainerHigh
-                        Grid {
-                            anchors.centerIn: parent
-                            columns: 2
-                            spacing: 4 * root.iconScale
-                            Repeater {
-                                model: tile.entry.apps.slice(0, 4)
-                                delegate: IconImage {
-                                    required property var modelData
-                                    implicitSize: (groupPlate.style === "circle" ? 18 : 22) * root.iconScale
-                                    mipmap: true
-                                    source: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
-                                }
-                            }
-                        }
+                    DesktopGroupFace {
+                        apps: tile.entry.apps
+                        shape: root.groupShapeOf(tile.entry)
+                        fill: root.groupFillOf(tile.entry)
                     }
                 }
             }
@@ -2122,7 +2170,14 @@ Item {
                             root.clearSelection();
                         const p = root.mapFromItem(gesture, mouse.x, mouse.y);
                         root.openContext(tile.entry.id, p.x, p.y);
+                    } else if (tile.span > 1) {
+                        // An extended group: the spot under the pointer opens
+                        // its own app, the mini group opens the popup.
+                        root.armedId = "";
+                        clickTimer.stop();
+                        root.openGroupSpot(tile, mouse.x, mouse.y);
                     } else if (Config.options.interactions.desktopDoubleClick
+                        && tile.entry.type !== "group"
                         && root.armedId !== tile.entry.id) {
                         // First beat of the pair: select it, arm, wait. The
                         // halo is the feedback that the icon is loaded.
@@ -2202,6 +2257,13 @@ Item {
                 const r = root.popupRect;
                 root.closePopup();
                 root.openContext(id, r.x + r.width / 2, r.y + r.height / 2, "rename");
+            }
+            onExtendRequested: {
+                const id = root.popupId;
+                const screenName = root.screenName;
+                const large = !(root.popupEntry?.large ?? false);
+                root.closePopup();
+                Qt.callLater(() => DesktopShortcuts.setGroupLarge(screenName, id, large));
             }
             onUngroupRequested: {
                 const id = root.popupId;

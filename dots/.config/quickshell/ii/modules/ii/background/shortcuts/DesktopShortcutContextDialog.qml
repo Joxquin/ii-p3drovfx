@@ -51,6 +51,7 @@ ItemContextDialog {
     // is not 1; only the unscaled surface has the bar and dock over it.
     insets: root.counterScale === 1 ? DesktopShortcuts.panelInsets(root.screenName) : ({ left: 8, top: 8, right: 8, bottom: 8 })
 
+    readonly property bool isUserGroup: entry.type === "group" && !entry.stack
     menuId: "desktopItem"
     customTarget: entry.path ?? ""
     title: entry.name || entry.id || ""
@@ -141,6 +142,11 @@ ItemContextDialog {
         { id: "pinDock", text: Translation.tr("Pinned to dock"), icon: "push_pin",
             toggle: true, checked: root.dockPinned, visible: root.pinKey !== "" },
         { id: "rename", text: Translation.tr("Rename"), icon: "edit", submenu: true, enabled: root.writable },
+        { id: "extend", text: entry.large ? Translation.tr("Shrink group") : Translation.tr("Extend group"),
+            icon: entry.large ? "close_fullscreen" : "open_in_full",
+            visible: isUserGroup && root.selectionCount === 1, enabled: root.writable },
+        { id: "style", text: Translation.tr("Group style"), icon: "palette", submenu: true,
+            visible: isUserGroup, enabled: root.writable },
         { id: "icon", text: Translation.tr("Change icon"), icon: "image", submenu: true,
             visible: entry.type === "directory", enabled: root.writable },
         { id: "details", text: Translation.tr("Details"), icon: "info", submenu: true },
@@ -168,7 +174,7 @@ ItemContextDialog {
         : page === "add" ? addPage : page === "member" ? memberPage : page === "details" ? detailsPage
         : page === "icon" ? iconPage : page === "copy" ? copyPage
         : page === "arrange" ? arrangePage : page === "screen" ? screenPage
-        : page === "section" ? sectionPage : page === "sectionRename" ? sectionRenamePage : null
+        : page === "style" ? stylePage : page === "section" ? sectionPage : page === "sectionRename" ? sectionRenamePage : null
     pageDepth: page === "" ? 0 : (page === "add" || page === "member" || page === "sectionRename" ? 2 : 1)
     onBackRequested: root.back()
     function back() {
@@ -192,6 +198,12 @@ ItemContextDialog {
                 TaskbarApps.togglePinnedFile(root.entry.path);
             else
                 TaskbarApps.togglePin(root.pinKey);
+        } else if (actionId === "extend") {
+            const large = !root.entry.large;
+            const from = root.screenName;
+            const id = root.entry.id;
+            root.dismiss();
+            Qt.callLater(() => DesktopShortcuts.setGroupLarge(from, id, large));
         } else if (actionId === "remove") {
             root.pendingAction = "remove";
             root.dismiss();
@@ -1111,6 +1123,60 @@ esac`
                         return;
                     root.sectionRenameRequested(root.currentSection, sectionNameField.text.trim());
                     root.page = "section";
+                }
+            }
+        }
+    }
+    // A group's own shape and colour; "Default" hands it back to Edit Mode's.
+    Component {
+        id: stylePage
+        ColumnLayout {
+            id: styleColumn
+            spacing: 3
+            readonly property var shapes: [
+                { value: "", text: Translation.tr("Default"), icon: "restart_alt" },
+                { value: "rounded", text: Translation.tr("Rounded"), icon: "rounded_corner" },
+                { value: "squircle", text: Translation.tr("Squircle"), icon: "square" },
+                { value: "circle", text: Translation.tr("Circle"), icon: "circle" },
+                { value: "cookie", text: Translation.tr("Cookie"), icon: "cookie" },
+                { value: "clover", text: Translation.tr("Clover"), icon: "filter_vintage" }
+            ]
+            readonly property var colors: [
+                { value: "", text: Translation.tr("Default"), icon: "restart_alt" },
+                { value: "primary", text: Translation.tr("Primary"), icon: "water_drop" },
+                { value: "secondary", text: Translation.tr("Secondary"), icon: "water_drop" },
+                { value: "tertiary", text: Translation.tr("Tertiary"), icon: "water_drop" },
+                { value: "neutral", text: Translation.tr("Neutral"), icon: "water_drop" }
+            ]
+            PageHeader { title: Translation.tr("Group style") }
+            EditPanelSectionLabel { text: Translation.tr("Shape") }
+            Repeater {
+                model: styleColumn.shapes
+                delegate: MenuRow {
+                    required property var modelData
+                    required property int index
+                    first: index === 0
+                    last: index === styleColumn.shapes.length - 1
+                    symbol: modelData.icon
+                    title: modelData.text
+                    trailingKind: (root.entry.shape ?? "") === modelData.value ? "check" : "none"
+                    rowEnabled: root.writable
+                    onActivated: DesktopShortcuts.setGroupStyle(root.screenName, root.entry.id, { shape: modelData.value })
+                }
+            }
+            EditPanelSectionLabel { text: Translation.tr("Colour") }
+            Repeater {
+                model: styleColumn.colors
+                delegate: MenuRow {
+                    required property var modelData
+                    required property int index
+                    first: index === 0
+                    last: index === styleColumn.colors.length - 1
+                    symbol: modelData.icon
+                    title: modelData.text
+                    trailingKind: (root.entry.color ?? "") === modelData.value ? "check" : "none"
+                    rowEnabled: root.writable
+                    onActivated: DesktopShortcuts.setGroupStyle(root.screenName, root.entry.id, { color: modelData.value })
                 }
             }
         }

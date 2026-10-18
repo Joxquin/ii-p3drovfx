@@ -151,6 +151,8 @@ Singleton {
                 { "id": "pinDock", "symbol": "push_pin", "title": "Pinned to dock" },
                 { "id": "separator", "separator": true },
                 { "id": "rename", "symbol": "edit", "title": "Rename", "submenu": true, "bar": true },
+                { "id": "extend", "symbol": "open_in_full", "title": "Extend group" },
+                { "id": "style", "symbol": "palette", "title": "Group style", "submenu": true },
                 { "id": "icon", "symbol": "image", "title": "Change icon", "submenu": true },
                 { "id": "details", "symbol": "info", "title": "Details", "submenu": true, "bar": true },
                 { "id": "reveal", "symbol": "folder_open", "title": "Show in folder" },

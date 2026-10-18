@@ -335,18 +335,30 @@ Singleton {
             byColumns: (root.options.flow ?? "columns") !== "rows"
         };
     }
-    function cellPos(g, col, row) {
-        const x = g.right ? g.area.x + g.area.width - (col + 1) * g.cw : g.area.x + col * g.cw;
-        const y = g.bottom ? g.area.y + g.area.height - (row + 1) * g.ch : g.area.y + row * g.ch;
+    // How many cells a side an entry covers: an extended app group is a 2x2
+    // block (three apps and a mini group), everything else is one cell.
+    function spanOf(item) {
+        return item && item.type === "group" && item.large && !item.stack ? 2 : 1;
+    }
+    // Blocks are addressed by their lowest cell indices, so a 2x2 covers
+    // (col..col+1, row..row+1) whichever corner the grid grows from. With
+    // span 1 every function below is the single-cell original.
+    function cellPos(g, col, row, span = 1) {
+        const left = g.right ? col + span - 1 : col;
+        const top = g.bottom ? row + span - 1 : row;
+        const x = g.right ? g.area.x + g.area.width - (left + 1) * g.cw : g.area.x + left * g.cw;
+        const y = g.bottom ? g.area.y + g.area.height - (top + 1) * g.ch : g.area.y + top * g.ch;
         return {
-            x: Math.max(0, Math.min(g.area.screenWidth - g.cw, x)),
-            y: Math.max(0, Math.min(g.area.screenHeight - g.ch, y))
+            x: Math.max(0, Math.min(g.area.screenWidth - g.cw * span, x)),
+            y: Math.max(0, Math.min(g.area.screenHeight - g.ch * span, y))
         };
     }
-    function cellOf(g, x, y) {
-        const col = Math.round((g.right ? g.area.x + g.area.width - g.cw - x : x - g.area.x) / g.cw);
-        const row = Math.round((g.bottom ? g.area.y + g.area.height - g.ch - y : y - g.area.y) / g.ch);
-        return { col: Math.max(0, Math.min(g.cols - 1, col)), row: Math.max(0, Math.min(g.rows - 1, row)) };
+    function cellOf(g, x, y, span = 1) {
+        const left = Math.round((g.right ? g.area.x + g.area.width - g.cw - x : x - g.area.x) / g.cw);
+        const top = Math.round((g.bottom ? g.area.y + g.area.height - g.ch - y : y - g.area.y) / g.ch);
+        const col = g.right ? left - span + 1 : left;
+        const row = g.bottom ? top - span + 1 : top;
+        return { col: Math.max(0, Math.min(g.cols - span, col)), row: Math.max(0, Math.min(g.rows - span, row)) };
     }
     // The i-th cell in fill order: down the first column (or across the
     // first row) from the origin corner. Past the last cell the fill keeps
@@ -359,13 +371,25 @@ Singleton {
     function key(cell) {
         return cell.col + ":" + cell.row;
     }
-    // The free cell closest to (col, row), by distance; the cell itself
-    // when the whole area is taken.
-    function nearestFree(g, taken, col, row) {
+    function blockFree(taken, col, row, span) {
+        for (let c = 0; c < span; ++c)
+            for (let r = 0; r < span; ++r)
+                if (taken.has((col + c) + ":" + (row + r)))
+                    return false;
+        return true;
+    }
+    function markBlock(taken, cell, span) {
+        for (let c = 0; c < span; ++c)
+            for (let r = 0; r < span; ++r)
+                taken.add((cell.col + c) + ":" + (cell.row + r));
+    }
+    // The free cell (block, for a span above 1) closest to (col, row), by
+    // distance; the cell itself when the whole area is taken.
+    function nearestFree(g, taken, col, row, span = 1) {
         let best = null, bestDistance = Infinity;
-        for (let c = 0; c < g.cols; ++c) {
-            for (let r = 0; r < g.rows; ++r) {
-                if (taken.has(c + ":" + r))
+        for (let c = 0; c <= g.cols - span; ++c) {
+            for (let r = 0; r <= g.rows - span; ++r) {
+                if (!root.blockFree(taken, c, r, span))
                     continue;
                 const d = (c - col) * (c - col) * g.cw * g.cw + (r - row) * (r - row) * g.ch * g.ch;
                 if (d < bestDistance) {
@@ -376,10 +400,10 @@ Singleton {
         }
         return best ?? { col: col, row: row };
     }
-    function firstFree(g, taken) {
+    function firstFree(g, taken, span = 1) {
         for (let i = 0; i < g.cols * g.rows; ++i) {
             const cell = root.slotCell(g, i);
-            if (!taken.has(root.key(cell)))
+            if (cell.col + span <= g.cols && cell.row + span <= g.rows && root.blockFree(taken, cell.col, cell.row, span))
                 return cell;
         }
         return null;
@@ -393,41 +417,49 @@ Singleton {
     function fileUrl(path) {
         return "file://" + path.split("/").map(part => encodeURIComponent(part)).join("/");
     }
-    function fits(g, others, x, y) {
-        return !others.some(other => Math.abs(x - other.x) < g.cw && Math.abs(y - other.y) < g.ch);
+    function fits(g, others, x, y, span = 1) {
+        const w = g.cw * span, h = g.ch * span;
+        return !others.some(o => {
+            const s = root.spanOf(o);
+            return x < o.x + g.cw * s && x + w > o.x && y < o.y + g.ch * s && y + h > o.y;
+        });
     }
-    function freeSpot(g, others, x, y) {
-        const clampX = v => Math.max(0, Math.min(g.area.screenWidth - g.cw, Math.round(v)));
-        const clampY = v => Math.max(0, Math.min(g.area.screenHeight - g.ch, Math.round(v)));
+    function freeSpot(g, others, x, y, span = 1) {
+        const w = g.cw * span, h = g.ch * span;
+        const clampX = v => Math.max(0, Math.min(g.area.screenWidth - w, Math.round(v)));
+        const clampY = v => Math.max(0, Math.min(g.area.screenHeight - h, Math.round(v)));
         const ox = clampX(x), oy = clampY(y);
-        if (root.fits(g, others, ox, oy))
+        if (root.fits(g, others, ox, oy, span))
             return { x: ox, y: oy };
         let best = null, bestDistance = Infinity;
         const consider = (px, py) => {
             px = clampX(px);
             py = clampY(py);
             const d = (px - ox) * (px - ox) + (py - oy) * (py - oy);
-            if (d < bestDistance && root.fits(g, others, px, py)) {
+            if (d < bestDistance && root.fits(g, others, px, py, span)) {
                 bestDistance = d;
                 best = { x: px, y: py };
             }
         };
         for (const other of others) {
-            if (Math.abs(ox - other.x) >= g.cw * 2 || Math.abs(oy - other.y) >= g.ch * 2)
+            const os = root.spanOf(other);
+            const ow = g.cw * os, oh = g.ch * os;
+            if (ox >= other.x + ow + w || ox <= other.x - ow - w || oy >= other.y + oh + h || oy <= other.y - oh - h)
                 continue;
             for (const dx of [-1, 0, 1]) {
                 for (const dy of [-1, 0, 1]) {
                     if (dx === 0 && dy === 0)
                         continue;
-                    consider(dx === 0 ? ox : other.x + dx * g.cw, dy === 0 ? oy : other.y + dy * g.ch);
+                    consider(dx === 0 ? ox : dx < 0 ? other.x - w : other.x + ow,
+                        dy === 0 ? oy : dy < 0 ? other.y - h : other.y + oh);
                 }
             }
         }
         if (best)
             return best;
-        const want = root.cellOf(g, ox, oy);
-        const cell = root.nearestFree(g, root.takenCells(g, others), want.col, want.row);
-        return root.cellPos(g, cell.col, cell.row);
+        const want = root.cellOf(g, ox, oy, span);
+        const cell = root.nearestFree(g, root.takenCells(g, others), want.col, want.row, span);
+        return root.cellPos(g, cell.col, cell.row, span);
     }
     // Moved items resolved one after another against what stays and what
     // has already landed, so a group keeps its shape where it fits.
@@ -438,7 +470,7 @@ Singleton {
         for (const item of items) {
             if (!moving.has(item.id))
                 continue;
-            const spot = root.freeSpot(g, placed, item.x, item.y);
+            const spot = root.freeSpot(g, placed, item.x, item.y, root.spanOf(item));
             const moved = Object.assign({}, item, spot);
             placed.push(moved);
             landed.set(item.id, moved);
@@ -449,15 +481,19 @@ Singleton {
     function planFreeDrop(screenName, ids, x, y) {
         const g = root.grid(screenName);
         const skip = new Set(ids);
-        const spot = root.freeSpot(g, root.itemsFor(screenName).filter(item => !skip.has(item.id)), x, y);
+        const all = root.itemsFor(screenName);
+        const span = ids.length === 1 ? root.spanOf(all.find(item => item.id === ids[0])) : 1;
+        const spot = root.freeSpot(g, all.filter(item => !skip.has(item.id)), x, y, span);
         return { x: spot.x, y: spot.y, bumpId: "", bumpX: 0, bumpY: 0 };
     }
 
     function takenCells(g, items, exceptIds) {
         const taken = new Set();
         for (const item of items) {
-            if (!exceptIds || !exceptIds.has(item.id))
-                taken.add(root.key(root.cellOf(g, item.x, item.y)));
+            if (!exceptIds || !exceptIds.has(item.id)) {
+                const span = root.spanOf(item);
+                root.markBlock(taken, root.cellOf(g, item.x, item.y, span), span);
+            }
         }
         return taken;
     }
@@ -470,18 +506,23 @@ Singleton {
         for (const item of items) {
             if (!moving.has(item.id))
                 continue;
-            const want = root.cellOf(g, item.x, item.y);
-            const cell = root.nearestFree(g, taken, want.col, want.row);
-            taken.add(root.key(cell));
-            landed.set(item.id, root.cellPos(g, cell.col, cell.row));
+            const span = root.spanOf(item);
+            const want = root.cellOf(g, item.x, item.y, span);
+            const cell = root.nearestFree(g, taken, want.col, want.row, span);
+            root.markBlock(taken, cell, span);
+            landed.set(item.id, root.cellPos(g, cell.col, cell.row, span));
         }
         return items.map(item => landed.has(item.id) ? Object.assign({}, item, landed.get(item.id)) : item);
     }
-    // Lay the items out in the given order, one cell each, from the origin.
+    // Lay the items out in the given order, from the origin: one cell each, a
+    // block for an extended group.
     function arrangeList(g, ordered) {
+        const taken = new Set();
         return ordered.map((item, i) => {
-            const cell = root.slotCell(g, i);
-            return Object.assign({}, item, root.cellPos(g, cell.col, cell.row));
+            const span = root.spanOf(item);
+            const cell = root.firstFree(g, taken, span) ?? root.slotCell(g, i);
+            root.markBlock(taken, cell, span);
+            return Object.assign({}, item, root.cellPos(g, cell.col, cell.row, span));
         });
     }
 
@@ -704,10 +745,11 @@ Singleton {
             const scaled = items.map(item => {
                 // Measured from the corner's own side of the icon, so the
                 // icons nearest the corner stay put.
-                const ex = g.right ? item.x + ow : item.x;
-                const ey = g.bottom ? item.y + oh : item.y;
-                const nx = ax + (ex - ax) * sx - (g.right ? root.cellWidth : 0);
-                const ny = ay + (ey - ay) * sy - (g.bottom ? root.cellHeight : 0);
+                const span = root.spanOf(item);
+                const ex = g.right ? item.x + ow * span : item.x;
+                const ey = g.bottom ? item.y + oh * span : item.y;
+                const nx = ax + (ex - ax) * sx - (g.right ? root.cellWidth * span : 0);
+                const ny = ay + (ey - ay) * sy - (g.bottom ? root.cellHeight * span : 0);
                 return Object.assign({}, item, { x: Math.round(nx / 10) * 10, y: Math.round(ny / 10) * 10 });
             });
             next[name] = root.options.keepSorted ? root.normalize(name, scaled)
@@ -1076,9 +1118,10 @@ Singleton {
                         apps.push(app);
                 }
             }
-            items[targetIndex] = { id: target.type === "group" ? target.id : "group:" + Date.now(),
+            items[targetIndex] = Object.assign({}, target.type === "group" ? target : {}, {
+                id: target.type === "group" ? target.id : "group:" + Date.now(),
                 type: "group", name: target.type === "group" ? target.name : Translation.tr("App group"),
-                apps: apps, x: target.x, y: target.y, addedAt: target.addedAt ?? Date.now() };
+                apps: apps, x: target.x, y: target.y, addedAt: target.addedAt ?? Date.now() });
         } else {
             const g = root.grid(screenName);
             const cw = g.cw, ch = g.ch;
@@ -1097,7 +1140,7 @@ Singleton {
                     const p = root.cellPos(g, cell.col, cell.row);
                     px = p.x;
                     py = p.y;
-                } else if (items.some(item => Math.abs(item.x - px) < cw && Math.abs(item.y - py) < ch)) {
+                } else if (!root.fits(g, items, px, py)) {
                     const cell = root.firstFree(g, taken);
                     if (!cell) {
                         root.error = Translation.tr("No free space for desktop shortcuts");
@@ -1133,9 +1176,10 @@ Singleton {
                     apps.push(app);
             }
             root.save(screenName, items.filter(item => item.id !== itemId).map(item => item.id === target.id
-                ? { id: target.type === "group" ? target.id : "group:" + Date.now(), type: "group",
+                ? Object.assign({}, target.type === "group" ? target : {}, {
+                    id: target.type === "group" ? target.id : "group:" + Date.now(), type: "group",
                     name: target.type === "group" ? target.name : Translation.tr("App group"),
-                    apps: apps, x: target.x, y: target.y, addedAt: target.addedAt ?? Date.now() } : item));
+                    apps: apps, x: target.x, y: target.y, addedAt: target.addedAt ?? Date.now() }) : item));
         } else {
             root.releaseKeptOrder();
             let next = items.map(item => item.id === itemId
@@ -1156,16 +1200,34 @@ Singleton {
     function planDrop(screenName, itemId, x, y) {
         const g = root.grid(screenName);
         const items = root.itemsFor(screenName);
-        const cell = root.cellOf(g, x, y);
+        const mine = items.find(item => item.id === itemId);
+        const span = root.spanOf(mine);
+        const cell = root.cellOf(g, x, y, span);
+        const taken = root.takenCells(g, items, new Set([itemId]));
+        // The block the icon asks for, when something stands on it: a
+        // single icon sends the one it lands on to the nearest free cell,
+        // an extended group takes the nearest block that is already free.
+        if (span > 1 || root.blockFree(taken, cell.col, cell.row, span)) {
+            const free = span > 1 ? root.nearestFree(g, taken, cell.col, cell.row, span) : cell;
+            const p = root.cellPos(g, free.col, free.row, span);
+            return { x: p.x, y: p.y, bumpId: "", bumpX: 0, bumpY: 0 };
+        }
         const p = root.cellPos(g, cell.col, cell.row);
         const plan = { x: p.x, y: p.y, bumpId: "", bumpX: 0, bumpY: 0 };
-        const occupant = items.find(item => item.id !== itemId
-            && root.key(root.cellOf(g, item.x, item.y)) === root.key(cell));
+        const occupant = items.find(item => {
+            if (item.id === itemId)
+                return false;
+            const os = root.spanOf(item);
+            const oc = root.cellOf(g, item.x, item.y, os);
+            return cell.col >= oc.col && cell.col < oc.col + os && cell.row >= oc.row && cell.row < oc.row + os;
+        });
         if (occupant) {
-            const taken = root.takenCells(g, items, new Set([itemId, occupant.id]));
-            taken.add(root.key(cell));
-            const out = root.nearestFree(g, taken, cell.col, cell.row);
-            const q = root.cellPos(g, out.col, out.row);
+            const os = root.spanOf(occupant);
+            const free = root.takenCells(g, items, new Set([itemId, occupant.id]));
+            root.markBlock(free, cell, 1);
+            const oc = root.cellOf(g, occupant.x, occupant.y, os);
+            const out = root.nearestFree(g, free, oc.col, oc.row, os);
+            const q = root.cellPos(g, out.col, out.row, os);
             plan.bumpId = occupant.id;
             plan.bumpX = q.x;
             plan.bumpY = q.y;
@@ -1205,7 +1267,11 @@ Singleton {
             ? Object.assign({}, item, { x: Math.round(landed.get(item.id).x), y: Math.round(landed.get(item.id).y) })
             : item);
         const fixed = next.filter(item => landed.has(item.id) && !landed.get(item.id).free);
-        const overlaps = (a, b) => Math.abs(a.x - b.x) < root.cellWidth && Math.abs(a.y - b.y) < root.cellHeight;
+        const overlaps = (a, b) => {
+            const sa = root.spanOf(a), sb = root.spanOf(b);
+            return a.x < b.x + root.cellWidth * sb && a.x + root.cellWidth * sa > b.x
+                && a.y < b.y + root.cellHeight * sb && a.y + root.cellHeight * sa > b.y;
+        };
         const displaced = next.filter(item => landed.has(item.id) ? landed.get(item.id).free
             : fixed.some(f => overlaps(f, item))).map(item => item.id);
         root.save(screenName, displaced.length > 0 ? root.resolveMoved(root.grid(screenName), next, displaced) : next);
@@ -1254,9 +1320,9 @@ Singleton {
         const order = chosen.slice().sort((a, b) => vertical ? (a.y - b.y) || (a.x - b.x) : (a.x - b.x) || (a.y - b.y));
         const others = items.filter(item => !picked.has(item.id));
         const placed = [];
-        const clash = (x, y) => others.concat(placed).some(o => Math.abs(o.x - x) < g.cw && Math.abs(o.y - y) < g.ch);
         const landed = new Map();
         for (const item of order) {
+            const clash = (x, y) => !root.fits(g, others.concat(placed), x, y, root.spanOf(item));
             let x = vertical ? line : item.x;
             let y = vertical ? item.y : line;
             let guard = 0;
@@ -1266,7 +1332,7 @@ Singleton {
                 else
                     x += g.cw;
             }
-            placed.push({ x: x, y: y });
+            placed.push(Object.assign({}, item, { x: x, y: y }));
             landed.set(item.id, { x: x, y: y });
         }
         root.save(screenName, items.map(item => landed.has(item.id) ? Object.assign({}, item, landed.get(item.id)) : item));
@@ -1305,10 +1371,10 @@ Singleton {
             return;
         const anchor = chosen.reduce((best, item) => (item.y < best.y || (item.y === best.y && item.x < best.x)) ? item : best, chosen[0]);
         const others = items.filter(item => !picked.has(item.id));
-        const clash = (x, y) => others.some(o => Math.abs(o.x - x) < g.cw && Math.abs(o.y - y) < g.ch);
         const landed = new Map();
         let x = anchor.x, y = anchor.y;
         for (const item of chosen) {
+            const clash = (x, y) => !root.fits(g, others, x, y, root.spanOf(item));
             let guard = 0;
             while (clash(x, y) && guard++ < 200) {
                 if (axis === "column")
@@ -1366,9 +1432,10 @@ Singleton {
         const taken = root.takenCells(g, target);
         const arrived = [];
         for (const item of leaving) {
-            const cell = root.firstFree(g, taken) ?? root.slotCell(g, target.length + arrived.length);
-            taken.add(root.key(cell));
-            arrived.push(Object.assign({}, item, root.cellPos(g, cell.col, cell.row)));
+            const span = root.spanOf(item);
+            const cell = root.firstFree(g, taken, span) ?? root.slotCell(g, target.length + arrived.length);
+            root.markBlock(taken, cell, span);
+            arrived.push(Object.assign({}, item, root.cellPos(g, cell.col, cell.row, span)));
         }
         root.pushUndo();
         const next = Object.assign({}, root.screens);
@@ -1428,13 +1495,54 @@ Singleton {
             return;
         const rest = items.filter(item => item.id !== groupId);
         const taken = root.takenCells(g, rest);
-        const home = root.cellOf(g, group.x, group.y);
+        const home = root.cellOf(g, group.x, group.y, root.spanOf(group));
         const members = (group.apps ?? []).map(app => {
             const cell = root.nearestFree(g, taken, home.col, home.row);
             taken.add(root.key(cell));
             return Object.assign({}, app, root.cellPos(g, cell.col, cell.row));
         });
         root.save(screenName, rest.concat(members));
+    }
+
+    // Extend a group into the 2x2 block (three apps and a mini group) or
+    // shrink it back to one cell. Growing needs a free block: it takes the
+    // nearest one to where the group stands, or says there is none.
+    function setGroupLarge(screenName, groupId, large) {
+        const items = root.itemsFor(screenName);
+        const group = items.find(item => item.id === groupId && item.type === "group" && !item.stack);
+        if (!group || !!group.large === large)
+            return false;
+        let spot = { x: group.x, y: group.y };
+        if (large) {
+            const g = root.grid(screenName);
+            const others = items.filter(item => item.id !== groupId);
+            spot = root.freeSpot(g, others, group.x, group.y, 2);
+            if (!root.fits(g, others, spot.x, spot.y, 2)) {
+                root.error = Translation.tr("No free space for desktop shortcuts");
+                return false;
+            }
+        }
+        return root.save(screenName, items.map(item => item.id === groupId
+            ? Object.assign({}, item, { large: large, x: spot.x, y: spot.y }) : item));
+    }
+    // A group's own look over the Edit Mode default: `shape` and `color`
+    // ("" keeps the default). Anything else in `patch` is ignored.
+    function setGroupStyle(screenName, groupId, patch) {
+        const keys = ["shape", "color"];
+        return root.save(screenName, root.itemsFor(screenName).map(item => {
+            if (item.id !== groupId || item.type !== "group")
+                return item;
+            const next = Object.assign({}, item);
+            for (const k of keys) {
+                if (patch[k] === undefined)
+                    continue;
+                if (patch[k] === "")
+                    delete next[k];
+                else
+                    next[k] = patch[k];
+            }
+            return next;
+        }));
     }
 
     function application(appId) {

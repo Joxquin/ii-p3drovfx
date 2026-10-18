@@ -5,3 +5,5 @@ DesktopShortcutContextDialog 1.0 DesktopShortcutContextDialog.qml
 DesktopShortcutGroupPopup 1.0 DesktopShortcutGroupPopup.qml
 ItemContextDialog 1.0 ItemContextDialog.qml
 DesktopIconPlates 1.0 DesktopIconPlates.qml
+DesktopGroupFace 1.0 DesktopGroupFace.qml
+DesktopGroupLarge 1.0 DesktopGroupLarge.qml

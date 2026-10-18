@@ -10,8 +10,10 @@ import qs.modules.common.widgets
 
 // A folder's contents, not its menu: left-clicking a group opens this card
 // beside the icon — the context dialog's surface language (same card colour,
-// border, corner, scrim and reveal), but a grid of the apps inside, each
-// launching on click. The context menu stays where it belongs: right-click.
+// border, corner, scrim and reveal) and its rows (ContextActionButton), one
+// per app inside, each launching on click. For an extended group the card
+// lists the members past the three on its face. The context menu stays where
+// it belongs: right-click.
 FocusScope {
     id: root
     required property var entry
@@ -26,10 +28,13 @@ FocusScope {
     // dissolves the members back onto the desktop.
     signal renameRequested()
     signal ungroupRequested()
+    // Extend the group into the big 2x2 block, or shrink it back.
+    signal extendRequested()
 
-    readonly property var apps: entry.apps ?? []
-    readonly property int columns: Math.max(1, Math.min(4, apps.length))
-    readonly property real cellWidth: 74
+    // An extended group shows its first three members on the desktop; this
+    // card holds the rest.
+    readonly property var apps: (entry.apps ?? []).slice(entry.large ? 3 : 0)
+    readonly property real cardWidth: 300
     property real reveal: 0
     property bool closing: false
     // The mode's shrink, undone: this card is laid out and drawn in SCREEN
@@ -57,7 +62,6 @@ FocusScope {
     readonly property real plateSpan: 0.22
     readonly property real rowLead: 0.2
     readonly property real rowSpan: 0.55
-    readonly property int gridRows: Math.ceil(apps.length / columns)
     function ease(t: real): real {
         return t * t * (3 - 2 * t);
     }
@@ -127,7 +131,7 @@ FocusScope {
                 ? Math.max(root.insets.top, tsy - implicitHeight - card.gap)
                 : tsy + tsh + card.gap) * k
         }
-        width: Math.min(root.width - 2 * card.gap, root.columns * root.cellWidth + (root.columns - 1) * 4 + 24)
+        width: Math.min(root.width - 2 * card.gap, root.cardWidth)
         height: implicitHeight
         implicitHeight: cardLayout.implicitHeight + 24
         radius: Appearance.rounding.windowRounding
@@ -204,6 +208,26 @@ FocusScope {
                     }
                 }
                 RippleButton {
+                    visible: !root.entry.stack
+                    implicitWidth: 34
+                    implicitHeight: 34
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colLayer1
+                    colRipple: Appearance.colors.colLayer1Active
+                    scaleBehaviorEnabled: false
+                    pointingHandCursor: true
+                    activeFocusOnTab: true
+                    onClicked: root.extendRequested()
+                    Keys.onReturnPressed: clicked()
+                    contentItem: MaterialSymbol {
+                        text: root.entry.large ? "close_fullscreen" : "open_in_full"
+                        iconSize: 18
+                        color: Appearance.m3colors.m3onSurface
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
+                RippleButton {
                     // A stack is kept by the stacks option, not by hand:
                     // ungrouping one would only see it re-form.
                     visible: !root.entry.stack
@@ -230,62 +254,36 @@ FocusScope {
             Flickable {
                 id: appFlickable
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(300, appGrid.implicitHeight)
+                Layout.preferredHeight: Math.min(380, appList.implicitHeight)
                 visible: root.apps.length > 0
-                contentHeight: appGrid.implicitHeight
+                contentHeight: appList.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
                 clip: true
 
                 TouchpadScrollHandler {
                     flickable: appFlickable
                 }
-                GridLayout {
-                    id: appGrid
+                ColumnLayout {
+                    id: appList
                     width: parent.width
-                    columns: root.columns
-                    columnSpacing: 4
-                    rowSpacing: 4
+                    spacing: 3
                     Repeater {
                         model: root.apps
-                        delegate: RippleButton {
+                        delegate: ContextActionButton {
                             required property var modelData
                             required property int index
-                            readonly property real arrived: root.rowReveal(
-                                Math.floor(index / root.columns), root.gridRows)
-                            implicitWidth: root.cellWidth
-                            implicitHeight: 76
-                            buttonRadius: Appearance.rounding.normal
-                            colBackground: "transparent"
-                            colBackgroundHover: Appearance.colors.colLayer1
-                            colBackgroundActive: Appearance.colors.colLayer1Active
-                            colRipple: Appearance.colors.colLayer1Active
-                            pointingHandCursor: true
-                            activeFocusOnTab: true
+                            readonly property real arrived: root.rowReveal(index, root.apps.length)
+                            textLabel: modelData.name || modelData.id
+                            iconSource: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
+                            // The card's own corner and padding: its 12px margin
+                            // plus the 1px border.
+                            hostRadius: card.radius
+                            hostInset: 13
                             opacity: arrived
                             visualScale: 0.965 + 0.035 * arrived
                             transformOrigin: Item.TopLeft
                             opacityBehaviorEnabled: root.reveal >= 1
-                            Keys.onReturnPressed: clicked()
                             onClicked: root.launch(modelData)
-                            contentItem: ColumnLayout {
-                                spacing: 2
-                                IconImage {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    Layout.topMargin: 8
-                                    implicitSize: 36
-                                    source: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
-                                }
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    Layout.margins: 6
-                                    Layout.topMargin: 0
-                                    text: modelData.name || modelData.id
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    horizontalAlignment: Text.AlignHCenter
-                                    elide: Text.ElideRight
-                                    maximumLineCount: 1
-                                }
-                            }
                         }
                     }
                 }
