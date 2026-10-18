@@ -27,6 +27,14 @@ Item {
     property color shadowColor: Qt.rgba(0, 0, 0, 0.5)
     // The key word of each line, once sung.
     property color accentColor: textColor
+    // What the words are painted with: never dark or see-through, whatever comes in
+    // (a dark extracted colour would leave black words on the dimmed artwork).
+    function legible(c) {
+        const q = Qt.color(c);
+        return Qt.hsla(Math.max(0, q.hslHue), q.hslSaturation, Math.max(0.68, q.hslLightness), 1);
+    }
+    readonly property color textInk: legible(textColor)
+    readonly property color accentInk: legible(accentColor)
     property real fontScale: 1
     // Part of the screen kept clear at the bottom-left for the title and transport.
     property real bottomInset: 0
@@ -855,7 +863,7 @@ Item {
                 ]
                 Text {
                     id: label
-                    property color ink: word.modelData.accent && word.revealed ? root.accentColor : root.textColor
+                    property color ink: word.modelData.accent && word.revealed ? root.accentInk : root.textInk
                     text: word.modelData.text
                     color: ink
                     renderType: Text.CurveRendering

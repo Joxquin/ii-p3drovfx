@@ -19,6 +19,17 @@ Item {
     property string layout: "side"
     /// 0 = side panels hidden, 1 = shown.
     property real panelProgress: 1
+    // The side wash behind the lyrics column. Kinetic lyrics cover the whole screen,
+    // so it steps away while they run.
+    property bool panelWashShown: true
+    property real panelWashAmount: panelWashShown ? 1 : 0
+    Behavior on panelWashAmount {
+        NumberAnimation {
+            duration: Appearance.animation.elementMove.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+    }
     property bool videoActive: false
     property color tint: Appearance.colors.colPrimary
     property color shade: Appearance.m3colors.m3scrim
@@ -596,7 +607,7 @@ Item {
         readonly property real strength: 0.35 + 0.65 * root.coverProgress
         anchors.fill: parent
         visible: !root.videoActive
-        opacity: root.panelProgress * strength
+        opacity: root.panelProgress * strength * root.panelWashAmount
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {
@@ -627,7 +638,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         visible: root.videoActive
-        opacity: root.panelProgress
+        opacity: root.panelProgress * root.panelWashAmount
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {

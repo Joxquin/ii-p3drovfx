@@ -280,6 +280,7 @@ Item {
             source: root.artSource
             layout: root.artLayout
             panelProgress: root.panelProgress
+            panelWashShown: !root.kineticShown
             videoActive: root.context.videoActive
             tint: root.tint
             fieldColor: root.fieldColor
@@ -336,6 +337,14 @@ Item {
         // Light fringes over the always-dark artwork, whatever the shell theme is.
         readonly property color visualizerColorA: ColorUtils.colorWithLightness(tint, 0.72)
         readonly property color visualizerColorB: ColorUtils.colorWithLightness(Appearance.m3colors.m3tertiary, 0.72)
+    // Kinetic lyrics' second ink. A colourless cover (black, grey, a dark photo) gave a
+    // grey or near-black accent, so those fall back to the theme's primary.
+    readonly property color kineticAccent: {
+        const c = Qt.color(root.tint);
+        const base = c.a < 0.5 || c.hslSaturation < 0.15 || c.hslLightness < 0.06 ? Appearance.m3colors.m3primary : c;
+        const q = Qt.color(base);
+        return Qt.hsla(Math.max(0, q.hslHue), q.hslSaturation, 0.74, 1);
+    }
 
         HaloVisualizer {
             anchors.fill: parent
@@ -407,7 +416,7 @@ Item {
                     anchors.fill: parent
                     player: root.context.player
                     textColor: root.foreground
-                    accentColor: root.visualizerColorA
+                    accentColor: root.kineticAccent
                     bottomInset: nowPlaying.height + root.gutter
                     fisheye: (Config.options.background.mediaMode.kineticFisheye ?? false) ? 0.7 : 0
                     Behavior on fisheye {
