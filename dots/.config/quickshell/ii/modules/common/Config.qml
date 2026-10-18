@@ -1970,7 +1970,7 @@ Singleton {
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
             "background.zoomOutStyle": [0, 1, 2],
             "background.overviewBackgroundStyle": ["", "gnome", "real-gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
-            "background.mediaMode.visualizerMode": [0, 1, 2, 3],
+            "background.mediaMode.visualizerMode": [0, 1, 2, 3, 4, 5],
             "background.mediaMode.syllable.textHighlightStyle": [0, 1],
             "bar.cornerStyle": [0, 1, 2, 3],
             "bar.barGroupStyle": [0, 1, 2],
@@ -4653,7 +4653,7 @@ Singleton {
                     property bool changeShellColor: true // Changes the shell color to the album color
                     property int backgroundOpacity: 50 // In percent
                     property int backgroundBlurRadius: 120
-                    property int visualizerMode: 0 // 0: Off, 1: Waves, 2: Bars, 3: Radial
+                    property int visualizerMode: 0 // 0: Off, 1: Waves, 2: Bars, 3: Radial, 4: Halo, 5: Spectrum
                     property bool showLyrics: true
                     property bool showPlayerSwitcher: true
                     property bool showSeekBar: true

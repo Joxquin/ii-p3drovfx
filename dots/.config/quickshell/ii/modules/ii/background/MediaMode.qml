@@ -143,7 +143,10 @@ Item { // Fullscreen MediaMode instance
     }
 
     // Mode state options (Bound to Config.options.background.mediaMode)
-    property int visualizerMode: Config.options.background.mediaMode.visualizerMode ?? 1 // 0: Off, 1: Waves, 2: Bars, 3: Radial
+    property int visualizerMode: Config.options.background.mediaMode.visualizerMode ?? 1 // 0: Off, 1: Waves, 2: Bars, 3: Radial, 4: Halo, 5: Spectrum
+    readonly property var visualizerModeNames: [Translation.tr("Off"), Translation.tr("Waves"), Translation.tr("Bars"),
+        Translation.tr("Radial"), Translation.tr("Halo"), Translation.tr("Spectrum")]
+    readonly property var visualizerModeIcons: ["equalizer", "waves", "bar_chart", "blur_circular", "fit_screen", "flare"]
     property bool showLyricsPanel: Config.options.background.mediaMode.showLyrics ?? true
     property bool showPlayerSwitcher: Config.options.background.mediaMode.showPlayerSwitcher ?? true
 
@@ -616,6 +619,31 @@ Item { // Fullscreen MediaMode instance
                     }
                 }
 
+                // Screen-edge halo and outward circle spectrum (shaders)
+                HaloVisualizer {
+                    anchors.fill: parent
+                    visible: root.visualizerMode === 4
+                    z: 3
+                    live: root.player?.isPlaying ?? false
+                    points: root.visualizerPoints
+                    coreColor: root.dynamicAccentColor
+                    colorA: Appearance.colors.colPrimary
+                    colorB: Appearance.colors.colTertiary
+                }
+
+                CircleSpectrumVisualizer {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width, parent.height) * 0.7
+                    height: width
+                    visible: root.visualizerMode === 5
+                    z: 3
+                    live: root.player?.isPlaying ?? false
+                    points: root.visualizerPoints
+                    coreColor: root.dynamicAccentColor
+                    colorA: Appearance.colors.colPrimary
+                    colorB: Appearance.colors.colTertiary
+                }
+
                 // Main Fullscreen Content Column
                 ColumnLayout {
                     anchors.fill: parent
@@ -862,24 +890,16 @@ Item { // Fullscreen MediaMode instance
                                     anchors.centerIn: parent
                                     iconSize: 20
                                     color: root.dynamicOnAccentContainer
-                                    text: {
-                                        if (root.visualizerMode === 1)
-                                            return "waves";
-                                        if (root.visualizerMode === 2)
-                                            return "bar_chart";
-                                        if (root.visualizerMode === 3)
-                                            return "blur_circular";
-                                        return "equalizer";
-                                    }
+                                    text: root.visualizerModeIcons[root.visualizerMode] ?? "equalizer"
                                 }
 
                                 onClicked: {
-                                    var nextMode = (root.visualizerMode + 1) % 4;
+                                    var nextMode = (root.visualizerMode + 1) % root.visualizerModeNames.length;
                                     Config.options.background.mediaMode.visualizerMode = nextMode;
                                 }
 
                                 PopupToolTip {
-                                    text: Translation.tr("Visualizer Mode: ") + (root.visualizerMode === 1 ? Translation.tr("Waves") : (root.visualizerMode === 2 ? Translation.tr("Bars") : (root.visualizerMode === 3 ? Translation.tr("Radial") : Translation.tr("Off"))))
+                                    text: Translation.tr("Visualizer Mode: ") + (root.visualizerModeNames[root.visualizerMode] ?? Translation.tr("Off"))
                                 }
                             }
 

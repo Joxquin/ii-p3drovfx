@@ -320,24 +320,52 @@ Item {
         }
     }
 
-    // The circle lives in the lyrics column; with the panels hidden it slides to
-    // the middle of the stage. The instrumental lyrics state draws its own ring.
+    // Light fringes over the always-dark artwork, whatever the shell theme is.
+    readonly property color visualizerColorA: ColorUtils.colorWithLightness(tint, 0.72)
+    readonly property color visualizerColorB: ColorUtils.colorWithLightness(Appearance.m3colors.m3tertiary, 0.72)
+
+    HaloVisualizer {
+        anchors.fill: parent
+        visible: root.visualizerMode === 4
+        opacity: root.introArt
+        live: root.visualizerPlaying
+        points: root.context.visualizerPoints
+        coreColor: root.foreground
+        colorA: root.visualizerColorA
+        colorB: root.visualizerColorB
+    }
+
+    // Circles live in the lyrics column and stay there with the panels hidden. The
+    // instrumental lyrics state draws its own ring.
     Item {
+        id: circleVisualizer
         readonly property real columnWidth: root.width - root.columnX - root.gutter
-        readonly property real centerX: (root.columnX * root.panelProgress + root.width) / 2
+        readonly property real centerX: root.columnX + columnWidth / 2
         width: Math.max(0, Math.min(columnWidth, panels.height) * 0.82)
         height: width
         x: centerX - width / 2
         y: panels.y + (panels.height - height) / 2
-        visible: root.visualizerMode === 3 && !(root.context.rightPanelVisible && root.activeTab === "lyrics"
-                                                 && (lyricsLoader.item?.instrumental ?? false))
+        visible: (root.visualizerMode === 3 || root.visualizerMode === 5)
+                 && !(root.context.rightPanelVisible && root.activeTab === "lyrics"
+                      && (lyricsLoader.item?.instrumental ?? false))
         opacity: root.introPanels
 
         RadialWaveVisualizer {
             anchors.fill: parent
-            live: root.visualizerPlaying && parent.visible
+            visible: root.visualizerMode === 3
+            live: root.visualizerPlaying && circleVisualizer.visible && visible
             color: root.foreground
             points: root.context.visualizerPoints
+        }
+
+        CircleSpectrumVisualizer {
+            anchors.fill: parent
+            visible: root.visualizerMode === 5
+            live: root.visualizerPlaying
+            points: root.context.visualizerPoints
+            coreColor: root.foreground
+            colorA: root.visualizerColorA
+            colorB: root.visualizerColorB
         }
     }
 
@@ -455,14 +483,14 @@ Item {
                            ? "side" : "cover"
             }
             MediaModeImmersiveButton {
-                symbol: ["equalizer", "waves", "bar_chart", "blur_circular"][root.visualizerMode] ?? "equalizer"
+                symbol: root.context.visualizerModeIcons[root.visualizerMode] ?? "equalizer"
                 quiet: true
                 foreground: root.foreground
                 highlighted: root.visualizerMode > 0
-                tooltip: Translation.tr("Visualizer Mode: ") + [Translation.tr("Off"), Translation.tr("Waves"),
-                                                                 Translation.tr("Bars"), Translation.tr("Radial")][
-                             root.visualizerMode]
-                onClicked: Config.options.background.mediaMode.visualizerMode = (root.visualizerMode + 1) % 4
+                tooltip: Translation.tr("Visualizer Mode: ") + (root.context.visualizerModeNames[root.visualizerMode]
+                                                                 ?? Translation.tr("Off"))
+                onClicked: Config.options.background.mediaMode.visualizerMode = (root.visualizerMode + 1)
+                           % root.context.visualizerModeNames.length
             }
             MediaModeImmersiveButton {
                 symbol: "headphones"

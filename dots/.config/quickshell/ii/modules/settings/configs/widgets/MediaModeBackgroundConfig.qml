@@ -124,6 +124,16 @@ Item {
                             "displayName": Translation.tr("Radial"),
                             "icon": "blur_circular",
                             "value": 3
+                        },
+                        {
+                            "displayName": Translation.tr("Halo"),
+                            "icon": "fit_screen",
+                            "value": 4
+                        },
+                        {
+                            "displayName": Translation.tr("Spectrum"),
+                            "icon": "flare",
+                            "value": 5
                         }
                     ]
                 }
