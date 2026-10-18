@@ -3378,6 +3378,7 @@ Item {
                                 isFirst: resultDelegate.rowData?.isFirst === true
                                 isLast: resultDelegate.rowData?.isLast === true
                                 horizontalMargin: root.rowInset
+                                clipInset: root.expressiveResults ? root.rowSideMargin : 0
                                 // This row's slice of the list-wide selection pill.
                                 indicatorTop: appResults.selectionIndicatorY - resultDelegate.y
                                 indicatorBottom: appResults.selectionIndicatorY + appResults.selectionIndicatorHeight - resultDelegate.y

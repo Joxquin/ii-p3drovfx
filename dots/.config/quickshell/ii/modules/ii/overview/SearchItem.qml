@@ -80,6 +80,11 @@ RippleButton {
     visible: root.entryShown
     // Hosts override this; it is the inset the row keeps from the panel edge.
     property int horizontalMargin: Appearance.sizes.elevationMargin
+    // How far the surface the row lives on (the expressive pane) sits inside the
+    // row's own width. Sliding action chips are clipped to that surface, not to
+    // the full list width, or they spill out past the pane's rounded edge.
+    property real clipInset: 0
+    readonly property real innerMargin: root.horizontalMargin - root.clipInset
     /**
      * Material 3 Expressive rows (Settings › Launcher › Panel appearance).
      *
@@ -244,6 +249,9 @@ RippleButton {
     readonly property real contractedWidth: 160
     readonly property real actionBtnSpacing: 4
     readonly property real actionBtnPadY: 4
+    // A long list cannot show every label inside the card, so only the chosen
+    // action keeps its label and the rest shrink to their icon.
+    readonly property bool compactActions: root.allActionItems.length >= 4
 
     property var allActionItems: {
         // Lazy: only compute when this item is selected or the panel is open.
@@ -419,11 +427,11 @@ RippleButton {
         let btnX = root.contractedWidth + root.actionBtnSpacing;
         for (let i = 0; i < root.actionSelectedIndex; i++) {
             const btn = actionRepeater.itemAt(i);
-            btnX += (btn ? btn.width : 0) + root.actionBtnSpacing;
+            btnX += (btn ? btn.targetWidth : 0) + root.actionBtnSpacing;
         }
         const selBtn = actionRepeater.itemAt(root.actionSelectedIndex);
-        const selRight = btnX + (selBtn ? selBtn.width : 0);
-        return Math.min(root.horizontalMargin, root.width - 4 - selRight);
+        const selRight = btnX + (selBtn ? selBtn.targetWidth : 0);
+        return Math.min(root.innerMargin, root.width - 2 * root.clipInset - root.innerMargin - selRight);
     }
     property real actionScrollX: root.actionOpenX
     Behavior on actionScrollX {
@@ -538,8 +546,8 @@ RippleButton {
     background: Rectangle {
         id: bgRect
         anchors.fill: root
-        anchors.leftMargin: 0
-        anchors.rightMargin: 0
+        anchors.leftMargin: root.clipInset
+        anchors.rightMargin: root.clipInset
         color: "transparent"
         antialiasing: true
         clip: true
@@ -557,11 +565,11 @@ RippleButton {
             anchors.bottom: parent.bottom
             spacing: root.actionBtnSpacing
 
-            x: root.mixReal(root.horizontalMargin, root.actionScrollX, root.actionProgress)
+            x: root.mixReal(root.innerMargin, root.actionScrollX, root.actionProgress)
 
             Rectangle {
                 id: itemRect
-                width: root.mixReal(bgRect.width - root.horizontalMargin * 2, root.contractedWidth, root.actionProgress)
+                width: root.mixReal(bgRect.width - root.innerMargin * 2, root.contractedWidth, root.actionProgress)
                 height: slideRow.height
                 y: 0
                 topLeftRadius: bgRect.topLeftRadius
@@ -1143,7 +1151,20 @@ RippleButton {
                     readonly property int hIdx: index + 1
                     readonly property bool isBtnActive: root.isSelected && isActionSelected
 
-                    width: actionBtnContent.implicitWidth + 24
+                    // 0 = icon only, 1 = icon and label. The scroll target reads
+                    // targetWidth, so it does not chase the animated width.
+                    readonly property bool compact: root.compactActions && !isActionSelected
+                    readonly property real labelWidth: Math.min(120, actionLabel.implicitWidth)
+                    readonly property real targetWidth: 36 + 24 + (compact ? 0 : 8 + labelWidth)
+                    property real labelProgress: compact ? 0 : 1
+                    Behavior on labelProgress {
+                        enabled: root.actionPanelOpen && !root.animationsDisabled
+                        NumberAnimation {
+                            duration: root.scaledDuration(140)
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                    width: 36 + 24 + labelProgress * (8 + labelWidth)
                     height: slideRow.height
                     y: 0
                     topLeftRadius: hIdx === root.activeHIndex || (hIdx - 1) === root.activeHIndex ? root.pillRadius : Appearance.rounding.small
@@ -1207,9 +1228,7 @@ RippleButton {
                     RowLayout {
                         id: actionBtnContent
                         anchors.centerIn: parent
-                        spacing: 8
-                        Layout.leftMargin: 6
-                        Layout.rightMargin: 10
+                        spacing: 0
 
                         Item {
                             Layout.preferredWidth: 36
@@ -1252,12 +1271,17 @@ RippleButton {
                         }
 
                         StyledText {
+                            id: actionLabel
                             text: actionBtn.modelData.name
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.family: Appearance.font.family.main
                             font.weight: Font.Medium
                             color: actionBtn.isBtnActive ? Appearance.colors.colOnPrimaryContainer : Appearance.m3colors.m3onSurface
                             elide: Text.ElideRight
+                            clip: true
+                            opacity: actionBtn.labelProgress
+                            Layout.leftMargin: 8 * actionBtn.labelProgress
+                            Layout.preferredWidth: actionBtn.labelProgress * actionBtn.labelWidth
                             Layout.maximumWidth: 120
                             Behavior on color {
                                 enabled: !root.animationsDisabled
