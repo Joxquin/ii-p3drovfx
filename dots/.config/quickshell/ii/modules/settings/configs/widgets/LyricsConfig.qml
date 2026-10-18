@@ -80,6 +80,30 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "lyrics"
+            text: Translation.tr("Enable lrcmux word-synced lyrics")
+            checked: Config.options.lyricsService.enableLrcmux ?? true
+            onCheckedChanged: {
+                Config.options.lyricsService.enableLrcmux = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Free word-by-word lyrics (KuGou and others via lrcmux.dev), asked when BetterLyrics has no word timing. Feeds kinetic lyrics.")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "cloud"
+            text: Translation.tr("Enable NetEase word-synced lyrics")
+            checked: Config.options.lyricsService.enableNetease ?? true
+            onCheckedChanged: {
+                Config.options.lyricsService.enableNetease = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Free word-by-word lyrics from NetEase Cloud Music, asked when neither BetterLyrics nor lrcmux has word timing.")
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "smart_display"
             text: Translation.tr("Enable YouTube Music lyrics")
             checked: Config.options.lyricsService.enableYtmusic
@@ -100,7 +124,7 @@ ContentPage {
             currentValue: Config.options.lyricsService.lyricsProvider ?? "auto"
             options: [
                 {
-                    displayName: Translation.tr("Auto (BetterLyrics → LRCLib → YTMusic → Genius)"),
+                    displayName: Translation.tr("Auto (word sync → LRCLib → YTMusic → Genius)"),
                     icon: "auto_awesome",
                     value: "auto"
                 },
@@ -108,6 +132,16 @@ ContentPage {
                     displayName: Translation.tr("BetterLyrics (cached TTML)"),
                     icon: "subtitles",
                     value: "betterlyrics"
+                },
+                {
+                    displayName: Translation.tr("lrcmux (word sync)"),
+                    icon: "lyrics",
+                    value: "lrcmux"
+                },
+                {
+                    displayName: Translation.tr("NetEase (word sync)"),
+                    icon: "cloud",
+                    value: "netease"
                 },
                 {
                     displayName: Translation.tr("LRCLib (synced/plain)"),

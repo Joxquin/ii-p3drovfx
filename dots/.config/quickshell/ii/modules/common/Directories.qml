@@ -121,6 +121,7 @@ Singleton {
     property string conflictCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/conflict-killer`)
     property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
     property string lyricsPath: FileUtils.trimFileProtocol(`${Directories.cache}/lyrics/lyrics.json`)
+    property string lyricsCacheDir: FileUtils.trimFileProtocol(`${Directories.cache}/lyrics`)
     property string betterlyricsCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/lyrics/betterlyrics.json`)
     // Hand-written .lrc keyed by track. Lives in state, not cache: it can't be
     // re-fetched from anywhere if it gets cleared.

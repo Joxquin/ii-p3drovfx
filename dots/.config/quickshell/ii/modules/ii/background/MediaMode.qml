@@ -978,12 +978,15 @@ Item { // Fullscreen MediaMode instance
                                         text: "remove"
                                     }
 
+                                    autoRepeat: true
+                                    autoRepeatDelay: 400
+                                    autoRepeatInterval: 90
                                     onClicked: {
-                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) - 250;
+                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) - 50;
                                     }
 
                                     PopupToolTip {
-                                        text: Translation.tr("Nudge Lyrics -250ms (Earlier)")
+                                        text: Translation.tr("Delay lyrics by 50 ms")
                                     }
                                 }
 
@@ -1002,12 +1005,15 @@ Item { // Fullscreen MediaMode instance
                                         text: "add"
                                     }
 
+                                    autoRepeat: true
+                                    autoRepeatDelay: 400
+                                    autoRepeatInterval: 90
                                     onClicked: {
-                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) + 250;
+                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) + 50;
                                     }
 
                                     PopupToolTip {
-                                        text: Translation.tr("Nudge Lyrics +250ms (Later)")
+                                        text: Translation.tr("Advance lyrics by 50 ms")
                                     }
                                 }
                             }

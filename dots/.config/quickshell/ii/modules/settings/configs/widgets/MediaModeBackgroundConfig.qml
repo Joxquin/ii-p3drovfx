@@ -74,7 +74,7 @@ Item {
                 checked: Config.options.background.mediaMode.kineticLyrics ?? false
                 onCheckedChanged: Config.options.background.mediaMode.kineticLyrics = checked
                 StyledToolTip {
-                    text: Translation.tr("Immersive design only. Sets word-synced BetterLyrics lines as moving typography with a camera that follows each word. Songs without word timing keep the regular lyrics.")
+                    text: Translation.tr("Immersive design only. Sets word-synced lines (BetterLyrics, lrcmux, NetEase) as moving typography with a camera that follows each word. Songs without word timing keep the regular lyrics.")
                 }
             }
 

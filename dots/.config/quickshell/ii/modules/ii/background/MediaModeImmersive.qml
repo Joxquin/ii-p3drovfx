@@ -67,11 +67,9 @@ Item {
     // Room for the title and the transport card on the artwork side.
     readonly property real stageWidth: width + (columnX - width) * panelProgress
     readonly property bool bothTabs: context.lyricsPanelVisible && context.queueEligible
-    // Kinetic typography needs word timings, which only BetterLyrics provides; any
-    // other source keeps the regular lyrics column.
-    readonly property bool kineticAvailable: LyricsService.usingBetterlyrics && !context.forcePlainLyrics
-                                             && Config.options.lyricsService.lyricsProvider !== "lrclib"
-                                             && LyricsService.syncedLines.some(line => (line.words?.length ?? 0) > 0)
+    // Kinetic typography needs word timings (BetterLyrics, lrcmux or NetEase); line-only
+    // lyrics keep the regular lyrics column.
+    readonly property bool kineticAvailable: LyricsService.hasWordTiming && !context.forcePlainLyrics
     readonly property bool kineticShown: (Config.options.background.mediaMode.kineticLyrics ?? false)
                                          && kineticAvailable && context.rightPanelVisible
                                          && context.lyricsPanelVisible && activeTab === "lyrics"

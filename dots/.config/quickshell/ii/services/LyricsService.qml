@@ -23,6 +23,8 @@ Singleton {
     readonly property bool lrclibEnabled: Config.options.lyricsService.enableLrclib
     readonly property bool betterlyricsEnabled: Config.options.lyricsService.enableBetterlyrics ?? true
     readonly property bool ytmusicEnabled: Config.options.lyricsService.enableYtmusic
+    readonly property bool lrcmuxEnabled: Config.options.lyricsService.enableLrcmux ?? true
+    readonly property bool neteaseEnabled: Config.options.lyricsService.enableNetease ?? true
     readonly property string lyricsProvider: Config.options.lyricsService.lyricsProvider ?? "auto"
     
     property bool isInitialized: false
@@ -52,6 +54,19 @@ Singleton {
         && (root.activePlayer?.trackTitle?.length > 0) && !localLyricsLoading && !hasLocalLyricsFile
     readonly property bool effectiveLrclibEnabled: lyricsEnabled && lrclibEnabled && isInitialized
         && (root.activePlayer?.trackTitle?.length > 0) && !localLyricsLoading && !hasLocalLyricsFile
+    // The word-sync sources only matter when BetterLyrics has no word timing, so in
+    // "auto" they wait for it, and NetEase waits for lrcmux, instead of every track
+    // costing three extra requests.
+    readonly property bool wordSyncAllowed: lyricsEnabled && isInitialized
+        && (root.activePlayer?.trackTitle?.length > 0) && !localLyricsLoading && !hasLocalLyricsFile
+    readonly property bool betterlyricsHasWords: betterlyrics.enabled && betterlyrics.hasWordLines
+    readonly property bool effectiveLrcmuxEnabled: wordSyncAllowed && lrcmuxEnabled
+        && (root.lyricsProvider === "lrcmux"
+            || (root.lyricsProvider === "auto" && betterlyrics.settled && !root.betterlyricsHasWords))
+    readonly property bool effectiveNeteaseEnabled: wordSyncAllowed && neteaseEnabled
+        && (root.lyricsProvider === "netease"
+            || (root.lyricsProvider === "auto" && betterlyrics.settled && !root.betterlyricsHasWords
+                && lrcmux.settled && !(lrcmux.enabled && lrcmux.hasSyncedLines)))
     readonly property bool effectiveGeniusEnabled: lyricsEnabled && geniusEnabled && isInitialized
         && !localLyricsLoading && !hasLocalLyricsFile
     readonly property bool effectiveYtmusicEnabled: lyricsEnabled && ytmusicEnabled && isInitialized
@@ -68,8 +83,21 @@ Singleton {
             return betterlyrics;
         if (root.lyricsProvider === "lrclib")
             return lrclib;
+        if (root.lyricsProvider === "lrcmux")
+            return lrcmux;
+        if (root.lyricsProvider === "netease")
+            return netease;
         if (root.lyricsProvider === "auto") {
-            if (betterlyrics.hasSyncedLines)
+            // Word timing first, from whichever source has it. A switched-off
+            // provider keeps its last lines (BetterLyrics even loads its disk
+            // cache), so only enabled ones count.
+            if (root.betterlyricsHasWords)
+                return betterlyrics;
+            if (lrcmux.enabled && lrcmux.hasSyncedLines)
+                return lrcmux;
+            if (netease.enabled && netease.hasSyncedLines)
+                return netease;
+            if (betterlyrics.enabled && betterlyrics.hasSyncedLines)
                 return betterlyrics;
             return lrclib;
         }
@@ -81,6 +109,13 @@ Singleton {
     readonly property string statusText: activeSyncedProvider ? activeSyncedProvider.displayText : ""
     readonly property bool hasSyncedLines: syncedLines && syncedLines.length > 0
     readonly property bool usingBetterlyrics: activeSyncedProvider === betterlyrics && betterlyrics.hasSyncedLines
+    // Some line carries per-word timing (BetterLyrics, lrcmux or NetEase).
+    readonly property bool hasWordTiming: hasSyncedLines && syncedLines.some(line => (line.words?.length ?? 0) > 0)
+    // Name of the online source behind the synced lines, for status labels.
+    readonly property string syncedSourceName: !hasSyncedLines ? ""
+        : activeSyncedProvider === betterlyrics ? "BetterLyrics"
+        : activeSyncedProvider === lrcmux ? "lrcmux"
+        : activeSyncedProvider === netease ? "NetEase" : "LRCLib"
 
     // Single source of truth for "where the lyrics think we are": player
     // position corrected by the user's sync offset. Used by the sync itself and
@@ -104,7 +139,8 @@ Singleton {
     readonly property bool searching: root.isInitialized
         && (root.activePlayer?.trackTitle?.length > 0)
         && !root.usingCustomLyrics && !root.usingLocalLyrics
-        && (root.localLyricsLoading || !root.searchGraceElapsed || betterlyrics.loading || lrclib.loading || genius.fetching || ytmusic.fetching)
+        && (root.localLyricsLoading || !root.searchGraceElapsed || betterlyrics.loading || lrclib.loading
+            || lrcmux.loading || netease.loading || genius.fetching || ytmusic.fetching)
 
     Binding {
         target: LocalLyrics
@@ -129,6 +165,22 @@ Singleton {
             enabled: root.lrclibEnabled,
             searching: lrclib.loading,
             found: lrclib.lines.length > 0 || lrclib.plainLyricsText.length > 0
+        },
+        {
+            key: "lrcmux",
+            label: "lrcmux",
+            icon: "lyrics",
+            enabled: root.lrcmuxEnabled,
+            searching: lrcmux.loading,
+            found: lrcmux.lines.length > 0
+        },
+        {
+            key: "netease",
+            label: "NetEase",
+            icon: "cloud",
+            enabled: root.neteaseEnabled,
+            searching: netease.loading,
+            found: netease.lines.length > 0
         },
         {
             key: "ytmusic",
@@ -178,6 +230,8 @@ Singleton {
         root.beginSearchGrace();
         betterlyrics.retryFetch();
         lrclib.retryFetch();
+        lrcmux.retryFetch();
+        netease.retryFetch();
         root.initiliazeLyrics();
     }
 
@@ -210,6 +264,8 @@ Singleton {
         const provider = root.lyricsProvider;
         if (provider === "betterlyrics") return betterlyrics.plainLyricsText;
         if (provider === "lrclib") return lrclib.plainLyricsText;
+        if (provider === "lrcmux") return lrcmux.plainLyricsText;
+        if (provider === "netease") return netease.plainLyricsText;
         if (provider === "ytmusic") return ytmusic.lyricsString;
         if (provider === "genius")  return genius.lyricsString;
         // auto fallback chain
@@ -325,6 +381,26 @@ Singleton {
         title: root.activePlayer?.trackTitle ?? ""
         artist: root.activePlayer?.trackArtist ?? ""
         album: root.activePlayer?.trackAlbum ?? ""
+        duration: root.activePlayer?.length ?? 0
+        position: root.syncPosition
+    }
+
+    WordSyncLyrics {
+        id: lrcmux
+        source: "lrcmux"
+        enabled: root.effectiveLrcmuxEnabled
+        title: betterlyrics.queryTitle
+        artist: betterlyrics.queryArtist
+        duration: root.activePlayer?.length ?? 0
+        position: root.syncPosition
+    }
+
+    WordSyncLyrics {
+        id: netease
+        source: "netease"
+        enabled: root.effectiveNeteaseEnabled
+        title: betterlyrics.queryTitle
+        artist: betterlyrics.queryArtist
         duration: root.activePlayer?.length ?? 0
         position: root.syncPosition
     }

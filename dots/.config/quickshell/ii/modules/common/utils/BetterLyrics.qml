@@ -23,6 +23,9 @@ Item {
     property var lines: root.fetchedLines
     property string plainLyricsText: ""
     readonly property bool hasSyncedLines: root.lines && root.lines.length > 0
+    readonly property bool hasWordLines: root.hasSyncedLines && root.lines.some(l => (l.words?.length ?? 0) > 0)
+    // Done with the current track, found or not (or not asked to look).
+    readonly property bool settled: !root.enabled || root.loadedKey === root.fetchKey
     property var _cache: ({})
     property var _negativeCache: ({})
 
@@ -366,6 +369,7 @@ Item {
         if (root._negativeCache[root.fetchKey]) {
             root.loading = false;
             root.error = "";
+            root.loadedKey = root.fetchKey;
             return;
         }
 

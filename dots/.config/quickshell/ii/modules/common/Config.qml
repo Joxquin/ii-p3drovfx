@@ -6926,8 +6926,12 @@ Singleton {
                 property bool enableLrclib: true
                 property bool enableBetterlyrics: true
                 property bool enableYtmusic: true // requires ytmusicapi in venv
-                // "auto" | "betterlyrics" | "lrclib" | "ytmusic" | "genius"
-                // auto = betterlyrics (if cached) → lrclib synced → lrclib plain → ytmusic → genius
+                // Free word-synced sources, asked only when BetterLyrics has no word timing.
+                property bool enableLrcmux: true
+                property bool enableNetease: true
+                // "auto" | "betterlyrics" | "lrcmux" | "netease" | "lrclib" | "ytmusic" | "genius"
+                // auto = word sync (betterlyrics → lrcmux → netease) → betterlyrics lines → lrclib synced
+                //        → lrclib plain → ytmusic → genius
                 property string lyricsProvider: "auto"
             }
 

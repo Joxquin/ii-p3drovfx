@@ -3,7 +3,7 @@ import QtQuick
 import qs.modules.common
 import qs.services
 
-// Kinetic typography for word-timed lyrics (BetterLyrics TTML), Immersive only.
+// Kinetic typography for word-timed lyrics (BetterLyrics, lrcmux or NetEase), Immersive only.
 //
 // Every line is set as a block. Most blocks are stacked rows, each fitted to the
 // block's width, so short words come out huge and long ones flat; some put the first
@@ -64,6 +64,10 @@ Item {
         root.clock = root._anchorPosition;
     }
     onSyncPositionChanged: reanchor(false)
+    // An offset change is a deliberate jump, often smaller than the soft-nudge
+    // threshold; apply it at once (after syncPosition has picked it up).
+    readonly property int offsetMs: Config.options.background.mediaMode.lyricsOffsetMs ?? 0
+    onOffsetMsChanged: Qt.callLater(root.reanchor, true)
     onPlayingChanged: reanchor(true)
     Component.onCompleted: {
         reanchor(true);
