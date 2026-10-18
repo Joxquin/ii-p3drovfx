@@ -905,6 +905,29 @@ Singleton {
         return true;
     }
 
+    // A launcher result sent to the desktop: an app id or a file/folder path,
+    // dropped on the first free cell of the focused screen, since there is no
+    // pointer position to honour.
+    function addFromLauncher(kind, value) {
+        if (!value || !Persistent.ready)
+            return false;
+        const focused = Hyprland.focusedMonitor?.name ?? "";
+        const screenName = root.isConnected(focused) ? focused : (Quickshell.screens[0]?.name ?? "");
+        if (!screenName)
+            return false;
+        const g = root.grid(screenName);
+        const cell = root.firstFree(g, root.takenCells(g, root.itemsFor(screenName)));
+        if (!cell) {
+            root.error = Translation.tr("No free space for desktop shortcuts");
+            return false;
+        }
+        const spot = root.cellPos(g, cell.col, cell.row);
+        if (kind === "app")
+            return root.addDockApps(screenName, [value], spot.x, spot.y);
+        const path = value.startsWith("~/") ? Quickshell.env("HOME") + value.slice(1) : value;
+        return root.importUrls(screenName, [path], spot.x, spot.y, "", g.area.screenWidth, g.area.screenHeight);
+    }
+
     function registerPlacement(key, screenName, x, y) {
         const next = Object.assign({}, root.pendingPlacements);
         next[key] = { screen: screenName, x: x, y: y };
