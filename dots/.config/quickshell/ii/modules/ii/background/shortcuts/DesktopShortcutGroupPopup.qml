@@ -18,6 +18,8 @@ FocusScope {
     // The tile's rect in this layer's coordinates, handed in by the layer so
     // the card can sit under it (or above it when the screen edge is closer).
     required property rect tileRect
+    // Room kept from each screen edge, raised by the host over the bar and dock.
+    property var insets: ({ left: 8, top: 8, right: 8, bottom: 8 })
     signal closeRequested()
     // The header's two group operations, carried to the layer that owns the
     // store: rename opens the context dialog on its rename page, ungroup
@@ -114,15 +116,15 @@ FocusScope {
         x: {
             const k = root.counterScale;
             const ts = root.tileRect;
-            Math.max(card.gap, Math.min(root.width - width - card.gap,
+            Math.max(root.insets.left, Math.min(root.width - width - root.insets.right,
                 (ts.x + ts.width / 2) / k - width / 2)) * k
         }
         y: {
             const k = root.counterScale;
             const tsy = root.tileRect.y / k;
             const tsh = root.tileRect.height / k;
-            (tsy + tsh + implicitHeight + 2 * card.gap > root.height
-                ? Math.max(card.gap, tsy - implicitHeight - card.gap)
+            (tsy + tsh + implicitHeight + card.gap + root.insets.bottom > root.height
+                ? Math.max(root.insets.top, tsy - implicitHeight - card.gap)
                 : tsy + tsh + card.gap) * k
         }
         width: Math.min(root.width - 2 * card.gap, root.columns * root.cellWidth + (root.columns - 1) * 4 + 24)

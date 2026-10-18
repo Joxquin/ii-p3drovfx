@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import Qt.labs.folderlistmodel
+import qs
 import qs.services
 import qs.modules.common
 
@@ -296,6 +297,28 @@ Singleton {
         const y2 = Math.floor((h - bottom) / 10) * 10;
         return { x: x, y: y, width: Math.max(root.cellWidth, x2 - x), height: Math.max(root.cellHeight, y2 - y),
             screenWidth: w, screenHeight: h };
+    }
+
+    // How far a floating card keeps from each screen edge: the bar's and the
+    // dock's thickness (wherever they sit) plus a gap. Unlike workArea this
+    // ignores `avoidPanels`, which is about where icons live, not about a
+    // menu that must not open underneath a panel.
+    function panelInsets(screenName) {
+        const gap = 8;
+        const insets = { left: gap, top: gap, right: gap, bottom: gap };
+        if (GlobalStates.barOpen) {
+            if (Config.options.bar.vertical) {
+                const side = Config.options.bar.bottom ? "right" : "left";
+                insets[side] += Appearance.sizes.verticalBarWidth;
+            } else {
+                const side = Config.options.bar.bottom ? "bottom" : "top";
+                insets[side] += Appearance.sizes.barHeight;
+            }
+        }
+        const dock = Config.options.dock?.enable ? GlobalStates.dockInsets[screenName] : null;
+        if (dock && insets[dock.side] !== undefined)
+            insets[dock.side] += dock.thickness;
+        return insets;
     }
 
     function grid(screenName) {

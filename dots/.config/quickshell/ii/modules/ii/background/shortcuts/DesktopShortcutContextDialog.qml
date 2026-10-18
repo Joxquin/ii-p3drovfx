@@ -47,6 +47,10 @@ ItemContextDialog {
         ? TaskbarApps.isPinnedFile(entry.path)
         : entry.type === "app" ? TaskbarApps.isPinned(pinKey) : false
 
+    // The canvas is shrunk with its panels outside it whenever counterScale
+    // is not 1; only the unscaled surface has the bar and dock over it.
+    insets: root.counterScale === 1 ? DesktopShortcuts.panelInsets(root.screenName) : ({ left: 8, top: 8, right: 8, bottom: 8 })
+
     menuId: "desktopItem"
     customTarget: entry.path ?? ""
     title: entry.name || entry.id || ""

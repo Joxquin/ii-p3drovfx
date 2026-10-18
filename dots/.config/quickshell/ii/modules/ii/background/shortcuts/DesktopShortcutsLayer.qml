@@ -2192,6 +2192,7 @@ Item {
             tileRect: root.popupRect
             onCloseRequested: root.closePopup()
             counterScale: root.counterScale
+            insets: root.counterScale === 1 ? DesktopShortcuts.panelInsets(root.screenName) : ({ left: 8, top: 8, right: 8, bottom: 8 })
             // The header's two operations: rename retargets the context
             // menu onto the same tile's rename page, ungroup dissolves the
             // members back onto the desktop. Both close the popup first —
@@ -2204,8 +2205,9 @@ Item {
             }
             onUngroupRequested: {
                 const id = root.popupId;
+                const screenName = root.screenName;
                 root.closePopup();
-                Qt.callLater(() => DesktopShortcuts.ungroup(root.screenName, id));
+                Qt.callLater(() => DesktopShortcuts.ungroup(screenName, id));
             }
         }
     }

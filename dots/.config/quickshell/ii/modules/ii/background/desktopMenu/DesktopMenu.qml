@@ -4,6 +4,7 @@ import Quickshell.Wayland
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.background.shortcuts
 
 /**
  * The desktop right-click menu's surface: one per screen, built on that
@@ -149,8 +150,9 @@ Scope {
                     closing: GlobalStates.desktopMenuClosing
                     surfaceWidth: menuWindow.width
                     surfaceHeight: menuWindow.height
-                    x: Math.min(Math.max(GlobalStates.desktopMenuX, 8), menuWindow.width - visualWidth - 8)
-                    y: Math.min(Math.max(GlobalStates.desktopMenuY, 8), menuWindow.height - visualHeight - 8)
+                    readonly property var insets: DesktopShortcuts.panelInsets(menuLoader.screenName)
+                    x: Math.min(Math.max(GlobalStates.desktopMenuX, insets.left), menuWindow.width - visualWidth - insets.right)
+                    y: Math.min(Math.max(GlobalStates.desktopMenuY, insets.top), menuWindow.height - visualHeight - insets.bottom)
                     onDismissRequested: GlobalStates.closeDesktopMenu()
                     onExitFinished: GlobalStates.finishDesktopMenuClose()
                 }

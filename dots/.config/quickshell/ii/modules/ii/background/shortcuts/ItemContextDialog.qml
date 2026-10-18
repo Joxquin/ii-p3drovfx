@@ -307,6 +307,9 @@ FocusScope {
     // anchorPoint arrives in surface coordinates and is converted here, the
     // clamp runs on the unscaled extent. 1 outside the mode.
     property real counterScale: 1
+    // The room the card keeps from each screen edge, in surface pixels: the
+    // host raises an edge to clear the bar or dock sitting on it.
+    property var insets: ({ left: 8, top: 8, right: 8, bottom: 8 })
     // Where the row that opened a page sits, in `body`, for the cascade card.
     property real anchorY: 0
     // The user's menu size (ContextMenus.scale) on top of the Edit Mode undo:
@@ -315,8 +318,8 @@ FocusScope {
 
     Item {
         id: body
-        x: Math.max(8, Math.min(root.anchorPoint.x / root.counterScale, root.width - width * ContextMenus.scale - 8)) * root.counterScale
-        y: Math.max(8, Math.min(root.anchorPoint.y / root.counterScale, root.height - height * ContextMenus.scale - 8)) * root.counterScale
+        x: Math.max(root.insets.left, Math.min(root.anchorPoint.x / root.counterScale, root.width - width * ContextMenus.scale - root.insets.right)) * root.counterScale
+        y: Math.max(root.insets.top, Math.min(root.anchorPoint.y / root.counterScale, root.height - height * ContextMenus.scale - root.insets.bottom)) * root.counterScale
         width: root.menuWidth
         height: cards.implicitHeight
         opacity: motion.reveal
