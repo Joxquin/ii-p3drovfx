@@ -148,6 +148,46 @@ StyledFlickable {
             onSelected: value => Config.options.background.desktopIcons.iconBackground = value
         }
 
+        EditPanelSectionLabel {
+            text: Translation.tr("App groups")
+        }
+        EditOptionChips {
+            Layout.fillWidth: true
+            label: Translation.tr("Group shape")
+            currentValue: root.options.groupShape ?? "auto"
+            options: [
+                { "displayName": Translation.tr("Auto"), "value": "auto" },
+                { "displayName": Translation.tr("Rounded"), "value": "rounded", "icon": "rounded_corner" },
+                { "displayName": Translation.tr("Squircle"), "value": "squircle", "icon": "square" },
+                { "displayName": Translation.tr("Circle"), "value": "circle", "icon": "circle" },
+                { "displayName": Translation.tr("Cookie"), "value": "cookie", "icon": "cookie" },
+                { "displayName": Translation.tr("Clover"), "value": "clover", "icon": "filter_vintage" },
+            ]
+            onSelected: value => Config.options.background.desktopIcons.groupShape = value
+        }
+        EditOptionChips {
+            Layout.fillWidth: true
+            label: Translation.tr("Group colour")
+            currentValue: root.options.groupColor ?? "auto"
+            options: [
+                { "displayName": Translation.tr("Auto"), "value": "auto" },
+                { "displayName": Translation.tr("Primary"), "value": "primary" },
+                { "displayName": Translation.tr("Secondary"), "value": "secondary" },
+                { "displayName": Translation.tr("Tertiary"), "value": "tertiary" },
+                { "displayName": Translation.tr("Neutral"), "value": "neutral" },
+            ]
+            onSelected: value => Config.options.background.desktopIcons.groupColor = value
+        }
+        StyledText {
+            Layout.fillWidth: true
+            Layout.leftMargin: 6
+            Layout.rightMargin: 6
+            text: Translation.tr("Extend a group from its right-click menu to show three apps big and the rest in a small group. A group can also keep its own shape and colour there.")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.Wrap
+        }
+
         EditPanelRow {
             Layout.fillWidth: true
             Layout.topMargin: 4

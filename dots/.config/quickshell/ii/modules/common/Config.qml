@@ -4544,6 +4544,10 @@ Singleton {
                     // A soft shadow under every icon; hovering lifts the icon and
                     // warms the shadow into a glow of the primary colour.
                     property bool iconShadow: false
+                    // How app groups are drawn; a group can override both in its own
+                    // menu. auto follows the icon background, as groups always did.
+                    property string groupShape: "auto" // auto | rounded | squircle | circle | cookie | clover
+                    property string groupColor: "auto" // auto | primary | secondary | tertiary | neutral
                 }
                 property bool windowZoomOnOverview: true // fake window scale-out during overview (GNOME-like)
                 property bool windowZoomLiveCapture: true // keep screencopy live instead of freezing on overview open
