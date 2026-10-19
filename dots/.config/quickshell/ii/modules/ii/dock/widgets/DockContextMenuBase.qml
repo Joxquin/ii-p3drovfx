@@ -247,19 +247,42 @@ Loader {
                 const itemHalfH = Math.abs(bottomRight.y - topLeft.y) / 2
                 const itemHalfW = Math.abs(bottomRight.x - topLeft.x) / 2
 
+                let x, y
                 if (pos === "bottom") {
-                    anchor.rect.x = mapped.x - popupWindow.implicitWidth / 2
-                    anchor.rect.y = mapped.y - itemHalfH - popupWindow.implicitHeight - dm
+                    x = mapped.x - popupWindow.implicitWidth / 2
+                    y = mapped.y - itemHalfH - popupWindow.implicitHeight - dm
                 } else if (pos === "top") {
-                    anchor.rect.x = mapped.x - popupWindow.implicitWidth / 2
-                    anchor.rect.y = mapped.y + itemHalfH + dm
+                    x = mapped.x - popupWindow.implicitWidth / 2
+                    y = mapped.y + itemHalfH + dm
                 } else if (pos === "left") {
-                    anchor.rect.x = mapped.x + itemHalfW + dm
-                    anchor.rect.y = mapped.y - popupWindow.implicitHeight / 2
+                    x = mapped.x + itemHalfW + dm
+                    y = mapped.y - popupWindow.implicitHeight / 2
                 } else {
-                    anchor.rect.x = mapped.x - itemHalfW - popupWindow.implicitWidth - dm
-                    anchor.rect.y = mapped.y - popupWindow.implicitHeight / 2
+                    x = mapped.x - itemHalfW - popupWindow.implicitWidth - dm
+                    y = mapped.y - popupWindow.implicitHeight / 2
                 }
+
+                // Centred on an item near either end of the dock, the card ran
+                // past the screen edge (the adjustment is None, so nothing
+                // slides it back). The dock window spans its whole main axis,
+                // minus other exclusive zones, so its edges are the limits;
+                // the shadow envelope may hang outside, the card may not. A
+                // card longer than the screen keeps its start visible.
+                const win = popupWindow.anchor.window
+                if (win) {
+                    const sm = popupWindow.shadowMargin
+                    const edgeGap = Appearance.sizes.hyprlandGapsOut
+                    if (pos === "left" || pos === "right")
+                        y = Math.max(edgeGap - sm, Math.min(y, win.height - popupWindow.implicitHeight + sm - edgeGap))
+                    else
+                        x = Math.max(edgeGap - sm, Math.min(x, win.width - popupWindow.implicitWidth + sm - edgeGap))
+                }
+
+                // One write per axis: every change to the rect re-dirties the
+                // anchor, so writing a provisional value and then the final
+                // one re-ran this handler forever (a polish loop per open).
+                anchor.rect.x = Math.round(x)
+                anchor.rect.y = Math.round(y)
             }
         }
 
