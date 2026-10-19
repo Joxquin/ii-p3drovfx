@@ -31,6 +31,9 @@ QuickToggleModel {
 
     name: Translation.tr("Internet")
     statusText: connectionStatus
+    heroLevel: Network.wifi ? Network.networkStrength / 100 : -1
+    heroValue: Network.wifi ? String(Network.networkStrength) : ""
+    heroUnit: Network.wifi ? "%" : ""
     tooltipText: Translation.tr("%1 | Right-click to configure").arg(connectionStatus)
     icon: Network.materialSymbol
 

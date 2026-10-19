@@ -126,16 +126,36 @@ Item {
 
         // ── Quick toggles ─────────────────────────────────────────────────
         LazyBlock {
-            placeholderHeight: 92
+            placeholderHeight: 92 + sidebarsRoot.cardGap + 190
             Layout.topMargin: sidebarsRoot.sectionGap
-            SidebarsLinkCard {
+            ColumnLayout {
                 Layout.fillWidth: true
-                symbol: "tune"
-                shapeIdle: MaterialShape.Shape.Clover4Leaf
-                shapeEngaged: MaterialShape.Shape.Flower
-                title: Translation.tr("Quick toggles and sliders")
-                summary: Translation.tr("Toggle styles, Android column count, capsule sliders and fixed sliders")
-                onClicked: sidebarsRoot.openSubPage("SidebarQuickTogglesConfig.qml")
+                spacing: sidebarsRoot.cardGap
+
+                // The design switch lives here, not in the subpage: it changes every tile.
+                SidebarsCacheCard {
+                    Layout.fillWidth: true
+                    symbol: "interests"
+                    shapeOn: MaterialShape.Shape.SoftBurst
+                    title: Translation.tr("Expressive design")
+                    subtitle: Translation.tr("Android style quick toggles")
+                    wordOn: Translation.tr("Expressive")
+                    wordOff: Translation.tr("Standard")
+                    summaryOn: Translation.tr("Every tile size gets its own layout, shapes and type")
+                    summaryOff: Translation.tr("The same icon and label layout at every tile size")
+                    checked: Config.options.sidebar.quickToggles.expressive
+                    onToggled: value => Config.options.sidebar.quickToggles.expressive = value
+                }
+
+                SidebarsLinkCard {
+                    Layout.fillWidth: true
+                    symbol: "tune"
+                    shapeIdle: MaterialShape.Shape.Clover4Leaf
+                    shapeEngaged: MaterialShape.Shape.Flower
+                    title: Translation.tr("Quick toggles and sliders")
+                    summary: Translation.tr("Toggle styles, Android column count, capsule sliders and fixed sliders")
+                    onClicked: sidebarsRoot.openSubPage("SidebarQuickTogglesConfig.qml")
+                }
             }
         }
 

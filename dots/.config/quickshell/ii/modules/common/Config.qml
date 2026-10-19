@@ -7684,6 +7684,8 @@ Singleton {
 
                 property JsonObject quickToggles: JsonObject {
                     property string style: "android" // Options: classic, android
+                    // Android style only: the Material 3 Expressive faces, one design per tile size.
+                    property bool expressive: false
                     property bool useThreeWaySliders: true
                     property JsonObject classic: JsonObject {
                         // Order matters: it is the order the toggles appear in.

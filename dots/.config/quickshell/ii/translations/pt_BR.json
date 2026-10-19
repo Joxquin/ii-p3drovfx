@@ -14788,5 +14788,10 @@
     "Search for ‘dictionary’, ‘define’ or ‘sinônimo’ to look words up with definitions, synonyms, antonyms and examples from Wiktionary.": "Busque por ‘dicionário’, ‘define’ ou ‘sinônimo’ para consultar palavras com definições, sinônimos, antônimos e exemplos do Wiktionary.",
     "Group apps that don't fit": "Agrupar apps que não cabem",
     "When widgets and open apps run out of room, the least recently used apps fold into one group instead of the dock being cut off": "Quando widgets e apps abertos não cabem mais, os apps usados há mais tempo se juntam num grupo em vez de a dock ser cortada",
-    "Apps that don't fit on the dock": "Apps que não cabem na dock"
+    "Apps that don't fit on the dock": "Apps que não cabem na dock",
+    "Expressive design": "Design expressivo",
+    "Android style quick toggles": "Quick toggles no estilo Android",
+    "Standard": "Padrão",
+    "Every tile size gets its own layout, shapes and type": "Cada tamanho de tile ganha seu próprio layout, formas e tipografia",
+    "The same icon and label layout at every tile size": "O mesmo layout de ícone e texto em todos os tamanhos"
 }

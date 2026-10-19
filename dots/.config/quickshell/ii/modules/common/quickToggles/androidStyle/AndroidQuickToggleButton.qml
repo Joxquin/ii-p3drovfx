@@ -58,6 +58,47 @@ Item {
     readonly property bool isOneByOne: (effectiveSizeW === 1 || effectiveSizeW === 0) && effectiveSizeH === 1
     readonly property bool expandedSize: isWide
     readonly property bool is3Way: (root.buttonData.type === "soundcoreAnc" || root.buttonData.type === "powerProfile" || root.buttonData.type === "keyboardBacklight")
+    // Material 3 Expressive faces: one design per footprint (ExpressiveQuickToggleContent).
+    property bool expressive: Config.options.sidebar.quickToggles.expressive ?? false
+    readonly property string expressiveVariant: {
+        if (root.isSquare)
+            return "orb";
+        const w = root.effectiveSizeW, h = root.effectiveSizeH;
+        if (h === 1)
+            return w === 1 ? "pill" : w === 2 ? "type" : "chip";
+        if (w === 1)
+            return h === 2 ? "column" : "spine";
+        if (w === 2)
+            return h === 2 ? "ornament" : "poster";
+        return "split";
+    }
+    // The faces with room for it mark the dialog with a ↗ ring.
+    readonly property bool expressiveDialogArrow: root.expressive && root.hasMenu
+        && ["ornament", "poster", "split"].includes(root.expressiveVariant)
+    // [idle, idle hover, idle press, on, on hover, on press]
+    readonly property var expressivePalette: {
+        const c = Appearance.colors;
+        const layer = [c.colLayer2, c.colLayer2Hover, c.colLayer2Active];
+        switch (root.expressiveVariant) {
+        case "orb": return ["transparent", "transparent", "transparent", "transparent", "transparent", "transparent"];
+        case "pill": return layer.concat([c.colPrimary, c.colPrimaryHover, c.colPrimaryActive]);
+        case "type": return layer.concat([c.colPrimaryContainer, c.colPrimaryContainerHover, c.colPrimaryContainerActive]);
+        case "spine": return layer.concat([c.colTertiaryContainer, c.colTertiaryContainerHover, c.colTertiaryContainerActive]);
+        case "ornament": return layer.concat([c.colSecondaryContainer, c.colSecondaryContainerHover, c.colSecondaryContainerActive]);
+        case "poster": return layer.concat([c.colPrimary, c.colPrimaryHover, c.colPrimaryActive]);
+        default: return layer.concat(layer); // chip, column, split: the state lives inside
+        }
+    }
+    function expressiveRadius(width, height) {
+        const full = Math.min(width, height) / 2;
+        switch (root.expressiveVariant) {
+        case "pill": case "chip": case "spine": return full;
+        case "type": return root.toggled ? Math.min(full, root.scaled(Appearance.rounding.normal)) : full;
+        case "poster": return Math.min(full, root.scaled(Appearance.rounding.verylarge));
+        default: return Math.min(full, root.scaled(Appearance.rounding.large));
+        }
+    }
+
     readonly property bool is3WaySlider: is3Way && effectiveSizeW === 2 && effectiveSizeH === 1 && (Config.options.sidebar.quickToggles.useThreeWaySliders ?? false)
 
     // Use the rendered widget's hover state while keeping it in this delegate's
@@ -227,13 +268,15 @@ Item {
 
         readonly property real layer2Mix: Math.max(root.hasMenu ? root.morphWideProgress : 0,
             root.morphTallProgress * (1 - root.morphWideProgress))
-        colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, root.threeWayProgress)
-        colBackgroundToggled: ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colLayer2, 1 - layer2Mix), root.threeWayProgress)
-        colBackgroundToggledHover: ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colPrimaryHover, Appearance.colors.colLayer2Hover, 1 - layer2Mix), root.threeWayProgress)
-        colBackgroundToggledActive: ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colPrimaryActive, Appearance.colors.colLayer2Active, 1 - layer2Mix), root.threeWayProgress)
+        colBackground: ColorUtils.transparentize(root.expressive ? root.expressivePalette[0] : Appearance.colors.colLayer2, root.threeWayProgress)
+        colBackgroundHover: root.expressive ? ColorUtils.transparentize(root.expressivePalette[1], root.threeWayProgress) : Appearance.colors.colLayer1Hover
+        colBackgroundActive: root.expressive ? ColorUtils.transparentize(root.expressivePalette[2], root.threeWayProgress) : Appearance.colors.colLayer1Active
+        colBackgroundToggled: root.expressive ? ColorUtils.transparentize(root.expressivePalette[3], root.threeWayProgress) : ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colLayer2, 1 - layer2Mix), root.threeWayProgress)
+        colBackgroundToggledHover: root.expressive ? ColorUtils.transparentize(root.expressivePalette[4], root.threeWayProgress) : ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colPrimaryHover, Appearance.colors.colLayer2Hover, 1 - layer2Mix), root.threeWayProgress)
+        colBackgroundToggledActive: root.expressive ? ColorUtils.transparentize(root.expressivePalette[5], root.threeWayProgress) : ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colPrimaryActive, Appearance.colors.colLayer2Active, 1 - layer2Mix), root.threeWayProgress)
         readonly property real fullRadius: Math.min(width, height) / 2
         readonly property real squareMorphProgress: Resize.progress(width, root.baseCellHeight, root.baseCellWidth)
-        buttonRadius: Config.options.appearance.sharpMode ? 0 : (
+        buttonRadius: Config.options.appearance.sharpMode ? 0 : root.expressive ? root.expressiveRadius(width, height) : (
             width < root.baseCellWidth
                 ? (root.toggled
                     ? Resize.mix(fullRadius, root.scaled(Appearance.rounding.large), squareMorphProgress)
@@ -248,7 +291,7 @@ Item {
         rightRadius: isPressed ? buttonRadiusPressed : buttonRadius
         Behavior on leftRadius { enabled: !root.editMode; animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton) }
         Behavior on rightRadius { enabled: !root.editMode; animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton) }
-        buttonRadiusPressed: is3WaySlider ? (height / 2) : (root.isSquare ? (root.toggled ? fullRadius : root.scaled(Appearance.rounding.normal)) : root.scaled(Appearance.rounding.normal))
+        buttonRadiusPressed: root.expressive && !is3WaySlider ? Math.max(0, buttonRadius - root.scaled(6)) : is3WaySlider ? (height / 2) : (root.isSquare ? (root.toggled ? fullRadius : root.scaled(Appearance.rounding.normal)) : root.scaled(Appearance.rounding.normal))
         property color colText: ColorUtils.transparentize(root.toggled
             ? ColorUtils.mix(Appearance.colors.colOnPrimary, Appearance.colors.colOnLayer2, 1 - layer2Mix)
             : Appearance.colors.colOnLayer2, enabled ? 0 : 0.7)
@@ -260,6 +303,15 @@ Item {
 
         onClicked: {
             if (is3WaySlider) return;
+            // Expressive: a click opens the dialog when there is one; the toggle
+            // itself switches from the PowerSpot on the icon.
+            if (root.expressive) {
+                if (root.hasMenu)
+                    root.altAction();
+                else
+                    root.mainAction();
+                return;
+            }
             if ((root.expandedSize || root.isTall) && root.hasMenu)
                 root.altAction();
             else
@@ -268,20 +320,40 @@ Item {
 
         contentItem: Item {
             anchors.fill: parent
-            readonly property Component overrideComponent: root.isTall
+            readonly property Component overrideComponent: root.isTall && !root.expressive
                 ? (root.isWide ? root.wide2x2OverrideComponent : root.tall1x2OverrideComponent) : null
             readonly property real sliderReveal: root.threeWayProgress
 
             QuickToggleMorphLayer {
                 anchors.fill: parent
+                visible: !root.expressive
                 reveal: parent.overrideComponent ? 0 : 1 - parent.sliderReveal
                 directionX: root.resizeDirectionX
                 directionY: root.resizeDirectionY
                 travel: root.scaled(12)
-                QuickToggleMorphContent {
+                Loader {
                     anchors.fill: parent
-                    tile: root
-                    button: visualButton
+                    active: !root.expressive
+                    sourceComponent: QuickToggleMorphContent {
+                        tile: root
+                        button: visualButton
+                    }
+                }
+            }
+            QuickToggleMorphLayer {
+                anchors.fill: parent
+                visible: root.expressive
+                reveal: 1 - parent.sliderReveal
+                directionX: root.resizeDirectionX
+                directionY: root.resizeDirectionY
+                travel: root.scaled(12)
+                Loader {
+                    anchors.fill: parent
+                    active: root.expressive
+                    sourceComponent: ExpressiveQuickToggleContent {
+                        tile: root
+                        button: visualButton
+                    }
                 }
             }
             Loader {
