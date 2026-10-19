@@ -1528,7 +1528,7 @@ Singleton {
     // A group's own look over the Edit Mode default: `shape` and `color`
     // ("" keeps the default). Anything else in `patch` is ignored.
     function setGroupStyle(screenName, groupId, patch) {
-        const keys = ["shape", "color"];
+        const keys = ["shape", "color", "mask"];
         return root.save(screenName, root.itemsFor(screenName).map(item => {
             if (item.id !== groupId || item.type !== "group")
                 return item;

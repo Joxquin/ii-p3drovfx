@@ -724,9 +724,16 @@ Item {
         const bg = root.options.iconBackground ?? "none";
         return bg === "circle" ? "circle" : bg === "squircle" ? "squircle" : "rounded";
     }
+    function groupColorOf(entry) {
+        return entry.color || (root.options.groupColor ?? "auto");
+    }
+    // Glass: the neutral surface at the glass alpha, which the compositor
+    // blurs (Appearance.desktopGlassScreens).
     function groupFillOf(entry) {
-        const v = entry.color || (root.options.groupColor ?? "auto");
+        const v = root.groupColorOf(entry);
         const bg = root.options.iconBackground ?? "none";
+        if (v === "glass")
+            return Qt.alpha(Appearance.m3colors.m3surfaceContainer, Appearance.desktopGlassAlpha);
         if (v === "primary" || (v === "auto" && (bg === "circle" || bg === "squircle")))
             return Appearance.colors.colPrimaryContainer;
         if (v === "secondary")
@@ -736,7 +743,7 @@ Item {
         return Appearance.m3colors.m3surfaceContainerHigh;
     }
     function groupOnFillOf(entry) {
-        const v = entry.color || (root.options.groupColor ?? "auto");
+        const v = root.groupColorOf(entry);
         const bg = root.options.iconBackground ?? "none";
         if (v === "primary" || (v === "auto" && (bg === "circle" || bg === "squircle")))
             return Appearance.colors.colOnPrimaryContainer;
@@ -746,6 +753,22 @@ Item {
             return Appearance.colors.colOnTertiaryContainer;
         return Appearance.m3colors.m3onSurface;
     }
+    // The glass's hairline rim: a light edge, like light catching a pane.
+    readonly property color groupRim: Qt.alpha(Appearance.m3colors.m3onSurface, 0.16)
+    // How a group clips its members' icons. Auto follows the group's shape,
+    // so square icons never poke out of a round group.
+    function groupMaskOf(entry) {
+        const v = entry.mask || (root.options.groupIconMask ?? "auto");
+        if (v !== "auto")
+            return v;
+        const shape = root.groupShapeOf(entry);
+        return shape === "rounded" ? "rounded" : shape === "squircle" ? "squircle" : "circle";
+    }
+    // A glass group on this screen turns the compositor blur on behind the
+    // layer even when the widgets are opaque.
+    readonly property bool hasGlassGroup: root.visible
+        && root.items.some(item => item.type === "group" && root.groupColorOf(item) === "glass")
+    onHasGlassGroupChanged: Appearance.setDesktopGlass(root.screenName, root.hasGlassGroup)
     function positionAt(x, y, span = 1) {
         return Qt.point(Math.max(0, Math.min(width - cellWidth * span, Math.round(x / 10) * 10)),
                         Math.max(0, Math.min(height - cellHeight * span, Math.round(y / 10) * 10)));
@@ -951,6 +974,7 @@ Item {
     onPlateEntriesChanged: DesktopShortcuts.setPlates(root.screenName, root.plateEntries)
     Component.onDestruction: {
         DesktopShortcuts.setPlates(root.screenName, []);
+        Appearance.setDesktopGlass(root.screenName, false);
         // A rename cut short by the layer going away gives its count back.
         if (root._captionCounted)
             GlobalStates.desktopDialogCount = Math.max(0, GlobalStates.desktopDialogCount - 1);
@@ -989,21 +1013,31 @@ Item {
         }
         return best;
     }
-    // A click on an extended group at (x, y) in its tile: spots 0-2 launch
-    // their app, the last one (or a spot with no app) opens the mini group.
+    // A click on an extended group at (x, y) in its tile: a spot with an
+    // app launches it; the mini group, an empty spot, the rim or the label
+    // open the popup.
     function openGroupSpot(tile, x, y) {
-        const spot = (y >= tile.height / 2 ? 2 : 0) + (x >= tile.width / 2 ? 1 : 0);
-        const app = spot < 3 ? (tile.entry.apps ?? [])[spot] : null;
+        const view = tile.largeView;
+        const p = view ? view.mapFromItem(tile, x, y) : Qt.point(x, y);
+        const spot = view ? view.spotAt(p.x, p.y) : -1;
+        const apps = tile.entry.apps ?? [];
+        const app = spot >= 0 && (spot < 3 || apps.length === 4) ? apps[spot] : null;
         if (app) {
             root.selectedIds = [];
             DesktopShortcuts.launch(app);
-        } else if (spot === 3) {
+        } else {
             root.openEntry(tile.entry);
         }
     }
     function openEntry(entry) {
         const tile = root.tileFor(entry.id);
-        if (entry.type === "group" && tile && tile.span > 1)
+        const view = tile ? tile.largeView : null;
+        if (entry.type === "group" && view) {
+            // From the mini group: the popup holds the members it gathers.
+            const r = view.spotRect(3);
+            const p = view.mapToItem(root, r.x, r.y);
+            root.openPopup(entry.id, p.x, p.y, r.width, r.height);
+        } else if (entry.type === "group" && tile && tile.span > 1)
             root.openPopup(entry.id, tile.x + tile.width / 2, tile.y + tile.height / 2, tile.width / 2, tile.height / 2);
         else if (entry.type === "group" && tile)
             root.openPopup(entry.id, tile.x, tile.y, tile.width, tile.height);
@@ -1096,7 +1130,10 @@ Item {
         }
     }
     onItemsChanged: sync()
-    Component.onCompleted: sync()
+    Component.onCompleted: {
+        sync();
+        Appearance.setDesktopGlass(root.screenName, root.hasGlassGroup);
+    }
     ListModel { id: iconModel; dynamicRoles: true }
 
     onVisibleChanged: {
@@ -1448,6 +1485,8 @@ Item {
             required property var entry
             required property int mergePulse
             readonly property int span: DesktopShortcuts.spanOf(entry)
+            // An extended group's plate, for its spots' geometry.
+            readonly property var largeView: tile.span > 1 ? glyphLoader.item : null
             readonly property point settled: root.positionAt(entry.x, entry.y, tile.span)
             property bool dragging: false
             property bool suppressClick: false
@@ -1784,7 +1823,7 @@ Item {
                 // tile at 0.96 moves the icon barely 2px. Suppressed during a
                 // drag (the Translate already moves the tile).
                 scale: (gesture.pressedButtons & Qt.LeftButton) !== 0
-                    && !tile.dragging ? 0.9 : 1.0
+                    && !tile.dragging ? (tile.span > 1 ? 0.97 : 0.9) : 1.0
                 Behavior on scale {
                     NumberAnimation {
                         duration: 150
@@ -1827,22 +1866,7 @@ Item {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                 }
-                // An extended group draws its own 2x2 spots instead.
-                Loader {
-                    anchors.fill: parent
-                    active: tile.span > 1
-                    sourceComponent: DesktopGroupLarge {
-                        host: root
-                        entry: tile.entry
-                        shape: root.groupShapeOf(tile.entry)
-                        fill: root.groupFillOf(tile.entry)
-                        onFill: root.groupOnFillOf(tile.entry)
-                        hovering: tile.hovered
-                        hoverPoint: tileHover.point.position
-                    }
-                }
                 ColumnLayout {
-                    visible: tile.span === 1
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
@@ -1851,8 +1875,13 @@ Item {
                     Item {
                         id: plate
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: root.iconSize
-                        Layout.preferredHeight: root.iconSize
+                        // An extended group's plate is the folder itself: as
+                        // big as the block leaves after its label.
+                        readonly property real size: tile.span > 1
+                            ? Math.min(tile.width - 24, tile.height - 24 - (labelBox.visible ? root.labelHeight + root.labelGap : 0))
+                            : root.iconSize
+                        Layout.preferredWidth: plate.size
+                        Layout.preferredHeight: plate.size
                         readonly property string style: root.options.iconBackground ?? "none"
                         readonly property bool shaped: plate.style === "circle" || plate.style === "squircle"
                         // The icon backdrop: a translucent card, or a
@@ -1868,13 +1897,15 @@ Item {
                             border.color: Qt.alpha(Appearance.m3colors.m3outlineVariant, 0.5)
                         }
                         Loader {
+                            id: glyphLoader
                             anchors.centerIn: parent
-                            readonly property real glyph: tile.entry.type === "group" ? root.iconSize
+                            readonly property real glyph: tile.entry.type === "group" ? plate.size
                                 : plate.shaped ? root.iconSize * 0.64
                                 : plate.style === "translucent" ? root.iconSize * 0.78 : root.iconSize
                             width: glyph
                             height: glyph
-                            sourceComponent: tile.entry.type === "group" ? groupIcon : singleIcon
+                            sourceComponent: tile.span > 1 ? largeGroupIcon
+                                : tile.entry.type === "group" ? groupIcon : singleIcon
                         }
                         // Running: the dock's own dot, under the icon.
                         Rectangle {
@@ -2111,6 +2142,24 @@ Item {
                         apps: tile.entry.apps
                         shape: root.groupShapeOf(tile.entry)
                         fill: root.groupFillOf(tile.entry)
+                        mask: root.groupMaskOf(tile.entry)
+                        glass: root.groupColorOf(tile.entry) === "glass"
+                        rim: root.groupRim
+                    }
+                }
+                Component {
+                    id: largeGroupIcon
+                    DesktopGroupLarge {
+                        id: largeView
+                        entry: tile.entry
+                        shape: root.groupShapeOf(tile.entry)
+                        fill: root.groupFillOf(tile.entry)
+                        onFill: root.groupOnFillOf(tile.entry)
+                        mask: root.groupMaskOf(tile.entry)
+                        glass: root.groupColorOf(tile.entry) === "glass"
+                        rim: root.groupRim
+                        hovering: tile.hovered
+                        hoverPoint: largeView.mapFromItem(tile, tileHover.point.position.x, tileHover.point.position.y)
                     }
                 }
             }

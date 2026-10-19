@@ -441,13 +441,30 @@ Singleton {
         delete next[screenName];
         root.widgetSelfBlurScreens = next;
     }
+    // Screens whose desktop shows a glass app group: the group is the only
+    // translucent thing there when the widgets are opaque, so it asks for the
+    // compositor blur on its own.
+    property var desktopGlassScreens: ({})
+    function setDesktopGlass(screenName: string, active: bool): void {
+        if (screenName === "" || (root.desktopGlassScreens[screenName] === true) === active)
+            return;
+        const next = Object.assign({}, root.desktopGlassScreens);
+        if (active)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.desktopGlassScreens = next;
+    }
+    // A glass group's alpha: always above the blur's ignore_alpha, so it is
+    // blurred whatever the widgets do.
+    readonly property real desktopGlassAlpha: Math.max(0.4, root.ignoreAlpha + 0.08)
     readonly property bool backgroundWidgetsTranslucent: root.widgetBackgroundAlpha > 0.01 && root.widgetBackgroundAlpha < 0.99
     readonly property real backgroundWidgetsIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, root.widgetBackgroundAlpha - 0.01))
     // Serialised so the rules are re-pushed only when a screen's answer changes.
     readonly property string backgroundWidgetsRules: {
         let out = "";
         for (const screen of Object.keys(root.widgetSelfBlurScreens)) {
-            const blur = root.backgroundWidgetsTranslucent && root.widgetSelfBlurScreens[screen] !== true;
+            const blur = (root.backgroundWidgetsTranslucent || root.desktopGlassScreens[screen] === true) && root.widgetSelfBlurScreens[screen] !== true;
             out += "hl.layer_rule({ name = 'ii:appearance:background-widgets:" + screen + "', match = { namespace = '^quickshell:backgroundWidgets:" + screen + "$' }, blur = "
                 + (blur ? "true" : "false") + ", ignore_alpha = " + root.backgroundWidgetsIgnoreAlpha + " }) ";
         }

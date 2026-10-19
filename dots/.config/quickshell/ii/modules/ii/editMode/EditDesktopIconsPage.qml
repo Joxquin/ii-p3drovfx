@@ -175,14 +175,28 @@ StyledFlickable {
                 { "displayName": Translation.tr("Secondary"), "value": "secondary" },
                 { "displayName": Translation.tr("Tertiary"), "value": "tertiary" },
                 { "displayName": Translation.tr("Neutral"), "value": "neutral" },
+                { "displayName": Translation.tr("Glass"), "value": "glass", "icon": "blur_on" },
             ]
             onSelected: value => Config.options.background.desktopIcons.groupColor = value
+        }
+        EditOptionChips {
+            Layout.fillWidth: true
+            label: Translation.tr("Icon mask")
+            currentValue: root.options.groupIconMask ?? "auto"
+            options: [
+                { "displayName": Translation.tr("Auto"), "value": "auto" },
+                { "displayName": Translation.tr("None"), "value": "none" },
+                { "displayName": Translation.tr("Rounded"), "value": "rounded", "icon": "rounded_corner" },
+                { "displayName": Translation.tr("Squircle"), "value": "squircle", "icon": "square" },
+                { "displayName": Translation.tr("Circle"), "value": "circle", "icon": "circle" },
+            ]
+            onSelected: value => Config.options.background.desktopIcons.groupIconMask = value
         }
         StyledText {
             Layout.fillWidth: true
             Layout.leftMargin: 6
             Layout.rightMargin: 6
-            text: Translation.tr("Extend a group from its right-click menu to show three apps big and the rest in a small group. A group can also keep its own shape and colour there.")
+            text: Translation.tr("Extend a group from its right-click menu to show three apps big and the rest in a small group. A group can also keep its own shape, colour and icon mask there. Auto clips the icons to the group's shape.")
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
             wrapMode: Text.Wrap

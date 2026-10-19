@@ -1146,37 +1146,74 @@ esac`
                 { value: "primary", text: Translation.tr("Primary"), icon: "water_drop" },
                 { value: "secondary", text: Translation.tr("Secondary"), icon: "water_drop" },
                 { value: "tertiary", text: Translation.tr("Tertiary"), icon: "water_drop" },
-                { value: "neutral", text: Translation.tr("Neutral"), icon: "water_drop" }
+                { value: "neutral", text: Translation.tr("Neutral"), icon: "water_drop" },
+                { value: "glass", text: Translation.tr("Glass"), icon: "blur_on" }
+            ]
+            readonly property var masks: [
+                { value: "", text: Translation.tr("Default"), icon: "restart_alt" },
+                { value: "none", text: Translation.tr("None"), icon: "crop_free" },
+                { value: "rounded", text: Translation.tr("Rounded"), icon: "rounded_corner" },
+                { value: "squircle", text: Translation.tr("Squircle"), icon: "square" },
+                { value: "circle", text: Translation.tr("Circle"), icon: "circle" }
             ]
             PageHeader { title: Translation.tr("Group style") }
-            EditPanelSectionLabel { text: Translation.tr("Shape") }
-            Repeater {
-                model: styleColumn.shapes
-                delegate: MenuRow {
-                    required property var modelData
-                    required property int index
-                    first: index === 0
-                    last: index === styleColumn.shapes.length - 1
-                    symbol: modelData.icon
-                    title: modelData.text
-                    trailingKind: (root.entry.shape ?? "") === modelData.value ? "check" : "none"
-                    rowEnabled: root.writable
-                    onActivated: DesktopShortcuts.setGroupStyle(root.screenName, root.entry.id, { shape: modelData.value })
-                }
-            }
-            EditPanelSectionLabel { text: Translation.tr("Colour") }
-            Repeater {
-                model: styleColumn.colors
-                delegate: MenuRow {
-                    required property var modelData
-                    required property int index
-                    first: index === 0
-                    last: index === styleColumn.colors.length - 1
-                    symbol: modelData.icon
-                    title: modelData.text
-                    trailingKind: (root.entry.color ?? "") === modelData.value ? "check" : "none"
-                    rowEnabled: root.writable
-                    onActivated: DesktopShortcuts.setGroupStyle(root.screenName, root.entry.id, { color: modelData.value })
+            // Three lists: taller than the screen allows on a small one.
+            StyledFlickable {
+                id: styleFlick
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(440, styleList.implicitHeight)
+                contentWidth: width
+                contentHeight: styleList.implicitHeight
+                clip: true
+                ColumnLayout {
+                    id: styleList
+                    width: styleFlick.width
+                    spacing: 3
+                    EditPanelSectionLabel { text: Translation.tr("Shape") }
+                    Repeater {
+                        model: styleColumn.shapes
+                        delegate: MenuRow {
+                            required property var modelData
+                            required property int index
+                            first: index === 0
+                            last: index === styleColumn.shapes.length - 1
+                            symbol: modelData.icon
+                            title: modelData.text
+                            trailingKind: (root.entry.shape ?? "") === modelData.value ? "check" : "none"
+                            rowEnabled: root.writable
+                            onActivated: DesktopShortcuts.setGroupStyle(root.screenName, root.entry.id, { shape: modelData.value })
+                        }
+                    }
+                    EditPanelSectionLabel { text: Translation.tr("Colour") }
+                    Repeater {
+                        model: styleColumn.colors
+                        delegate: MenuRow {
+                            required property var modelData
+                            required property int index
+                            first: index === 0
+                            last: index === styleColumn.colors.length - 1
+                            symbol: modelData.icon
+                            title: modelData.text
+                            trailingKind: (root.entry.color ?? "") === modelData.value ? "check" : "none"
+                            rowEnabled: root.writable
+                            onActivated: DesktopShortcuts.setGroupStyle(root.screenName, root.entry.id, { color: modelData.value })
+                        }
+                    }
+                    EditPanelSectionLabel { text: Translation.tr("Icon mask") }
+                    Repeater {
+                        model: styleColumn.masks
+                        delegate: MenuRow {
+                            required property var modelData
+                            required property int index
+                            first: index === 0
+                            last: index === styleColumn.masks.length - 1
+                            symbol: modelData.icon
+                            title: modelData.text
+                            trailingKind: (root.entry.mask ?? "") === modelData.value ? "check" : "none"
+                            rowEnabled: root.writable
+                            onActivated: DesktopShortcuts.setGroupStyle(root.screenName, root.entry.id, { mask: modelData.value })
+                        }
+                    }
                 }
             }
         }

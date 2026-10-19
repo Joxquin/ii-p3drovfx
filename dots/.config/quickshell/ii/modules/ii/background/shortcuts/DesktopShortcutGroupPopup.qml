@@ -31,9 +31,9 @@ FocusScope {
     // Extend the group into the big 2x2 block, or shrink it back.
     signal extendRequested()
 
-    // An extended group shows its first three members on the desktop; this
-    // card holds the rest.
-    readonly property var apps: (entry.apps ?? []).slice(entry.large ? 3 : 0)
+    // An extended group shows its first apps on the desktop; the popup holds
+    // the ones its mini group gathers, or all of them when there is none.
+    readonly property var apps: (entry.apps ?? []).slice(entry.large && (entry.apps ?? []).length > 4 ? 3 : 0)
     readonly property real cardWidth: 300
     property real reveal: 0
     property bool closing: false
