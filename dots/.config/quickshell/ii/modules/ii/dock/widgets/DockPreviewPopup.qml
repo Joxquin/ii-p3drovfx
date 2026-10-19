@@ -369,7 +369,12 @@ PopupWindow {
             // here re-anchored the popup (a Wayland round trip) on every frame
             // the hovered icon grew; the card now lifts inside the surface
             // instead (popupBackground.lensLift), which has room for it.
-            x: compactMode ? 0 : dockPos === "left" ? ((dockWindow?.width ?? 0) - (dockWindow?.magCrossExtra ?? 0)) : (dockPos === "right" ? (dockWindow?.magCrossExtra ?? 0) : 0)
+            // Connect mode widens a vertical dock's window inward by pushRoom
+            // (sidebar push room) and offsets the dock by sidebarPush; anchor
+            // to the dock's inner edge, not the window's.
+            x: compactMode ? 0 : dockPos === "left"
+                ? ((dockWindow?.width ?? 0) - (dockWindow?.pushRoom ?? 0) + (dockWindow?.sidebarPush ?? 0) - (dockWindow?.magCrossExtra ?? 0))
+                : (dockPos === "right" ? ((dockWindow?.pushRoom ?? 0) - (dockWindow?.sidebarPush ?? 0) + (dockWindow?.magCrossExtra ?? 0)) : 0)
             y: compactMode ? 0 : dockPos === "bottom" ? (dockWindow?.magCrossExtra ?? 0) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magCrossExtra ?? 0)) : 0
         }
 
