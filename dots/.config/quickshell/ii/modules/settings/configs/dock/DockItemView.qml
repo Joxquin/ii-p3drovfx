@@ -67,6 +67,7 @@ Loader {
                 anchors.centerIn: parent
                 apps: root.itemData.apps ?? []
                 groupId: root.itemData.groupId ?? ""
+                autoGroup: root.itemData.autoGroup === true
                 dockContent: root.context
                 delegateIndex: root.itemIndex
             }

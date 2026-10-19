@@ -5826,6 +5826,8 @@ Singleton {
                 property bool islandsStyle: false
                 property real islandSpacing: 8
                 property bool enableAppGroups: true
+                // Fold the least recently used apps into one ephemeral group when the tray runs out of room.
+                property bool autoOverflowGroup: true
                 property bool enableShapeMask: true
                 property string shapeMask: "Circle"
                 property real height: 56

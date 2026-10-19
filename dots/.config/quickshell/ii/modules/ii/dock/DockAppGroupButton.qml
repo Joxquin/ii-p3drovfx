@@ -18,6 +18,9 @@ DockButton {
     property var dockContent: null
     property int delegateIndex: -1
     property string groupId: ""
+    // The dock's overflow group: derived from the room left, not saved, so it
+    // cannot be dragged, dissolved or edited.
+    property bool autoGroup: false
     property bool groupHovered: false
     property var displayedApps: []
 
@@ -275,7 +278,7 @@ DockButton {
                 return
             const point = interactionArea.mapToItem(null, event.x, event.y)
             const distance = Math.max(Math.abs(point.x - pressPoint.x), Math.abs(point.y - pressPoint.y))
-            if (!dragActive && distance > 5 && root.delegateIndex >= 0) {
+            if (!dragActive && distance > 5 && root.delegateIndex >= 0 && !root.autoGroup) {
                 dragActive = true
                 root.groupHovered = false
                 root.dockContent?.startItemDrag(root.delegateIndex, interactionArea, event.x, event.y)
@@ -290,7 +293,7 @@ DockButton {
                 // A right-click inside the separate group popup can finish
                 // after that popup starts closing. Do not let that release
                 // fall through and remove the whole group underneath it.
-                if (groupPopup.active)
+                if (groupPopup.active || root.autoGroup)
                     return
                 groupPopup.close()
                 root.dockContent?.removeAppGroup(root.groupId)
@@ -323,12 +326,15 @@ DockButton {
         anchorItem: root
         apps: root.apps
         groupId: root.groupId
+        autoGroup: root.autoGroup
         dockContent: root.dockContent
     }
 
     DockTooltip {
         parentItem: root
-        text: Translation.tr("Right click to dissolve group\nRight click an app to remove it from the group")
+        text: root.autoGroup
+            ? Translation.tr("Apps that don't fit on the dock")
+            : Translation.tr("Right click to dissolve group\nRight click an app to remove it from the group")
         showTooltip: root.groupHovered
         tooltipOffset: -root.dotMargin
     }

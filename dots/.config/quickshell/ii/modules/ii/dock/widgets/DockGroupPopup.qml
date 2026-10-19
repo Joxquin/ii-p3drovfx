@@ -16,6 +16,8 @@ DockContextMenuBase {
     property var apps: []
     property var dockContent: null
     property string groupId: ""
+    // The dock's overflow group has no saved definition to take members out of.
+    property bool autoGroup: false
     property string draggingAppId: ""
     property var pendingRemovals: []
     property Item hoveredAppButton: null
@@ -172,6 +174,10 @@ DockContextMenuBase {
                 function removeMember() {
                     if (appButton.removing)
                         return;
+                    if (root.autoGroup) {
+                        appButton.resetDrag();
+                        return;
+                    }
                     const length = Math.hypot(appButton.dragX, appButton.dragY);
                     appButton.removalX = length > 0 ? appButton.dragX / length : root.motionX;
                     appButton.removalY = length > 0 ? appButton.dragY / length : root.motionY;

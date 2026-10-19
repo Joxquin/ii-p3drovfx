@@ -14785,5 +14785,8 @@
     "Wiktionary": "Wiktionary",
     "Wiktionary, CC BY-SA": "Wiktionary, CC BY-SA",
     "Wiktionary has no entry for this spelling in any language.": "O Wiktionary não tem entrada para essa grafia em nenhum idioma.",
-    "Search for ‘dictionary’, ‘define’ or ‘sinônimo’ to look words up with definitions, synonyms, antonyms and examples from Wiktionary.": "Busque por ‘dicionário’, ‘define’ ou ‘sinônimo’ para consultar palavras com definições, sinônimos, antônimos e exemplos do Wiktionary."
+    "Search for ‘dictionary’, ‘define’ or ‘sinônimo’ to look words up with definitions, synonyms, antonyms and examples from Wiktionary.": "Busque por ‘dicionário’, ‘define’ ou ‘sinônimo’ para consultar palavras com definições, sinônimos, antônimos e exemplos do Wiktionary.",
+    "Group apps that don't fit": "Agrupar apps que não cabem",
+    "When widgets and open apps run out of room, the least recently used apps fold into one group instead of the dock being cut off": "Quando widgets e apps abertos não cabem mais, os apps usados há mais tempo se juntam num grupo em vez de a dock ser cortada",
+    "Apps that don't fit on the dock": "Apps que não cabem na dock"
 }

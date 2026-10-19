@@ -14,6 +14,7 @@ import Quickshell.Services.Mpris
 
 import "./widgets"
 import "DockReorder.js" as DockReorder
+import "DockOverflow.js" as DockOverflow
 import "DockMagnification.js" as DockMagnification
 import "utilities/DockUtilityCatalog.js" as DockUtilityCatalog
 
@@ -23,6 +24,8 @@ Item {
     signal togglePinRequested
 
     property var currentScreen: null
+    // Main-axis room the tray has on this screen (Dock.qml); 0 = unknown.
+    property real availableMainExtent: 0
     property bool isPinned: false
     property bool dockRevealed: false
     property bool dockWindowVisible: true
@@ -663,6 +666,9 @@ Item {
     function _orderKeysForIslandItem(item, currentOrder) {
         if (!item)
             return [];
+
+        if (item.autoGroup)
+            return Array.from(item.memberKeys ?? []);
 
         if (item.type === "appGroup") {
             return (item.appIds ?? []).map(appId => root._orderKeyForAppId(currentOrder, appId));
@@ -1409,7 +1415,7 @@ Item {
             return false;
         if (target.type === "app")
             return target.appId !== source.appId;
-        return target.type === "appGroup";
+        return target.type === "appGroup" && target.autoGroup !== true;
     }
 
     function _buildGroupableFlags() {
@@ -1862,7 +1868,7 @@ Item {
         if (items[targetIndex]?.type === "editAdd")
             targetIndex = Math.max(0, targetIndex - 1);
         const targetItem = items[targetIndex];
-        if (sourceItem?.type === "editAdd")
+        if (sourceItem?.type === "editAdd" || sourceItem?.autoGroup)
             return false;
         if (!sourceItem || !targetItem || sourceItem.orderKey === targetItem.orderKey)
             return false;
@@ -1872,6 +1878,8 @@ Item {
 
         const currentOrder = Array.from(Config.options?.dock?.order ?? []);
         const keysOf = function (item) {
+            if (item.autoGroup)
+                return Array.from(item.memberKeys);
             return item.type === "appGroup"
                 ? item.appIds.map(appId => root._orderKeyForAppId(currentOrder, appId))
                 : [String(item.orderKey)];
@@ -1919,7 +1927,14 @@ Item {
         // user's anchors are all stale — pruning against it would wipe them.
         if (current.length === 0 || root.modelItems.length === 0)
             return;
-        const live = root.modelItems.map(function (item) { return String(item?.orderKey ?? ""); });
+        // Apps folded into the overflow group are still on the dock.
+        const live = [];
+        for (const item of root.modelItems) {
+            if (item?.autoGroup)
+                live.push(...item.memberKeys);
+            else
+                live.push(String(item?.orderKey ?? ""));
+        }
         const next = DockReorder.pruneManualKeys(current, live);
         if (next.length !== current.length)
             Config.options.dock.manualOrder = next;
@@ -2685,12 +2700,114 @@ Item {
             );
         }
 
-        const items = root._coalesceLauncherItems(result);
+        let items = root._coalesceLauncherItems(result);
+        const editAdd = root.editLayerActive ? { type: "editAdd", orderKey: root.editAddKey } : null;
+        items = root._foldOverflow(items, editAdd);
         // Edit Mode's (+): the way to put a widget on the dock from the dock.
         // Never part of dock.order (_writeDockOrder drops its key).
-        if (root.editLayerActive)
-            items.push({ type: "editAdd", orderKey: root.editAddKey });
+        if (editAdd)
+            items.push(editAdd);
         return items;
+    }
+
+    // ── Overflow group ─────────────────────────────────────────────────────
+    // Widgets and pinned launchers can leave too little room for the apps that
+    // keep opening; past the tray the row is clipped. Instead, the least
+    // recently used apps fold into one group that exists only in the derived
+    // model (never in dock.order or dock.appGroups) and unfolds by itself as
+    // soon as there is room again.
+    readonly property bool autoOverflowEnabled: Config.options?.dock?.autoOverflowGroup ?? true
+    readonly property string overflowGroupId: "__overflow"
+    // Last use per normalised app id. Mutated in place: a focus change must not
+    // rebuild the model unless it can change what is folded.
+    property var _appLastUsed: ({})
+    property var _overflowFoldedIds: ({})
+    property int _overflowRecencyRevision: 0
+
+    function _noteAppUsed(appId) {
+        const id = TaskbarApps.normalizeAppId(appId ?? "");
+        if (!id)
+            return;
+        root._appLastUsed[id] = Date.now();
+        // Only a folded app becoming the most recent changes the fold.
+        if (root._overflowFoldedIds[id])
+            root._overflowRecencyRevision++;
+    }
+
+    Connections {
+        target: ToplevelManager
+        function onActiveToplevelChanged() {
+            root._noteAppUsed(ToplevelManager.activeToplevel?.appId);
+        }
+    }
+
+    function _appRecency(item) {
+        const id = TaskbarApps.normalizeAppId(item?.appId ?? "");
+        if (!id)
+            return 0;
+        // An app seen for the first time counts as just used: a window that
+        // just opened is the last thing that should fold.
+        if (root._appLastUsed[id] === undefined && (item.appData?.toplevels?.length ?? 0) > 0)
+            root._appLastUsed[id] = Date.now();
+        return root._appLastUsed[id] ?? 0;
+    }
+
+    // The row's main-axis extent as the layout will build it, from the item
+    // list alone (baseMetrics reads flattenedItems, which this decides).
+    function _estimateMainExtent(items) {
+        const count = items.length;
+        if (count === 0)
+            return 0;
+        const spacing = Config.options?.dock?.iconSpacing ?? 0;
+        const separator = Math.max(root.dotMargin, root.sepThickness * 2);
+        const smart = Config.options?.dock?.smartGrouping ?? false;
+        let total = spacing * (count - 1);
+        for (let i = 0; i < count; i++) {
+            total += root._rawItemMainExtent(items[i]);
+            if (!root.effectiveShowDividers)
+                continue;
+            if (i > 0 && (smart ? root.getItemCategory(items[i]) !== root.getItemCategory(items[i - 1])
+                                : root.isSpecialItem(items[i])))
+                total += separator;
+            if (!smart && i < count - 1 && root.isSpecialItem(items[i]) && !root.isSpecialItem(items[i + 1]))
+                total += separator;
+        }
+        if (root.islandsStyle)
+            total += Math.max(0, root._buildIslandSegments(items).length - 1) * root.islandExtraGap;
+        return total;
+    }
+
+    function _makeOverflowGroupItem(members) {
+        return {
+            type: "appGroup",
+            autoGroup: true,
+            groupId: root.overflowGroupId,
+            appIds: members.map(item => item.appId),
+            apps: members.map(item => item.appData),
+            memberKeys: members.map(item => String(item.orderKey)),
+            orderKey: "group:" + root.overflowGroupId
+        };
+    }
+
+    function _foldOverflow(items, editAdd) {
+        root._overflowRecencyRevision;
+        const folded = {};
+        let next = items;
+        if (root.autoOverflowEnabled) {
+            const outcome = DockOverflow.fold(items, {
+                budget: root.availableMainExtent,
+                measure: list => root._estimateMainExtent(editAdd ? list.concat([editAdd]) : list),
+                recencyOf: item => root._appRecency(item),
+                makeGroup: members => root._makeOverflowGroupItem(members)
+            });
+            next = outcome.items;
+            for (const item of items) {
+                if (outcome.foldedKeys.indexOf(String(item.orderKey)) >= 0)
+                    folded[TaskbarApps.normalizeAppId(item.appId ?? "")] = true;
+            }
+        }
+        root._overflowFoldedIds = folded;
+        return next;
     }
 
     // ── Presence transitions ───────────────────────────────────────────────
@@ -3501,6 +3618,7 @@ Item {
                 apps: appGroupItemRoot._itemData.apps ?? []
                 dockContent: root
                 groupId: appGroupItemRoot._itemData.groupId ?? ""
+                autoGroup: appGroupItemRoot._itemData.autoGroup === true
                 delegateIndex: appGroupItemRoot._index
             }
         }

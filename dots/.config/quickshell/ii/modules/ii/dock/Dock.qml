@@ -103,7 +103,10 @@ Scope {
             // Main-axis room the tray keeps from the window edge for its shadow.
             mainEdgePad: isDynamic ? 0 : mainPad / 2,
             backgroundWidth: bgW,
-            backgroundHeight: bgH
+            backgroundHeight: bgH,
+            // The longest the visible tray can get on its main axis: content
+            // beyond it is clipped, so the dock folds apps to stay inside.
+            trayMainCap: opts.isVertical ? (flushMainH ? maxH : trayCapH) : (flushMainW ? maxW : trayCapW)
         }
     }
 
@@ -914,6 +917,9 @@ Scope {
                         z: 1
                         isPinned: dock.pinned
                         currentScreen: dockRoot.screen
+                        // The dynamic island insets the content by its concave corners.
+                        availableMainExtent: Math.max(0, dockRoot.sizing.trayMainCap
+                            - (dockRoot.isDynamicIsland ? dockRoot.concaveCornerRadius * 2 : 0))
                         dockRevealed: dockRoot.reveal
                         dockWindowVisible: dockRoot.visible
                         onTogglePinRequested: {

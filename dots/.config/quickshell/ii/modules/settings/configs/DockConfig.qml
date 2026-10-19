@@ -627,6 +627,20 @@ Item {
                     }
                 }
 
+                ConfigRow {
+                    uniform: true
+                    visible: Config.options.dock.enable
+                    ConfigSwitch {
+                        buttonIcon: "auto_awesome_motion"
+                        text: Translation.tr("Group apps that don't fit")
+                        checked: Config.options.dock.autoOverflowGroup ?? true
+                        onCheckedChanged: Config.options.dock.autoOverflowGroup = checked
+                        StyledToolTip {
+                            text: Translation.tr("When widgets and open apps run out of room, the least recently used apps fold into one group instead of the dock being cut off")
+                        }
+                    }
+                }
+
                 ContentSubsection {
                     visible: Config.options.dock.enable
                     title: Translation.tr("Show on")
