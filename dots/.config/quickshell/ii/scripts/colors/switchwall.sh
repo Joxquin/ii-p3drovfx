@@ -1196,7 +1196,16 @@ main() {
         fi
     fi
 
-    # Resolve light theme variant when mode is light
+    # Resolve light theme variant when mode is light. Without --mode the mode
+    # is only read in switch(), after the dark file was already picked.
+    if [[ -n "$theme_file" && -z "$mode_flag" ]]; then
+        current_mode=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null | tr -d "'")
+        if [[ "$current_mode" == "prefer-dark" ]]; then
+            mode_flag="dark"
+        else
+            mode_flag="light"
+        fi
+    fi
     if [[ -n "$theme_file" && "$mode_flag" == "light" ]]; then
         local light_theme_file="${theme_file%.json}_light.json"
         if [[ -f "$light_theme_file" ]]; then
