@@ -1110,7 +1110,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 30
+    readonly property int currentConfigVersion: 31
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1851,6 +1851,20 @@ Singleton {
                 }
                 console.log("[Config] Migrated workspace compactor keys into bar.workspaces.arranger");
             }
+        }
+
+        // v30 -> v31: the desktop icon menu's "Open in Zed" became the editor
+        // entry, which runs apps.editor; an arranged menu keeps it where it was.
+        if (from < 31 && Array.isArray(raw.contextMenu?.layouts)) {
+            for (const layout of raw.contextMenu.layouts) {
+                if (!layout || layout.menu !== "desktopItem")
+                    continue;
+                for (const key of ["order", "bar", "hidden"]) {
+                    if (Array.isArray(layout[key]))
+                        layout[key] = layout[key].map(id => id === "zed" ? "editor" : id);
+                }
+            }
+            console.log("[Config] Migrated desktop icon menu: zed -> editor");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -3204,6 +3218,7 @@ Singleton {
             property JsonObject apps: JsonObject {
                 property string bluetooth: "kcmshell6 kcm_bluetooth"
                 property string changePassword: "kitty -1 --hold=yes fish -i -c 'passwd'"
+                property string editor: "zeditor" // The desktop icon menu's "Open in", given the path
                 property string network: "kcmshell6 kcm_networkmanagement"
                 property string manageUser: "kcmshell6 kcm_users"
                 property string networkEthernet: "kcmshell6 kcm_networkmanagement"

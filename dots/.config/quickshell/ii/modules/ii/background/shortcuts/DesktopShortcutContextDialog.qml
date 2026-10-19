@@ -95,14 +95,24 @@ ItemContextDialog {
         root.dismiss();
     }
 
-    // Zed takes a folder as a project and a file in a window of its own; a
-    // link opens where it points. The Arch package calls the binary zeditor.
-    function openInZed() {
+    // apps.editor is a command like apps.terminal, given the path; the desktop
+    // entry that runs the same binary names the row and lends it an icon. A
+    // link opens where it points, and the path is absolute, never an option.
+    readonly property string editorCommand: String((Config.options.apps && Config.options.apps.editor) || "").trim()
+    readonly property var editorEntry: {
+        const binary = (root.editorCommand.split(/\s+/)[0] || "").split("/").pop();
+        if (!binary)
+            return null;
+        const matches = DesktopEntries.applications.values.filter(app =>
+            String((app.command && app.command[0]) || "").split("/").pop() === binary);
+        return matches.find(app => !app.noDisplay) ?? matches[0] ?? null;
+    }
+    function openInEditor() {
         const target = root.entry.path;
-        if (!target)
+        if (!target || !root.editorCommand)
             return;
         Quickshell.execDetached(["bash", "-c",
-            `p=$(readlink -f -- "$1") || p="$1"; z=$(command -v zeditor || command -v zed) || exit 1; exec "$z" -- "$p"`,
+            `p=$(readlink -f -- "$1") || p="$1"; exec ${root.editorCommand} "$p"`,
             "_", target]);
         root.dismiss();
     }
@@ -115,7 +125,7 @@ ItemContextDialog {
         return Quickshell.iconPath(name, true);
     }
     readonly property string claudeIcon: Quickshell.iconPath("claude", true)
-    readonly property string zedIcon: Quickshell.iconPath("zed", true)
+    readonly property string editorIcon: root.editorEntry ? Quickshell.iconPath(root.editorEntry.icon, true) : ""
     // A copy answers in place before the menu goes: the row fills, its icon
     // turns into a check and its label says so, long enough to be read.
     function confirmCopy(id) {
@@ -155,8 +165,9 @@ ItemContextDialog {
             iconSource: root.terminalIcon, visible: entry.path !== "" },
         { id: "claude", text: Translation.tr("Claude Code here"), icon: "smart_toy",
             iconSource: root.claudeIcon, visible: entry.path !== "" },
-        { id: "zed", text: Translation.tr("Open in Zed"), icon: "code",
-            iconSource: root.zedIcon, visible: entry.path !== "" },
+        { id: "editor", text: root.editorEntry ? Translation.tr("Open in %1").arg(root.editorEntry.name)
+            : Translation.tr("Open in editor"), icon: "code",
+            iconSource: root.editorIcon, visible: entry.path !== "" && root.editorCommand !== "" },
         { id: "copy", text: Translation.tr("Copy"), icon: "content_copy", submenu: true,
             visible: entry.name !== "" || entry.path !== "" },
         { id: "section", text: root.selectionCount > 1 ? Translation.tr("Move selection to section")
@@ -213,8 +224,8 @@ ItemContextDialog {
             root.openTerminalHere();
         } else if (actionId === "claude") {
             root.openTerminalHere("claude");
-        } else if (actionId === "zed") {
-            root.openInZed();
+        } else if (actionId === "editor") {
+            root.openInEditor();
         } else {
             root.page = actionId;
         }

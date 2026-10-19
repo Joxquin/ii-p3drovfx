@@ -158,7 +158,7 @@ Singleton {
                 { "id": "reveal", "symbol": "folder_open", "title": "Show in folder" },
                 { "id": "terminal", "symbol": "terminal", "title": "Open terminal here" },
                 { "id": "claude", "symbol": "smart_toy", "title": "Claude Code here" },
-                { "id": "zed", "symbol": "code", "title": "Open in Zed" },
+                { "id": "editor", "symbol": "code", "title": "Open in editor" },
                 { "id": "copy", "symbol": "content_copy", "title": "Copy", "submenu": true, "bar": true },
                 { "id": "separator-2", "separator": true },
                 { "id": "section", "symbol": "dashboard", "title": "Section", "submenu": true },
