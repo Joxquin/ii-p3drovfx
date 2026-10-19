@@ -530,12 +530,13 @@ Singleton {
 
     /// The terminal command that rebuilds what a `rebuild` finding lists: Quickshell
     /// through qs-rebuild.sh (it knows a repository build from an AUR one), the rest
-    /// with the AUR helper; `--rebuild`, or yay reinstalls its cached build.
+    /// with the AUR helper; `--rebuild`, or yay reinstalls its cached build, and
+    /// `aur/`, or it offers a repository package that provides the same name.
     function rebuildCommand(d): var {
         const pkgs = Array.from(d?.packages ?? []);
         if (pkgs.some(p => p.reason === "quickshell"))
             return ["bash", `${root.guardDir}/qs-rebuild.sh`];
-        const names = root.rebuildable(d).map(p => String(p.name));
+        const names = root.rebuildable(d).map(p => `aur/${p.name}`);
         const aur = String(d?.aurHelper ?? "") || "yay";
         return [aur, "-S", "--rebuild", ...names];
     }

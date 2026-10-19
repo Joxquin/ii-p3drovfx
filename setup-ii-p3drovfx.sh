@@ -2062,12 +2062,14 @@ ensure_quickshell_git() {
     before="$(pacman -Qdtq 2>/dev/null | sort || true)"
 
     sudo_prime || true
-    ui_info "Running $helper -S quickshell-git — its own output follows."
+    ui_info "Running $helper -S aur/quickshell-git — its own output follows."
     printf '\n'
     local -a flags=(-S --needed)
     [[ "$OPT_ASSUME_YES" == true ]] && flags+=(--noconfirm)
     local rc=0
-    "$helper" "${flags[@]}" quickshell-git || rc=$?
+    # aur/: a repository package may provide quickshell-git (CachyOS's
+    # noctalia-qs), and --noconfirm would take it over the AUR's.
+    "$helper" "${flags[@]}" aur/quickshell-git || rc=$?
     printf '\n'
     if ((rc != 0)); then
         ui_warn "quickshell-git install failed (exit $rc) — fix it before starting the shell."

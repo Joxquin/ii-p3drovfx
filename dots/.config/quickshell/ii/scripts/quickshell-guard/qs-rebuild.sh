@@ -6,7 +6,9 @@
 #
 # - A package from the AUR (or built by hand) is rebuilt with yay or paru. The
 #   `--rebuild` matters: without it yay finds the old build in its cache, prints
-#   "already made -- skipping build" and installs the same binary again.
+#   "already made -- skipping build" and installs the same binary again. So does
+#   `aur/`: a repository package may provide the same name (CachyOS's noctalia-qs
+#   provides quickshell-git), and the helper offers that one before the AUR.
 # - A package from the distribution's repository cannot be rebuilt here; the
 #   repository rebuilds it for each Qt release, so a full update is offered, and
 #   the AUR's quickshell-git when the repository has no matching build yet.
@@ -147,7 +149,7 @@ if pacman -Qqm "$pkg" >/dev/null 2>&1; then
         say "No AUR helper (yay or paru) found. Rebuild it where its PKGBUILD is: makepkg -si"
         finish 1
     fi
-    run "$aur" -S --rebuild "$pkg"
+    run "$aur" -S --rebuild "aur/$pkg"
 else
     head_line "$pkg comes from your distribution's repository"
     say "The repository rebuilds it for each Qt release, so a full update usually brings the matching build."
@@ -156,7 +158,7 @@ else
         head_line "The repository has no matching build yet"
         say "quickshell-git from the AUR builds from source against your Qt, in a few minutes."
         say "pacman will offer to replace $pkg with it."
-        run "$aur" -S --rebuild quickshell-git
+        run "$aur" -S --rebuild aur/quickshell-git
     fi
 fi
 
