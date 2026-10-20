@@ -50,20 +50,33 @@ ContentPage {
         title: Translation.tr("Style & Layout")
 
         ContentSubsection {
-            title: Translation.tr("Bluetooth devices layout")
+            title: Translation.tr("Visual style")
             icon: "bluetooth"
-            tooltip: Translation.tr("Choose the layout for the Bluetooth devices popup in the bar")
             ConfigSelectionArray {
-                currentValue: Config.options.bar.styles.bluetooth
+                currentValue: Config.options.bar.styles.bluetooth === "default" ? "classic" : Config.options.bar.styles.bluetooth
                 onSelected: newValue => {
                     Config.options.bar.styles.bluetooth = String(newValue);
-                    // The popup has two layouts; Sculpt uses the expressive one.
-                    Config.options.bar.bluetoothDevicesLayout = newValue === "classic" ? "classic" : "expressive";
                 }
                 options: [
                     { displayName: Translation.tr("Classic"),    icon: "style",     value: "classic" },
                     { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
                     { displayName: Translation.tr("Sculpt"),     icon: "shapes",    value: "sculpt" }
+                ]
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Popup style")
+            icon: "style"
+            tooltip: Translation.tr("Choose the layout for the Bluetooth devices popup in the bar")
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.bluetoothDevicesLayout === "expressive" ? "expressive" : "classic"
+                onSelected: newValue => {
+                    Config.options.bar.bluetoothDevicesLayout = String(newValue);
+                }
+                options: [
+                    { displayName: Translation.tr("Default"),    icon: "style",     value: "classic" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
                 ]
             }
         }

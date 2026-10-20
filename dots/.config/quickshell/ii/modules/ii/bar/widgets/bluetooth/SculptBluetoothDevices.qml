@@ -145,9 +145,9 @@ MouseArea {
     PopupLoader {
         active: BarInteraction.enablePopups
             && (BarInteraction.clickToShow || root.containsMouse || held)
-        source: Config.options.bar.bluetoothDevicesLayout === "classic"
-            ? "../../popups/bluetooth/BluetoothDevicesPopup.qml"
-            : "../../popups/bluetooth/ExpressiveBluetoothDevicesPopup.qml"
+        source: Config.options.bar.bluetoothDevicesLayout === "expressive"
+            ? "../../popups/bluetooth/ExpressiveBluetoothDevicesPopup.qml"
+            : "../../popups/bluetooth/BluetoothDevicesPopup.qml"
         onLoaded: item.hoverTarget = root
     }
 }
