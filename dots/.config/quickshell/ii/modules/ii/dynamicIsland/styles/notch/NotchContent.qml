@@ -809,7 +809,7 @@ Item {
              * the grid arrived a few frames later.
              */
             active: content.overviewBuilt
-            visible: opacity > 0.01
+            visible: (content.overviewVisible || content.overviewFade > 0.01) && opacity > 0.01
             opacity: content.overviewFade
 
             transform: [
