@@ -26,16 +26,30 @@ import Quickshell.Hyprland
 Scope {
     id: root
 
-    function toggle() {
-        if (!(Config.options.oledSaver.enable ?? true)) return;
-        const name = Hyprland.focusedMonitor?.name;
-        if (!name) return;
-        const monitors = GlobalStates.oledSaverMonitors;
-        GlobalStates.oledSaverMonitors = monitors.includes(name) ? monitors.filter(n => n !== name) : [...monitors, name];
+    property list<var> grabWindows: []
+
+    function registerGrabWindow(win) {
+        if (!root.grabWindows.includes(win))
+            root.grabWindows = [...root.grabWindows, win];
     }
 
-    function close(name) {
-        GlobalStates.oledSaverMonitors = GlobalStates.oledSaverMonitors.filter(n => n !== name);
+    function unregisterGrabWindow(win) {
+        if (root.grabWindows.includes(win))
+            root.grabWindows = root.grabWindows.filter(w => w !== win);
+    }
+
+    function toggle() {
+        GlobalStates.toggleOledSaver();
+    }
+
+    function close() {
+        GlobalStates.closeOledSaver();
+    }
+
+    HyprlandFocusGrab {
+        id: aodGrab
+        windows: root.grabWindows
+        active: root.grabWindows.length > 0
     }
 
     // An AOD still up at unlock (a fingerprint unlocks without waking it) must not
@@ -67,7 +81,7 @@ Scope {
 
     GlobalShortcut {
         name: "oledSaverToggle"
-        description: "Toggles the Always On Display on the focused monitor"
+        description: "Toggles the Always On Display on all monitors"
         onPressed: root.toggle()
     }
 
@@ -118,24 +132,22 @@ Scope {
         // cursor image would sit on the blackout until the user moved the mouse.
         // Arming the grab a moment after the surface is up lets the pointer
         // enter land first, then still routes keys here without a click.
-        HyprlandFocusGrab {
-            id: aodGrab
-            windows: [window]
-            active: false
-        }
-
         Timer {
-            running: true
+            running: window.holdsInput
             interval: 100
-            onTriggered: aodGrab.active = window.holdsInput
+            onTriggered: {
+                if (window.holdsInput)
+                    root.registerGrabWindow(window);
+            }
         }
         Connections {
             target: window
             function onHoldsInputChanged() {
                 if (!window.holdsInput)
-                    aodGrab.active = false;
+                    root.unregisterGrabWindow(window);
             }
         }
+        Component.onDestruction: root.unregisterGrabWindow(window)
 
         Rectangle {
             anchors.fill: parent
@@ -254,7 +266,7 @@ Scope {
                 sourceComponent: AodWindow {
                     screen: screenScope.modelData
                     aod: aodState
-                    onDismiss: root.close(screenScope.modelData.name)
+                    onDismiss: root.close()
                 }
             }
         }

@@ -261,11 +261,7 @@ Scope {
                         buttonText: Translation.tr("OLED Saver")
                         onClicked: {
                             sessionRoot.hide();
-                            const name = Hyprland.focusedMonitor?.name || (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
-                            if (name) {
-                                const monitors = GlobalStates.oledSaverMonitors;
-                                GlobalStates.oledSaverMonitors = monitors.includes(name) ? monitors.filter(n => n !== name) : [...monitors, name];
-                            }
+                            GlobalStates.toggleOledSaver();
                         }
                         onFocusChanged: {
                             if (focus)

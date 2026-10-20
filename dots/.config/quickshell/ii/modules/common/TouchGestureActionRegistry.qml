@@ -251,7 +251,7 @@ Singleton {
             break;
 
         case "oledSaver":
-            GlobalStates.oledSaverOpen = !GlobalStates.oledSaverOpen;
+            GlobalStates.toggleOledSaver();
             break;
 
         case "lock":

@@ -170,11 +170,21 @@ Singleton {
 
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
-    // Names of screens showing the Always On Display (the OLED saver). Independent
-    // per monitor: toggling one monitor doesn't affect the others. Read by the desktop
+    // Names of screens showing the Always On Display (the OLED saver). Read by the desktop
     // overlay (OledSaver) and, while locked, by LockSurface, BackgroundRoot and the
     // widgets window.
     property var oledSaverMonitors: []
+
+    function toggleOledSaver(): void {
+        if (!(Config.options?.oledSaver?.enable ?? true))
+            return;
+        const all = Quickshell.screens.map(s => s.name);
+        root.oledSaverMonitors = (root.oledSaverMonitors ?? []).length > 0 ? [] : all;
+    }
+
+    function closeOledSaver(): void {
+        root.oledSaverMonitors = [];
+    }
     // Anti burn-in pixel shift for Always On Display (OLED saver).
     // Shifts widgets every minute to a nearby position to prevent OLED burn-in.
     property real aodBurnInShiftX: 0

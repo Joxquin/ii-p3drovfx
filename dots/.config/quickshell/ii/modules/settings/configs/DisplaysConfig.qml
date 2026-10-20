@@ -1542,7 +1542,7 @@ ContentPage {
         title: Translation.tr("Always On Display")
 
         StyledText {
-            text: Translation.tr("Super + R turns the focused monitor into an Always On Display: pure black, with the lock screen's widgets in grey, where the lock screen places them. A click, a key or the same shortcut wakes it. On the lock screen it also comes on by itself after the timeout below.")
+            text: Translation.tr("Super + R turns all monitors into an Always On Display: pure black, with the lock screen's widgets in grey, where the lock screen places them. A click, a key or the same shortcut wakes them. On the lock screen it also comes on by itself after the timeout below.")
             color: Appearance.colors.colOnLayer1
             opacity: 0.75
             font.pixelSize: Appearance.font.pixelSize.small

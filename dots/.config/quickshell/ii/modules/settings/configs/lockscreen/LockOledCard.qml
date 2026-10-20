@@ -133,7 +133,7 @@ Rectangle {
                 }
 
                 StyledToolTip {
-                    text: Translation.tr("Super + R toggles Always On Display immediately on the focused monitor")
+                    text: Translation.tr("Super + R toggles Always On Display immediately on all monitors")
                 }
 
                 MouseArea {
@@ -142,12 +142,7 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        const name = Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name;
-                        if (!name) return;
-                        const monitors = GlobalStates.oledSaverMonitors ?? [];
-                        GlobalStates.oledSaverMonitors = monitors.includes(name)
-                            ? monitors.filter(n => n !== name)
-                            : [...monitors, name];
+                        GlobalStates.toggleOledSaver();
                     }
                 }
             }
