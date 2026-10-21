@@ -289,6 +289,17 @@ PanelWindow {
     readonly property bool leftSidebarFusesBar: barCanFuse && barOnLeft && leftSidebarActiveOnMonitor
     readonly property bool rightSidebarFusesBar: barCanFuse && barOnRight && rightSidebarActiveOnMonitor
 
+    // With the wrapped frame on, a welded vertical bar's plate (WrappedFrameVisuals
+    // leftBarPlate / rightBarPlate) already spans totalLeftPush / totalRightPush,
+    // painting the sidebar and the bar as one continuous fill. Keep the sidebar's
+    // own rectangle transparent then so translucent backgrounds are not blended twice.
+    readonly property bool barWeldedToFrame: topPanel.usingWrappedFrame && topPanel.shellSeated
+        && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2)
+        && Config.options.bar.barBackgroundStyle !== 3
+        && (verticalBarLoader.item ? verticalBarLoader.item.showBarBackground : false)
+    readonly property bool leftSidebarWeldedToBar: barWeldedToFrame && barOnLeft
+    readonly property bool rightSidebarWeldedToBar: barWeldedToFrame && barOnRight
+
     // ── Shell edge slide ─────────────────────────────────────────────────────
     // Fullscreen and media mode used to drop the bar and the frame in a single
     // frame — `active` went false and the panels were simply gone. They now
@@ -944,7 +955,7 @@ PanelWindow {
         y: topPanel.sidebarTopOffset + topPanel.floatSidebarGap
         width: topPanel.floatSidebarCards ? Math.round(GlobalStates.animatedLeftSidebarWidth) : Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
         height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset - 2 * topPanel.floatSidebarGap))
-        color: topPanel.floatSidebarCards ? (topPanel.leftSidebarFusesBar ? "transparent" : topPanel.floatSidebarColor) : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0)
+        color: topPanel.floatSidebarCards ? (topPanel.leftSidebarFusesBar ? "transparent" : topPanel.floatSidebarColor) : (topPanel.leftSidebarWeldedToBar ? "transparent" : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0))
         clip: topPanel.floatSidebarCards
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
@@ -1085,7 +1096,7 @@ PanelWindow {
         y: topPanel.sidebarTopOffset + topPanel.floatSidebarGap
         width: topPanel.floatSidebarCards ? Math.round(GlobalStates.animatedRightSidebarWidth) : Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
         height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset - 2 * topPanel.floatSidebarGap))
-        color: topPanel.floatSidebarCards ? (topPanel.rightSidebarFusesBar ? "transparent" : topPanel.floatSidebarColor) : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0)
+        color: topPanel.floatSidebarCards ? (topPanel.rightSidebarFusesBar ? "transparent" : topPanel.floatSidebarColor) : (topPanel.rightSidebarWeldedToBar ? "transparent" : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0))
         clip: topPanel.floatSidebarCards
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
