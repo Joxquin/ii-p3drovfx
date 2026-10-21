@@ -235,10 +235,18 @@ MODES_PATHS = (
     "modes",
 )
 
+# The Clock app and its shared time/alarm/timer/pomodoro/world-clock settings.
+# Bedtime (including intrusive mode's forced shutdown), alarms, reminders,
+# timers, world clocks and clock format belong to the user, not a theme.
+CLOCK_PATHS = (
+    "clockApp",
+    "time",
+)
+
 # Everything merge() hands back to the importer.
 LOCAL_ONLY_PATHS = (
     MONITOR_BINDING_PATHS + PERSONAL_PATHS + LOCAL_FOLDER_PATHS + LOCAL_PREFERENCE_PATHS
-    + SCREEN_TIME_PATHS + MODES_PATHS
+    + SCREEN_TIME_PATHS + MODES_PATHS + CLOCK_PATHS
 )
 # The shell keeps a durable mirror of every path here (plus the dock/search
 # keys above and the blacklisted root sections) in
@@ -570,6 +578,7 @@ ROOT_PRESET_BLACKLIST_KEYS = {
     "cheatsheet",
     *SCREEN_TIME_PATHS,
     *MODES_PATHS,
+    *CLOCK_PATHS,
 }
 
 def remove_secrets_and_userdata(data, is_root=True):

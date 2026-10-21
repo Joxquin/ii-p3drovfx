@@ -74,6 +74,10 @@ Singleton {
         "appStats",
         // Modes & Routines (presets_helper.py MODES_PATHS).
         "modes",
+        // The Clock app, bedtime (and intrusive mode), reminders, alarms, timers,
+        // pomodoro, world clocks and time format (presets_helper.py CLOCK_PATHS).
+        "clockApp",
+        "time",
         "language",
         "policies",
         "workSafety",

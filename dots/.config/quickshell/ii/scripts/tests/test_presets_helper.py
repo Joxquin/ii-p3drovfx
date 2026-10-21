@@ -1754,6 +1754,166 @@ class TestModesStayLocal(unittest.TestCase):
         self.assertEqual(merged["modes"], current["modes"])
 
 
+class TestClockAndIntrusiveModeStayLocal(unittest.TestCase):
+    """The Clock app, bedtime (and intrusive mode), alarms, timers, pomodoro, reminders and world clocks never travel in a preset."""
+
+    CLOCK_APP = {
+        "enable": True,
+        "startTab": "bedtime",
+        "showTimetableEvents": False,
+        "timetableLeadMinutes": 30,
+        "timetableLookaheadDays": 5,
+        "analogWorldClock": False,
+        "showSecondsInApp": False,
+        "bedtime": {
+            "enable": True,
+            "time": "22:00",
+            "days": [True, True, True, True, True, False, False],
+            "windDownMinutes": 45,
+            "remindEveryMinutes": 10,
+            "nightEndsHour": 6,
+            "intrusive": True,
+            "snoozeMinutes": 5,
+            "maxSnoozes": 3,
+            "shutdownGraceSeconds": 30,
+        },
+        "phoneAlarm": {
+            "enable": False,
+            "pollMinutes": 15,
+            "clockApps": ["com.google.android.deskclock"],
+            "ignorePackages": [],
+        },
+        "reminders": {
+            "defaultAlert": "strong",
+            "allDayTime": "08:00",
+            "snoozeMinutes": 10,
+            "autoSilenceMinutes": 2,
+            "catchUpMinutes": 20,
+            "wakeFromSuspend": True,
+            "alertBackgroundColor": "#ff0000",
+            "alertBackgroundImage": "/home/author/bg.png",
+            "alertSound": True,
+            "autoDeleteCompletedDays": 7,
+            "trashDays": 14,
+            "sortBy": "name",
+            "pinImportant": False,
+            "showCompleted": True,
+            "view": "list",
+            "categoriesExpanded": False,
+            "showTemplates": False,
+            "defaultCategory": "work",
+            "showInTimetable": False,
+            "todoSync": {"enable": True, "intervalMinutes": 5},
+        },
+    }
+
+    TIME = {
+        "format": "h:mm ap",
+        "secondsFormat": "ss",
+        "shortDateFormat": "MM/dd",
+        "longDateFormat": "yyyy-MM-dd",
+        "dateWithYearFormat": "yyyy-MM-dd",
+        "dateFormat": "ddd, MMM d",
+        "firstDayOfWeek": 0,
+        "secondPrecision": True,
+        "worldClocks": [{"city": "Tokyo", "tz": "Asia/Tokyo"}],
+        "pomodoro": {
+            "focus": 3000,
+            "breakTime": 600,
+            "longBreak": 1800,
+            "cyclesBeforeLongBreak": 2,
+            "notify": False,
+        },
+        "timer": {
+            "notify": False,
+            "presets": [120, 600],
+        },
+        "alarms": {
+            "useFullscreenPopup": True,
+            "showAnalogClock": False,
+            "showWorldClocks": False,
+            "showAlarmsSection": False,
+            "snoozeMinutes": 5,
+            "autoSilenceMinutes": 0,
+            "catchUpMinutes": 30,
+            "wakeFromSuspend": False,
+            "wakeLeadSeconds": 120,
+            "upcomingMinutes": 120,
+            "showUpcoming": False,
+        },
+    }
+
+    def test_clock_and_intrusive_mode_blacklisted_on_export(self):
+        input_data = {
+            "appearance": {"palette": "vynx"},
+            "clockApp": copy.deepcopy(self.CLOCK_APP),
+            "time": copy.deepcopy(self.TIME),
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(input_data), "/home/testuser")
+        self.assertNotIn("clockApp", sanitized)
+        self.assertNotIn("time", sanitized)
+        self.assertEqual(sanitized["appearance"]["palette"], "vynx")
+
+    def test_preset_clock_and_intrusive_mode_are_not_imported_or_merged(self):
+        preset = {
+            "appearance": {"palette": "nord"},
+            "clockApp": copy.deepcopy(self.CLOCK_APP),
+            "time": copy.deepcopy(self.TIME),
+        }
+        local_config = {
+            "appearance": {"palette": "vynx"},
+            "clockApp": {
+                "enable": True,
+                "bedtime": {
+                    "enable": False,
+                    "time": "23:30",
+                    "intrusive": False,
+                    "maxSnoozes": 3,
+                    "shutdownGraceSeconds": 30,
+                },
+            },
+            "time": {
+                "format": "hh:mm",
+                "firstDayOfWeek": 6,
+                "worldClocks": [],
+                "alarms": {"useFullscreenPopup": False, "wakeFromSuspend": True},
+            },
+        }
+        merged = merge_preset_into_config(preset, local_config)
+        self.assertEqual(merged["appearance"]["palette"], "nord")
+        self.assertFalse(merged["clockApp"]["bedtime"]["enable"])
+        self.assertFalse(merged["clockApp"]["bedtime"]["intrusive"])
+        self.assertEqual(merged["clockApp"]["bedtime"]["time"], "23:30")
+        self.assertNotIn("reminders", merged["clockApp"])
+        self.assertEqual(merged["time"]["format"], "hh:mm")
+        self.assertEqual(merged["time"]["firstDayOfWeek"], 6)
+        self.assertEqual(merged["time"]["worldClocks"], [])
+        self.assertFalse(merged["time"]["alarms"]["useFullscreenPopup"])
+        self.assertTrue(merged["time"]["alarms"]["wakeFromSuspend"])
+
+    def test_preset_cannot_add_clock_or_intrusive_mode_to_a_config_without_them(self):
+        preset = {
+            "clockApp": copy.deepcopy(self.CLOCK_APP),
+            "time": copy.deepcopy(self.TIME),
+        }
+        merged = merge_preset_into_config(preset, {"appearance": {"palette": "vynx"}})
+        self.assertNotIn("clockApp", merged)
+        self.assertNotIn("time", merged)
+
+    def test_restore_local_only_hands_back_clock_and_time(self):
+        current = {
+            "clockApp": {"bedtime": {"enable": False, "intrusive": False}},
+            "time": {"format": "hh:mm"},
+        }
+        merged = {
+            "clockApp": copy.deepcopy(self.CLOCK_APP),
+            "time": copy.deepcopy(self.TIME),
+        }
+        presets_helper.restore_local_only(merged, current)
+        self.assertEqual(merged["clockApp"], current["clockApp"])
+        self.assertEqual(merged["time"], current["time"])
+
+
 class TestDesktopPhotoWidgetsPresetExport(unittest.TestCase):
     """Contracts and integration tests for desktop photo widgets in presets."""
 
