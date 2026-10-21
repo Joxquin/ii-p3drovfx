@@ -469,8 +469,8 @@ Item { // Bar content region
             Brightness.increaseBrightness()
         onMovedAway: GlobalStates.osdBrightnessOpen = false
         onPressed: event => {
-            if (event.button === Qt.LeftButton)
-                GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+            if (event.button === Qt.LeftButton && Config.options.bar.sidebarClickOpen)
+                GlobalStates.toggleLeftSidebar(root.screen?.name);
         }
     }
 
@@ -615,9 +615,8 @@ Item { // Bar content region
             Audio.incrementVolume()
         onMovedAway: GlobalStates.osdVolumeOpen = false
         onPressed: event => {
-            if (event.button === Qt.LeftButton) {
-                GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
-            }
+            if (event.button === Qt.LeftButton && Config.options.bar.sidebarClickOpen)
+                GlobalStates.toggleRightSidebar(root.screen?.name);
         }
     }
 }
