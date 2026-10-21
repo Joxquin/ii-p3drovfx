@@ -39,7 +39,9 @@ WorkspacesPane {
         { "value": "dock", "label": Translation.tr("Dock"), "symbol": "dock_to_left", "shape": "Clover4Leaf",
           "line": Translation.tr("App icons and window dots") },
         { "value": "index", "label": Translation.tr("Index"), "symbol": "format_list_numbered", "shape": "Sunny",
-          "line": Translation.tr("Numerals, the current one large") }
+          "line": Translation.tr("Numerals, the current one large") },
+        { "value": "pills", "label": Translation.tr("Pills"), "symbol": "view_week", "shape": "Oval",
+          "line": Translation.tr("Vertical bars, the current one taller") }
     ]
     readonly property var colors: [
         { "value": "primary", "label": Translation.tr("Primary") },

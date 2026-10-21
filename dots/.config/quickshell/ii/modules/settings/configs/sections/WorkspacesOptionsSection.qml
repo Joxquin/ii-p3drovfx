@@ -27,7 +27,8 @@ ColumnLayout {
                     { displayName: Translation.tr("Minimal"), icon: "navigation", value: "minimal" },
                     { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
                     { displayName: Translation.tr("Dock"), icon: "dock_to_left", value: "dock" },
-                    { displayName: Translation.tr("Index"), icon: "format_list_numbered", value: "index" }
+                    { displayName: Translation.tr("Index"), icon: "format_list_numbered", value: "index" },
+                    { displayName: Translation.tr("Pills"), icon: "view_week", value: "pills" }
                 ]
             }
         }

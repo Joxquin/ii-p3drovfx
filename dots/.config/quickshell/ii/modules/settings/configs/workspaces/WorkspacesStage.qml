@@ -50,7 +50,8 @@ Item {
         "minimal": "MinimalWorkspaces.qml",
         "expressive": "ExpressiveWorkspaces.qml",
         "dock": "DockWorkspaces.qml",
-        "index": "IndexWorkspaces.qml"
+        "index": "IndexWorkspaces.qml",
+        "pills": "PillsWorkspaces.qml"
     })
     readonly property string widgetSource: Qt.resolvedUrl("../../../ii/bar/widgets/workspaces/"
         + (root.widgetFiles[root.style] ?? root.widgetFiles["default"]))

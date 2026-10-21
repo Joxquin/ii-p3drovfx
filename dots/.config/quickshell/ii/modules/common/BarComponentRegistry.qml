@@ -146,6 +146,11 @@ Singleton {
                     displayName: qsTr("Index"),
                     icon: "format_list_numbered",
                     value: "index"
+                },
+                {
+                    displayName: qsTr("Pills"),
+                    icon: "view_week",
+                    value: "pills"
                 }
             ]
         },

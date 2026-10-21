@@ -12,7 +12,7 @@ QtObject {
     function getStyle(widgetId) {
         const s = Config.options.bar.styles;
         switch (widgetId) {
-            case "workspaces":             return s.workspaces   ?? "default"; // default, expressive, minimal, dock
+            case "workspaces":             return s.workspaces   ?? "default"; // default, expressive, minimal, dock, index, pills
             case "clock":                  return s.clock        ?? "default";
             case "music_player":           return s.media        ?? "default";
             case "utility_buttons":        return s.utilButtons  ?? "default";

@@ -27,6 +27,10 @@ Item {
                 return "../../bar/widgets/workspaces/ExpressiveWorkspaces.qml";
             if (root.workspaceStyle === "dock")
                 return "../../bar/widgets/workspaces/DockWorkspaces.qml";
+            if (root.workspaceStyle === "index")
+                return "../../bar/widgets/workspaces/IndexWorkspaces.qml";
+            if (root.workspaceStyle === "pills")
+                return "../../bar/widgets/workspaces/PillsWorkspaces.qml";
             return "../../bar/widgets/workspaces/Workspaces.qml";
         }
         onLoaded: {

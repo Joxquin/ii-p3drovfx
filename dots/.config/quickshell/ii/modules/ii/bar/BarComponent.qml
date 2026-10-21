@@ -806,6 +806,8 @@ Item {
                 return workspaceCompDock;
             if (style === "index")
                 return workspaceCompIndex;
+            if (style === "pills")
+                return workspaceCompPills;
             return workspaceComp;
         case "music_player":
             if (isExp)
@@ -1462,6 +1464,12 @@ Item {
     Component {
         id: workspaceCompIndex
         IndexWorkspaces {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: workspaceCompPills
+        PillsWorkspaces {
             vertical: rootItem.vertical
         }
     }
