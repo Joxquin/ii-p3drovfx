@@ -74,6 +74,10 @@ Item { // Bar content region
     readonly property bool isDynamicIsland: BarInteraction.cornerStyle === 3
     readonly property bool isHugIslandMode: root.isIslandMode && BarInteraction.cornerStyle === 0
 
+    // Float + Connect: an open sidebar card is fused with the bar, and the top layer
+    // paints the two as one shape with one shadow, so the bar's own pill steps aside.
+    property bool fusedToSidebar: false
+
     // Hug/Rect vertical bars are welded to the wrapped frame ring, so the shell
     // shadow is generated once in WrappedFrameVisuals, underneath every panel.
     // Float and Dynamic Island bars keep their own shadow: they really do float
@@ -136,7 +140,7 @@ Item { // Bar content region
         width: root.isDynamicIsland ? Math.max(0, parent.width - root.frameThickness) : parent.width
         height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
 
-        color: (root.isIslandMode || root.weldedToFrame) ? "transparent" : barBackground.actualColor
+        color: (root.isIslandMode || root.weldedToFrame || root.fusedToSidebar) ? "transparent" : barBackground.actualColor
         readonly property real availablePillExtension: Math.max(0, width)
         readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availablePillExtension / 2))
         property real baseRadius: root.isDynamicIsland ? islandRadius : (BarInteraction.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)
@@ -160,7 +164,7 @@ Item { // Bar content region
             }
         }
 
-        layer.enabled: !root.isIslandMode && !root.weldedToFrame && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
+        layer.enabled: !root.isIslandMode && !root.weldedToFrame && !root.fusedToSidebar && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)

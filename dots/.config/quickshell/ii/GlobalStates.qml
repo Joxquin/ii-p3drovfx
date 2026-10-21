@@ -2151,10 +2151,11 @@ Singleton {
 
     readonly property bool connectModeActive: ShellModePolicy.connectModeActive
 
-    // In Float mode (cornerStyle 1), sidebars remain as separate PanelWindows
+    // With a horizontal Float bar (cornerStyle 1), sidebars remain as separate PanelWindows
     // rather than being embedded in the TopLayer. Only search/OSD are integrated.
+    // A vertical Float bar embeds them as floating cards that fuse with the bar.
     readonly property bool connectSidebarsSeparate: {
-        return connectModeActive && Config.options.bar.cornerStyle === 1;
+        return connectModeActive && Config.options.bar.cornerStyle === 1 && !Config.options.bar.vertical;
     }
 
     readonly property bool searchCenterMode: {

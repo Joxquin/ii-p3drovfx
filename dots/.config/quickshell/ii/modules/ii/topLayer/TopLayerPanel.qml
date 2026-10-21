@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
@@ -270,6 +271,23 @@ PanelWindow {
     // Float bar gaps: the bar is visually offset from screen edges by hyprlandGapsOut.
     // SearchDrop/OsdDrop need this offset so they emerge from the bar's visual top edge.
     readonly property real barMargin: BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0
+
+    // A Float bar leaves no screen edge for a sidebar to run along, so each embedded sidebar
+    // is a card floating at the bar's gaps, and the one on the bar's side fuses with the bar
+    // into a single rounded shape (barFusedFill). Horizontal Float bars keep their sidebars
+    // as separate windows (GlobalStates.connectSidebarsSeparate).
+    readonly property bool floatSidebarCards: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && BarInteraction.cornerStyle === 1
+    readonly property real floatSidebarGap: floatSidebarCards ? Appearance.sizes.hyprlandGapsOut : 0
+    // The bar's own pill radius, so the fused shape is rounded alike at both ends.
+    readonly property real floatSidebarRadius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut
+    readonly property color floatSidebarColor: Config.options.bar.amoledBackground ? "#000000" : (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0)
+    readonly property bool floatSidebarShadow: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
+    // Only a seated bar with a background of its own fuses: island bars have none, and a bar
+    // sliding off the edge hands the card its own fill back first.
+    readonly property bool barCanFuse: floatSidebarCards && !!verticalBarLoader.item && topPanel.shellHide === 0
+        && Config.options.bar.barBackgroundStyle !== 3
+    readonly property bool leftSidebarFusesBar: barCanFuse && barOnLeft && leftSidebarActiveOnMonitor
+    readonly property bool rightSidebarFusesBar: barCanFuse && barOnRight && rightSidebarActiveOnMonitor
 
     // ── Shell edge slide ─────────────────────────────────────────────────────
     // Fullscreen and media mode used to drop the bar and the frame in a single
@@ -674,9 +692,34 @@ PanelWindow {
                         }
                     }
 
+                    // A Float card fused with the bar: one fill from the card's outer edge to
+                    // the bar's, standing in for the bar's own pill and shadow. At zero width
+                    // it is exactly that pill, so the hand-over never shows.
+                    RectangularShadow {
+                        anchors.fill: barFusedFill
+                        visible: barFusedFill.visible && topPanel.floatSidebarShadow
+                        radius: barFusedFill.radius
+                        blur: 32
+                        offset: Qt.vector2d(topPanel.barOnRight ? -4 : 4, 0)
+                        color: Qt.rgba(0, 0, 0, 0.28)
+                    }
+
+                    Rectangle {
+                        id: barFusedFill
+                        readonly property real gap: Appearance.sizes.hyprlandGapsOut
+                        visible: topPanel.leftSidebarFusesBar || topPanel.rightSidebarFusesBar
+                        x: topPanel.barOnRight ? barContent.x + gap : gap
+                        y: barContent.y + gap
+                        width: topPanel.barOnRight ? parent.width - barContent.x - 2 * gap : barContent.x + barContent.width - 2 * gap
+                        height: barContent.height - 2 * gap
+                        radius: topPanel.floatSidebarRadius
+                        color: topPanel.floatSidebarColor
+                    }
+
                     VBar.VerticalBarContent {
                         id: barContent
                         monitorIndex: vBarItem.monitorIndex
+                        fusedToSidebar: barFusedFill.visible
                         implicitWidth: Appearance.sizes.verticalBarWindowWidth
                         width: implicitWidth
                         anchors {
@@ -802,7 +845,7 @@ PanelWindow {
     }
 
     // Space reserver for pinned sidebar in Connect Mode
-    // Disabled in Float+Connect mode — sidebars remain separate PanelWindows with own space
+    // Disabled with a horizontal Float bar — sidebars remain separate PanelWindows with own space
     PanelWindow {
         id: pinSpaceReserver
         WlrLayershell.namespace: "quickshell:pinReserver"
@@ -815,8 +858,10 @@ PanelWindow {
             left: topPanel.policiesOnLeft
             right: !topPanel.policiesOnLeft
         }
-        implicitWidth: GlobalStates.policiesWidth
-        exclusiveZone: implicitWidth - ((topPanel.barVertical && ((topPanel.barOnLeft && topPanel.policiesOnLeft) || (topPanel.barOnRight && !topPanel.policiesOnLeft))) ? 0 : (Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin))
+        readonly property bool besideBar: topPanel.barVertical && ((topPanel.barOnLeft && topPanel.policiesOnLeft) || (topPanel.barOnRight && !topPanel.policiesOnLeft))
+        // A Float card standing alone ends a gap further out; one beside the bar ends at it.
+        implicitWidth: GlobalStates.policiesWidth + (besideBar ? 0 : topPanel.floatSidebarGap)
+        exclusiveZone: implicitWidth - (besideBar ? 0 : (Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin))
     }
 
     // The dock's tray without the wrapped frame: painted here, like the frame's band, so it
@@ -880,23 +925,36 @@ PanelWindow {
         }
     }
 
+    // A Float card standing alone casts the bar's shadow; a fused one is shadowed with the bar.
+    RectangularShadow {
+        anchors.fill: leftSidebar
+        visible: leftSidebar.visible && topPanel.floatSidebarCards && !topPanel.leftSidebarFusesBar && topPanel.floatSidebarShadow
+        radius: topPanel.floatSidebarRadius
+        blur: 32
+        offset: Qt.vector2d(4, 0)
+        color: Qt.rgba(0, 0, 0, 0.28)
+    }
+
     // Left Sidebar Policies Content
-    // Disabled in Float+Connect mode (cornerStyle 1) — sidebars remain separate PanelWindows
+    // Disabled with a horizontal Float bar — sidebars remain separate PanelWindows
+    // A Float card grows from its outer edge, clipping the content that rides its inner one.
     Rectangle {
         id: leftSidebar
-        x: -(width - GlobalStates.animatedLeftSidebarWidth)
-        y: topPanel.sidebarTopOffset
-        width: Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
-        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
-        color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
+        x: topPanel.floatSidebarCards ? topPanel.floatSidebarGap : -(width - GlobalStates.animatedLeftSidebarWidth)
+        y: topPanel.sidebarTopOffset + topPanel.floatSidebarGap
+        width: topPanel.floatSidebarCards ? Math.round(GlobalStates.animatedLeftSidebarWidth) : Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
+        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset - 2 * topPanel.floatSidebarGap))
+        color: topPanel.floatSidebarCards ? (topPanel.leftSidebarFusesBar ? "transparent" : topPanel.floatSidebarColor) : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0)
+        clip: topPanel.floatSidebarCards
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
-        readonly property real defaultRadius: (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+        readonly property bool connectSheet: GlobalStates.connectModeActive && !topPanel.floatSidebarCards
+        readonly property real defaultRadius: topPanel.floatSidebarCards ? topPanel.floatSidebarRadius : (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
         radius: 0
         topLeftRadius: isConnectDynamicIslandTop ? 0 : defaultRadius
         topRightRadius: isConnectDynamicIslandBottom ? 0 : defaultRadius
-        bottomLeftRadius: (isConnectDynamicIslandBottom) ? 0 : (GlobalStates.connectModeActive ? 0 : defaultRadius)
-        bottomRightRadius: isConnectDynamicIslandBottom ? defaultRadius : (GlobalStates.connectModeActive ? 0 : defaultRadius)
+        bottomLeftRadius: (isConnectDynamicIslandBottom) ? 0 : (connectSheet ? 0 : defaultRadius)
+        bottomRightRadius: isConnectDynamicIslandBottom ? defaultRadius : (connectSheet ? 0 : defaultRadius)
         visible: topPanel.leftSidebarActiveOnMonitor && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
@@ -906,12 +964,19 @@ PanelWindow {
         // because every minor visual change (timer ticks, notification syncs,
         // infinite pulse animations, gradient behaviors) forced a full FBO
         // re-render of the entire Phone tab subtree.
-        layer.enabled: GlobalStates.leftSidebarAnimating
+        // A Float card changes size every frame, so its constant-size content takes the layer.
+        layer.enabled: GlobalStates.leftSidebarAnimating && !topPanel.floatSidebarCards
 
         Loader {
             id: leftSidebarContentLoader
             active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarContentWanted && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
-            anchors.fill: parent
+            anchors {
+                top: parent.top
+                bottom: parent.bottom
+                right: parent.right
+            }
+            width: Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
+            layer.enabled: GlobalStates.leftSidebarAnimating && topPanel.floatSidebarCards
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
                 if (pos === "inverted") {
@@ -1003,23 +1068,34 @@ PanelWindow {
         }
     }
 
+    RectangularShadow {
+        anchors.fill: rightSidebar
+        visible: rightSidebar.visible && topPanel.floatSidebarCards && !topPanel.rightSidebarFusesBar && topPanel.floatSidebarShadow
+        radius: topPanel.floatSidebarRadius
+        blur: 32
+        offset: Qt.vector2d(-4, 0)
+        color: Qt.rgba(0, 0, 0, 0.28)
+    }
+
     // Right Sidebar Dashboard Content
-    // Disabled in Float+Connect mode (cornerStyle 1) — sidebars remain separate PanelWindows
+    // Disabled with a horizontal Float bar — sidebars remain separate PanelWindows
     Rectangle {
         id: rightSidebar
-        x: parent.width - Math.round(GlobalStates.animatedRightSidebarWidth)
-        y: topPanel.sidebarTopOffset
-        width: Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
-        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
-        color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
+        x: parent.width - topPanel.floatSidebarGap - Math.round(GlobalStates.animatedRightSidebarWidth)
+        y: topPanel.sidebarTopOffset + topPanel.floatSidebarGap
+        width: topPanel.floatSidebarCards ? Math.round(GlobalStates.animatedRightSidebarWidth) : Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
+        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset - 2 * topPanel.floatSidebarGap))
+        color: topPanel.floatSidebarCards ? (topPanel.rightSidebarFusesBar ? "transparent" : topPanel.floatSidebarColor) : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0)
+        clip: topPanel.floatSidebarCards
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
-        readonly property real defaultRadius: (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+        readonly property bool connectSheet: GlobalStates.connectModeActive && !topPanel.floatSidebarCards
+        readonly property real defaultRadius: topPanel.floatSidebarCards ? topPanel.floatSidebarRadius : (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
         radius: 0
         topRightRadius: isConnectDynamicIslandTop ? 0 : defaultRadius
         topLeftRadius: isConnectDynamicIslandBottom ? 0 : defaultRadius
-        bottomRightRadius: (isConnectDynamicIslandBottom) ? 0 : (GlobalStates.connectModeActive ? 0 : defaultRadius)
-        bottomLeftRadius: isConnectDynamicIslandBottom ? defaultRadius : (GlobalStates.connectModeActive ? 0 : defaultRadius)
+        bottomRightRadius: (isConnectDynamicIslandBottom) ? 0 : (connectSheet ? 0 : defaultRadius)
+        bottomLeftRadius: isConnectDynamicIslandBottom ? defaultRadius : (connectSheet ? 0 : defaultRadius)
         visible: topPanel.rightSidebarActiveOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarActiveOnMonitor) && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
@@ -1028,12 +1104,19 @@ PanelWindow {
         // statically open. Keeping it on while open caused visible seam artifacts
         // at the corner junctions because the FBO edge anti-aliasing differs from
         // direct rendering of the RoundCorner overlays.
-        layer.enabled: GlobalStates.rightSidebarAnimating
+        // A Float card changes size every frame, so its constant-size content takes the layer.
+        layer.enabled: GlobalStates.rightSidebarAnimating && !topPanel.floatSidebarCards
 
         Loader {
             id: rightSidebarContentLoader
             active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarContentWanted && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
-            anchors.fill: parent
+            anchors {
+                top: parent.top
+                bottom: parent.bottom
+                left: parent.left
+            }
+            width: Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
+            layer.enabled: GlobalStates.rightSidebarAnimating && topPanel.floatSidebarCards
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
                 if (pos === "inverted") {
@@ -1329,7 +1412,7 @@ PanelWindow {
         id: leftSidebarMaskItem
         x: 0
         y: topPanel.sidebarTopOffset
-        width: (GlobalStates.animatedLeftSidebarWidth > 0 && topPanel.leftSidebarWarmOnMonitor) ? topPanel.leftSidebarMaskWidth : 0
+        width: (GlobalStates.animatedLeftSidebarWidth > 0 && topPanel.leftSidebarWarmOnMonitor) ? topPanel.leftSidebarMaskWidth + topPanel.floatSidebarGap : 0
         height: parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset
     }
 
@@ -1337,7 +1420,7 @@ PanelWindow {
         id: rightSidebarMaskItem
         x: parent.width - width
         y: topPanel.sidebarTopOffset
-        width: (GlobalStates.animatedRightSidebarWidth > 0 && topPanel.rightSidebarWarmOnMonitor) ? topPanel.rightSidebarMaskWidth : 0
+        width: (GlobalStates.animatedRightSidebarWidth > 0 && topPanel.rightSidebarWarmOnMonitor) ? topPanel.rightSidebarMaskWidth + topPanel.floatSidebarGap : 0
         height: parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset
     }
 
