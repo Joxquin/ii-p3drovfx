@@ -299,7 +299,7 @@ Singleton {
      * and NetworkManager's own security string. Keyed by SSID.
      */
     function readWifiDetails(callback): void {
-        root.run(["nmcli", "-t", "-e", "yes", "-g", "ACTIVE,SIGNAL,FREQ,SSID,BSSID,SECURITY,NAME", "device", "wifi"], "details", (code, out) => {
+        root.run(["nmcli", "-t", "-e", "yes", "-g", "ACTIVE,SIGNAL,FREQ,SSID,BSSID,SECURITY", "device", "wifi"], "details", (code, out) => {
             callback(code === 0 ? root.parseWifiDetails(out) : ({}));
         });
     }
@@ -319,8 +319,7 @@ Singleton {
                 frequency: parseInt(parts[2]) || 0,
                 ssid: ssid,
                 bssid: parts[4] ?? "",
-                security: parts[5] ?? "",
-                profile: parts[6] ?? ""
+                security: parts[5] ?? ""
             };
             // Several radios can advertise the same SSID; keep the connected one,
             // then the strongest, so these extras describe the same access point
@@ -335,6 +334,22 @@ Singleton {
     function readSavedConnections(callback): void {
         root.run(["nmcli", "-t", "-e", "yes", "-g", "NAME,UUID,TYPE,DEVICE,AUTOCONNECT,TIMESTAMP", "connection", "show"], "saved", (code, out) => {
             callback(code === 0 ? root.parseSavedConnections(out) : []);
+        });
+    }
+
+    // The SSIDs the saved Wi-Fi profiles connect to, which a profile's name
+    // need not be. One batched show: a record per profile, blank-separated.
+    readonly property string kSavedSsids: `
+        ids=()
+        while IFS=: read -r uuid type; do
+            [ "$type" = 802-11-wireless ] && ids+=(uuid "$uuid")
+        done < <(nmcli -t -f UUID,TYPE connection show)
+        [ \${#ids[@]} -eq 0 ] || nmcli -e no -g 802-11-wireless.ssid connection show "\${ids[@]}"
+    `
+
+    function readSavedWifiSsids(callback): void {
+        root.runScript(root.kSavedSsids, [], "saved", (code, out) => {
+            callback(code === 0 ? out.split("\n").filter(line => line.length > 0) : []);
         });
     }
 

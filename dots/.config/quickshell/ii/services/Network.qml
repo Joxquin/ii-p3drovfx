@@ -503,12 +503,15 @@ Singleton {
     Timer {
         id: savedDebounce
         interval: 400
-        onTriggered: NetworkCommands.readSavedConnections(rows => {
-            root.savedConnections = rows;
-            const wireless = rows.filter(r => r.type === "802-11-wireless").map(r => r.name);
-            const known = Array.from(NetworkState.wifiNetworks ?? []).filter(n => n.known).map(n => n.name);
-            root.savedSsids = [...new Set([...wireless, ...known])];
-        })
+        onTriggered: {
+            NetworkCommands.readSavedConnections(rows => root.savedConnections = rows);
+            // By SSID rather than profile name, which is all a scan row has to
+            // match against on the nmcli path (see WifiAccessPoint.known).
+            NetworkCommands.readSavedWifiSsids(ssids => {
+                const known = Array.from(NetworkState.wifiNetworks ?? []).filter(n => n.known).map(n => n.name);
+                root.savedSsids = [...new Set([...ssids, ...known])];
+            });
+        }
     }
 
     Timer {

@@ -29,10 +29,10 @@ QtObject {
     readonly property int strength: root.backend ? Math.round(root.backend.signalStrength * 100) : (root.lastIpcObject?.strength ?? 0)
     readonly property int frequency: root.details?.frequency ?? root.lastIpcObject?.frequency ?? 0
     readonly property bool active: root.backend?.connected ?? root.lastIpcObject?.active ?? false
-    // nmcli names the saved profile an access point matches in the same scan
-    // row the rest of `details` comes from, which is the only thing that can
-    // answer this where there is no backend network object to ask.
-    readonly property bool known: root.backend?.known ?? ((root.details?.profile ?? "").length > 0)
+    // Without a backend network object to ask, a scan row only has its SSID to
+    // match against the saved profiles. nmcli's NAME column is no help: it
+    // holds "AP[1]", not a profile name.
+    readonly property bool known: root.backend?.known ?? Network.savedSsids.includes(root.ssid)
 
     readonly property int securityType: root.backend?.security ?? QNet.WifiSecurityType.Unknown
     // NetworkManager's string is the friendlier of the two and covers mixed
