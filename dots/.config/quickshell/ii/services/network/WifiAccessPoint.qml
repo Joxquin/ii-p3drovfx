@@ -48,4 +48,15 @@ QtObject {
     readonly property bool stateChanging: root.backend?.stateChanging ?? false
 
     property bool askingPassword: false
+
+    // What the saved 802.1X profile holds, read whenever a prompt opens so it
+    // can show the account and server domain it is about to change.
+    property string savedIdentity: ""
+    property string savedDomain: ""
+    property bool savedCaCert: false
+
+    onAskingPasswordChanged: {
+        if (root.askingPassword && root.enterprise)
+            Network.loadEnterpriseProfile(root);
+    }
 }

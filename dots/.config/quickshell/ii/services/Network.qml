@@ -169,16 +169,29 @@ Singleton {
     function connectToWifiNetwork(accessPoint: WifiAccessPoint): void {
         if (!accessPoint)
             return;
-        root.beginConnect(accessPoint);
-        NetworkCommands.connectToSsid(accessPoint.ssid, NetworkState.wifiInterface, (code, out, err) => root.finishConnect(code, err));
+        const attempt = root.beginConnect(accessPoint);
+        const done = (code, out, err) => root.finishConnect(attempt, code, out, err);
+        if (accessPoint.enterprise) {
+            NetworkCommands.connectEnterprise(accessPoint.ssid, NetworkState.wifiInterface, done);
+            return;
+        }
+        NetworkCommands.connectToSsid(accessPoint.ssid, NetworkState.wifiInterface, done);
     }
 
-    function connectWithPassword(ssid: string, password: string, username = "", hidden = false): void {
-        root.beginConnect(root.wifiNetworks.find(n => n && n.ssid === ssid) ?? null);
-        const done = (code, out, err) => root.finishConnect(code, err);
-        if (username.length > 0) {
-            NetworkCommands.connectWithEnterprise(ssid, password, {
+    // `domain` is the 802.1X server domain; null leaves the saved one alone.
+    function connectWithPassword(ssid: string, password: string, username = "", hidden = false, domain = null): void {
+        const accessPoint = root.wifiNetworks.find(n => n && n.ssid === ssid) ?? null;
+        const attempt = root.beginConnect(accessPoint);
+        const done = (code, out, err) => root.finishConnect(attempt, code, out, err);
+        // Chosen by the network rather than by whether a username was typed: on
+        // an 802.1X network an empty one keeps the saved identity, and the PSK
+        // path below would delete that profile.
+        if ((accessPoint?.enterprise ?? false) || username.length > 0) {
+            const savedDomain = accessPoint?.savedDomain ?? "";
+            NetworkCommands.saveEnterprise(ssid, password, {
                 identity: username,
+                domain: domain ?? savedDomain,
+                savedDomain: savedDomain,
                 ifname: NetworkState.wifiInterface,
                 hidden: hidden
             }, done);
@@ -199,10 +212,10 @@ Singleton {
         root.connectWithPassword(ssid, password, username, true);
     }
 
-    function changePassword(network: WifiAccessPoint, password: string, username = ""): void {
+    function changePassword(network: WifiAccessPoint, password: string, username = "", domain = null): void {
         if (!network)
             return;
-        root.connectWithPassword(network.ssid, password, username, false);
+        root.connectWithPassword(network.ssid, password, username, false, domain);
     }
 
     function disconnectWifiNetwork(): void {
@@ -241,25 +254,37 @@ Singleton {
     }
 
     // ---- Connection bookkeeping -------------------------------------------
-    function beginConnect(accessPoint): void {
+    // Commands run one at a time, so a network clicked while another is still
+    // connecting waits its turn. Numbering the attempts keeps the first one's
+    // result off the target and error state the second one now owns.
+    property int connectAttempt: 0
+
+    function beginConnect(accessPoint): int {
         root.lastWifiError = "";
         root.lastWifiExitCode = 0;
         root.wifiErrorTarget = null;
         root.wifiConnectTarget = accessPoint;
         if (accessPoint)
             accessPoint.askingPassword = false;
+        return ++root.connectAttempt;
     }
 
-    function finishConnect(exitCode: int, stderr: string): void {
+    function finishConnect(attempt: int, exitCode: int, output: string, stderr: string): void {
+        root.refreshDetails();
+        root.refreshSaved();
+        if (attempt !== root.connectAttempt)
+            return;
         const target = root.wifiConnectTarget;
         root.wifiConnectTarget = null;
         root.lastWifiError = (stderr ?? "").trim();
-        root.refreshDetails();
-        root.refreshSaved();
         if (!target)
             return;
-        target.askingPassword = exitCode !== 0;
-        if (exitCode === 0 || root.lastWifiError.includes("Secrets were required")) {
+        // A certificate profile has no password to ask for, so its failures stay
+        // errors. Otherwise missing secrets, or a missing 802.1X profile, are
+        // what the prompt is for.
+        const lines = (output ?? "").split("\n");
+        target.askingPassword = exitCode !== 0 && !lines.includes(NetworkCommands.kCertificateProfile);
+        if (exitCode === 0 || (target.askingPassword && (lines.includes(NetworkCommands.kNoProfile) || root.lastWifiError.includes("Secrets were required")))) {
             root.lastWifiExitCode = 0;
             root.wifiErrorTarget = null;
             return;
@@ -271,6 +296,22 @@ Singleton {
     function savedProfileFor(ssid: string): string {
         const match = root.savedConnections.find(c => c.type === "802-11-wireless" && c.name === ssid);
         return match?.name ?? "";
+    }
+
+    // Cleared first so a prompt opening again still sees the values change and
+    // picks them up.
+    function loadEnterpriseProfile(accessPoint: WifiAccessPoint): void {
+        accessPoint.savedIdentity = "";
+        accessPoint.savedDomain = "";
+        accessPoint.savedCaCert = false;
+        NetworkCommands.readEnterpriseProfile(accessPoint.ssid, profile => {
+            // The access point can leave the scan while this is read.
+            if (!root.wifiNetworks.includes(accessPoint))
+                return;
+            accessPoint.savedIdentity = profile.identity;
+            accessPoint.savedDomain = profile.domain;
+            accessPoint.savedCaCert = profile.caCert;
+        });
     }
 
     // ---- Backend to WifiAccessPoint bridge --------------------------------
@@ -400,7 +441,10 @@ Singleton {
             if (!target)
                 return;
             if (reason === QNet.ConnectionFailReason.NoSecrets) {
-                target.askingPassword = true;
+                // 802.1X is left to finishConnect, which knows whether the
+                // profile is a certificate one with no password to ask for.
+                if (!target.enterprise)
+                    target.askingPassword = true;
                 return;
             }
             root.lastWifiError = NetworkState.failReasonLabel(reason);
