@@ -204,8 +204,24 @@ Singleton {
             NetworkCommands.forgetProfile(stale);
         NetworkCommands.connectWithPsk(ssid, password, {
             ifname: NetworkState.wifiInterface,
-            hidden: hidden
+            hidden: hidden,
+            kind: root.pskKind(accessPoint)
         }, done);
+    }
+
+    // What a new profile for a password network needs, read off the scan.
+    // Anything still offering WPA/WPA2 gets wpa-psk, which also covers WPA2/WPA3
+    // transition networks; WPA3 alone needs SAE. A hidden network has no scan
+    // entry to read and gets wpa-psk.
+    function pskKind(accessPoint): string {
+        const tokens = (accessPoint?.security ?? "").split(/\s+/);
+        if (tokens.some(t => t === "WPA" || t === "WPA1" || t === "WPA2"))
+            return "wpa-psk";
+        if (tokens.includes("WPA3"))
+            return "sae";
+        if (tokens.includes("WEP"))
+            return "wep";
+        return "wpa-psk";
     }
 
     function connectToHiddenNetwork(ssid: string, password: string, username = ""): void {
