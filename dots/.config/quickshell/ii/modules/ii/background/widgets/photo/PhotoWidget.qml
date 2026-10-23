@@ -148,4 +148,12 @@ AbstractBackgroundWidget {
             }
         }
     }
+
+    // Drop an image from the file manager to replace this widget's picture.
+    PhotoDropArea {
+        anchors.fill: outerCircle
+        entryName: root.configEntryName
+        instanceId: root.widgetInstance?.id ?? ""
+        shapeMode: "circle"
+    }
 }

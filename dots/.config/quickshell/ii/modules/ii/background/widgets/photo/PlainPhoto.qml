@@ -128,4 +128,12 @@ AbstractBackgroundWidget {
             visible: root.isAnimated
         }
     }
+
+    // Drop an image from the file manager to replace this widget's picture.
+    PhotoDropArea {
+        anchors.fill: frame
+        entryName: root.configEntryName
+        instanceId: root.widgetInstance?.id ?? ""
+        radius: frame.radius
+    }
 }

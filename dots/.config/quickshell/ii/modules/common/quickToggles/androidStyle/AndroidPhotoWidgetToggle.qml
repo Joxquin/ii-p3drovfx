@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.quickToggles.androidStyle
+import qs.modules.ii.background.widgets.photo
 
 /**
  * Freeform Photo Widget Quick Toggle: the image tile the island dashboard draws, and
@@ -60,51 +61,54 @@ AndroidWidgetTileBase {
     }
 
     function openPicker(): void {
-        WidgetPhotoPicker.pickWithCallback((path) => {
-            if (!path || path.length === 0)
-                return;
-            root.chosenPath = path;
+        WidgetPhotoPicker.pickWithCallback((path) => root.applyChosenPath(path));
+    }
 
-            // 1. Update buttonData
-            if (root.buttonData)
-                root.buttonData.imagePath = path;
+    // Shared by the file picker and by an image dropped onto the tile.
+    function applyChosenPath(path: string): void {
+        if (!path || path.length === 0)
+            return;
+        root.chosenPath = path;
 
-            // 2. Persist on this tile's own record, in the layout this host draws. The
-            // island's page array and the sidebar's are different, and a pick here must
-            // not rewrite the other host's tile.
-            const layout = root.panel?.layoutConfig;
-            if (layout && layout.pages) {
-                try {
-                    let updatedPages = JSON.parse(JSON.stringify(layout.pages));
-                    let found = false;
-                    for (let p = 0; p < updatedPages.length && !found; p++) {
-                        const page = updatedPages[p];
-                        for (let i = 0; i < page.length; i++) {
-                            if (page[i] && page[i].id === root.tileId) {
-                                page[i].imagePath = path;
-                                found = true;
-                                break;
-                            }
+        // 1. Update buttonData
+        if (root.buttonData)
+            root.buttonData.imagePath = path;
+
+        // 2. Persist on this tile's own record, in the layout this host draws. The
+        // island's page array and the sidebar's are different, and a pick here must
+        // not rewrite the other host's tile.
+        const layout = root.panel?.layoutConfig;
+        if (layout && layout.pages) {
+            try {
+                let updatedPages = JSON.parse(JSON.stringify(layout.pages));
+                let found = false;
+                for (let p = 0; p < updatedPages.length && !found; p++) {
+                    const page = updatedPages[p];
+                    for (let i = 0; i < page.length; i++) {
+                        if (page[i] && page[i].id === root.tileId) {
+                            page[i].imagePath = path;
+                            found = true;
+                            break;
                         }
                     }
-                    if (found)
-                        layout.pages = updatedPages;
-                } catch (e) {
-                    console.warn("[PhotoWidget] Failed to update tile in pages:", e);
                 }
+                if (found)
+                    layout.pages = updatedPages;
+            } catch (e) {
+                console.warn("[PhotoWidget] Failed to update tile in pages:", e);
             }
+        }
 
-            // 3. The island also keeps a dashboard-wide photo, which one of its tiles
-            // falls back to until it has an image of its own. It belongs to the island's
-            // config, so only the island host writes it.
-            if (root.hostFamily === "island" && Config.options?.dynamicIsland?.dashboard)
-                Config.options.dynamicIsland.dashboard.photoWidgetPath = path;
+        // 3. The island also keeps a dashboard-wide photo, which one of its tiles
+        // falls back to until it has an image of its own. It belongs to the island's
+        // config, so only the island host writes it.
+        if (root.hostFamily === "island" && Config.options?.dynamicIsland?.dashboard)
+            Config.options.dynamicIsland.dashboard.photoWidgetPath = path;
 
-            // 4. Force save options to disk so it persists across restarts
-            if (typeof Config.saveOptionsNow === "function") {
-                Config.saveOptionsNow();
-            }
-        });
+        // 4. Force save options to disk so it persists across restarts
+        if (typeof Config.saveOptionsNow === "function") {
+            Config.saveOptionsNow();
+        }
     }
 
     // ── IMAGE FILL CONTENT WITH ROUNDED CORNER MASK ─────────────────────────
@@ -182,5 +186,13 @@ AndroidWidgetTileBase {
         enabled: !root.editMode
         cursorShape: Qt.PointingHandCursor
         onClicked: root.openPicker()
+    }
+
+    // Drop an image from the file manager onto the tile to replace its picture.
+    PhotoDropArea {
+        anchors.fill: parent
+        autoPersist: false
+        radius: root.surfaceRadius
+        onImageDropped: path => root.applyChosenPath(path)
     }
 }

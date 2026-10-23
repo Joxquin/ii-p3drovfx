@@ -210,4 +210,13 @@ AbstractBackgroundWidget {
             opacity: 0.50
         }
     }
+
+    // Drop an image from the file manager to replace this widget's picture.
+    PhotoDropArea {
+        anchors.fill: parent
+        entryName: root.configEntryName
+        instanceId: root.widgetInstance?.id ?? ""
+        shapeMode: root.isRectangle ? "rectangle" : "materialShape"
+        materialShape: root.chosenShape
+    }
 }
