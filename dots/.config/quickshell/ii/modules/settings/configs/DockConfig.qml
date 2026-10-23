@@ -104,9 +104,11 @@ Item {
                 id: heroTag
                 anchors.left: parent.left
                 anchors.margins: 11
+                // The off switch owns the top-left corner; the tag steps aside when it shares that edge.
+                anchors.leftMargin: heroOff.visible && hero.pillEdge === "top" ? heroOff.width + 19 : 11
                 y: hero.pillEdge === "top" ? 11 : hero.height - height - 11
                 height: tagColumn.implicitHeight + 12
-                width: Math.min(hero.width - heroAction.width - 34, tagColumn.implicitWidth + 36)
+                width: Math.min(hero.width - heroAction.width - anchors.leftMargin - 23, tagColumn.implicitWidth + 36)
                 radius: Math.min(height / 2, Appearance.rounding.large)
                 color: Appearance.colors.colSurfaceContainerHigh
 
@@ -143,6 +145,47 @@ Item {
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             color: Appearance.colors.colSubtext
                             elide: Text.ElideRight
+                        }
+                    }
+                }
+            }
+
+            // Turns the dock off right here, so nobody has to dig for the Behavior switch.
+            RippleButton {
+                id: heroOff
+                z: 5
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.margins: 11
+                visible: dockConfigRoot.dockOn
+                implicitHeight: heroTag.height
+                implicitWidth: hero.width < 520 ? heroTag.height : heroOffRow.implicitWidth + 36
+                buttonRadius: height / 2
+                buttonRadiusPressed: Appearance.rounding.small
+                colBackground: Appearance.colors.colErrorContainer
+                colBackgroundHover: Appearance.colors.colErrorContainerHover
+                colRipple: Appearance.colors.colErrorContainerActive
+                onClicked: Config.options.dock.enable = false
+                StyledToolTip {
+                    visible: hero.width < 520 && parent.hovered
+                    text: Translation.tr("Turn off the dock")
+                }
+                contentItem: Item {
+                    RowLayout {
+                        id: heroOffRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        MaterialSymbol {
+                            text: "power_settings_new"
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.colors.colOnErrorContainer
+                        }
+                        StyledText {
+                            visible: hero.width >= 520
+                            text: Translation.tr("Turn off the dock")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnErrorContainer
                         }
                     }
                 }
