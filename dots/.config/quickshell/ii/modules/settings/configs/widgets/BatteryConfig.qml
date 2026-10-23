@@ -112,14 +112,25 @@ ContentPage {
 
         ContentSubsection {
             title: Translation.tr("Show Percentage")
-            enabled: Config.options.battery.style === "windows11" && Config.options.bar.styles.battery !== "material"
+            enabled: (Config.options.battery.style === "windows11" || Config.options.battery.style === "oneui") && Config.options.bar.styles.battery !== "material"
             icon: "percent"
             Layout.fillWidth: true
 
             StyledComboBox {
                 buttonIcon: "percent"
                 textRole: "displayName"
-                model: [
+                // One UI draws the number inside the pill, so it only has on/off.
+                readonly property bool insideOnly: Config.options.battery.style === "oneui"
+                model: insideOnly ? [
+                    {
+                        displayName: Translation.tr("Off"),
+                        value: "off"
+                    },
+                    {
+                        displayName: Translation.tr("On"),
+                        value: "inside"
+                    }
+                ] : [
                     {
                         displayName: Translation.tr("Off"),
                         value: "off"
@@ -135,7 +146,9 @@ ContentPage {
                 ]
 
                 currentIndex: {
-                    const val = Config.options.bar.battery.showPercentage || "off";
+                    let val = Config.options.bar.battery.showPercentage || "off";
+                    if (insideOnly && val !== "off")
+                        val = "inside";
                     const index = model.findIndex(item => item.value === val);
                     return index !== -1 ? index : 0;
                 }

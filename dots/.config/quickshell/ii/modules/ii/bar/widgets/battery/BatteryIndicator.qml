@@ -33,6 +33,8 @@ MouseArea {
     readonly property bool isPerformance: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.Performance)
 
     property color colText: Appearance.colors.colOnSurface
+    // One UI draws the percentage (and the charging bolt) inside the pill; "Show Percentage" only toggles it.
+    readonly property bool oneuiShowPercentage: (Config.options.bar.battery.showPercentage ?? "off") !== "off"
     visible: Battery.available
 
     Component.onCompleted: {
@@ -96,24 +98,30 @@ MouseArea {
                     value: root.percentage
                     highlightColor: (root.isLow && !root.effectivelyCharging) ? Appearance.m3colors.m3error : Appearance.colors.colOnSecondaryContainer
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 2
+                    // Bolt + percentage punched out of the fill. Both follow the "Show Percentage" setting.
+                    textMask: Item {
+                        width: oneuiBattery.valueBarWidth
+                        height: oneuiBattery.valueBarHeight
 
-                        MaterialSymbol {
-                            id: boltIcon
-                            Layout.alignment: Qt.AlignVCenter
-                            Layout.leftMargin: -2
-                            Layout.rightMargin: -2
-                            fill: 1
-                            text: root.showCheck ? "check" : "bolt"
-                            iconSize: Appearance.font.pixelSize.smaller
-                            visible: (root.effectivelyCharging || root.showCheck) && root.percentage < 1
-                        }
-                        StyledText {
-                            Layout.alignment: Qt.AlignVCenter
-                            font: oneuiBattery.font
-                            text: oneuiBattery.text
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 0
+                            visible: root.oneuiShowPercentage
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                renderType: Text.QtRendering
+                                fill: 1
+                                text: root.showCheck ? "check" : "bolt"
+                                iconSize: Appearance.font.pixelSize.smaller
+                                visible: (root.effectivelyCharging || root.showCheck) && root.percentage < 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                renderType: Text.QtRendering
+                                font: oneuiBattery.font
+                                text: oneuiBattery.text
+                            }
                         }
                     }
                 }
