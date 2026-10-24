@@ -873,7 +873,6 @@ AbstractWidget {
         enabled: !root.exiting && root.entryProgress >= 1
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
-    readonly property real lockScaleFactor: lockBehavior === "center" ? 1.0 : (GlobalStates.lockAnimationActive ? 0.85 : 1.0)
     // No scale while dragging. A 3% lift used to be the only feedback that the
     // grab took, but it wrote `root.scale` on press and on release, which meant
     // a plain reposition also re-rasterised every Canvas behind `Supersampled`
@@ -881,7 +880,7 @@ AbstractWidget {
     // widget whose real size never changed. The grab is reported by the snap
     // guides and the selection halo instead, neither of which moves the widget.
     scale: _effectiveInstanceScale * (Config.options.background.widgets.widgetsScale ?? 1.0)
-        * lockScaleFactor * lifecycleScale
+        * lifecycleScale
     Behavior on scale {
         // Same as the opacity above: `elementResize` is 300ms and the reap is
         // at 260ms, so left armed this Behavior turns the exit's shrink into a
