@@ -327,13 +327,24 @@ Item {
      * been selected — the file is read asynchronously — and an editor that only looked
      * once would show an empty page over a note that has text in it. The first thing typed
      * would then be saved over the real content.
+     *
+     * `keepScroll` exists because replacing `blocks` hands the ListView a brand new array,
+     * and a new model is a reset: the view drops `contentY` and goes back to the top. That
+     * is what threw the page away on every Enter — splitting has to rebuild the list to
+     * show the new block. Saving the offset for the length of the rebuild keeps the page
+     * where it was; only a different note opts out, because it starts at its own top.
      */
-    function syncFromDocument(forceText = false): void {
+    function syncFromDocument(forceText = false, keepScroll = true): void {
         const document = root.noteId.length > 0 ? NotesService.documentOf(root.noteId) : null;
         const next = document ? Doc.asArray(document.blocks) : [];
         root.ready = document !== null;
-        if (forceText || root.signatureOf(next) !== root.signatureOf(root.blocks))
+        if (forceText || root.signatureOf(next) !== root.signatureOf(root.blocks)) {
+            const savedScroll = keepScroll ? list.contentY : 0;
             root.blocks = next;
+            // The reset happens synchronously, inside the assignment; restoring it in the
+            // same turn means the frame never gets drawn at the top.
+            list.contentY = savedScroll;
+        }
         if (root.pendingAutoFocus && root.blocks.length > 0) {
             root.pendingAutoFocus = false;
             root.focusFirstBlock();
@@ -361,7 +372,9 @@ Item {
         root.lastSelectionFullText = "";
         root.lastSelectionStart = -1;
         root.lastSelectionEnd = -1;
-        root.syncFromDocument();
+        // A different note starts at its own top, so this is the one rebuild that must not
+        // carry the previous page's offset over.
+        root.syncFromDocument(false, false);
     }
 
     Connections {
@@ -899,8 +912,18 @@ Item {
     property int focusTick: 0
 
     onFocusRequestChanged: {
-        if (root.focusRequest.length > 0)
-            refocusTimer.restart();
+        if (root.focusRequest.length === 0)
+            return;
+        // Revealed *before* the delegates are asked, because a row that is out of view has
+        // not been created yet — and a delegate that does not exist cannot take the caret.
+        // Enter is what made this matter: the new block lands below the fold as often as
+        // not, so without this the caret had nowhere to go and the page was rebuilt with
+        // nothing following the keystroke. `Contain` moves the least it can, so a block
+        // that is already on screen does not move the page at all.
+        const at = root.indexOfBlock(root.focusRequest);
+        if (at >= 0)
+            list.positionViewAtIndex(at, ListView.Contain);
+        refocusTimer.restart();
     }
 
     Timer {
