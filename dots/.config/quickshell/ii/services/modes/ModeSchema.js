@@ -66,6 +66,15 @@ var SETTLE_MS = {
     monitors: 1500
 };
 
+// How long a game trigger keeps counting once the game is gone, unless the
+// trigger sets `offSec`: long enough to survive a crash-restart or loading
+// into a launcher, and an alt-tab to a chat for "focused".
+function gameOffSec(t) {
+    if (t && t.offSec !== null && t.offSec !== undefined && isFinite(Number(t.offSec)))
+        return Math.max(0, Math.round(Number(t.offSec)));
+    return t && t.when === "focused" ? 5 : 30;
+}
+
 function settleMs(type) {
     return SETTLE_MS[type] ?? 0;
 }
@@ -74,8 +83,8 @@ function settleMs(type) {
 // restarting, a player between tracks, headphones reconnecting. A mode or
 // routine held by one of them waits the grace period (modes.graceSec) before
 // it ends. Everything else is clear-cut — a schedule, the charger, the lid —
-// and ends it at once. `game` is absent on purpose: GameDetector already
-// holds its verdict for a while after the game is gone.
+// and ends it at once. `game` is absent on purpose: its trigger has its own
+// delay (`offSec`, gameOffSec()).
 var GRACE_TYPES = {
     app: true,
     fullscreen: true,
@@ -340,6 +349,8 @@ function normalizeTrigger(raw) {
         break;
     case "game":
         t.when = t.when === "focused" ? "focused" : "running";
+        // Seconds it keeps counting after the game is gone (null: the default).
+        t.offSec = optionalInt(t.offSec, 0, 3600);
         break;
     case "battery":
         t.below = optionalInt(t.below, 0, 100);
