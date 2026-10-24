@@ -192,6 +192,25 @@ var GAME_LAUNCHER_PATTERNS = [
     "^orion"
 ];
 
+// Game stores / launchers whose own windows are not a game. steam.desktop is
+// categorised "Game" and Big Picture is fullscreen + GPU-heavy, so without this
+// merely opening Steam would count. Games themselves show up as steam_app_<id>
+// (or their own class), which none of these match. Skips the desktop-category
+// and GPU signals only; GAME_LAUNCHER_PATTERNS and the user's list still win.
+var GAME_CLIENT_PATTERNS = [
+    "^steam$",
+    "^steamwebhelper$",
+    "^steam-runtime",
+    "^steam_proton$"
+];
+
+// Emulator front-ends that are one window for both the library and the game.
+// Such a window is a client until its title says a game is loaded. Ryujinx:
+// idle "Ryujinx 1.3.3+hash", playing "Ryujinx 1.3.3+hash - Name (0100…16 hex) (64-bit)".
+var GAME_CLIENT_TITLE_RULES = [
+    { cls: "^ryujinx$", playing: " - .+ \\([0-9a-f]{16}\\) \\((32|64)-bit\\)$" }
+];
+
 // The exact option set the Game Mode quick toggle writes
 // (modules/common/models/quickToggles/GameModeToggle.qml). Kept identical so
 // the Gaming preset and the toggle cannot drift apart.
