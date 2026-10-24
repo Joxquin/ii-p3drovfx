@@ -43,6 +43,7 @@ Scope {
     }
 
     function close() {
+        Aod.resetMotion();
         GlobalStates.closeOledSaver();
     }
 
@@ -181,6 +182,7 @@ Scope {
                 if (!Aod.keyWakes(event.key))
                     return;
                 event.accepted = true;
+                Aod.resetMotion();
                 window.dismiss();
             }
 
@@ -189,11 +191,16 @@ Scope {
                 hoverEnabled: true
                 cursorShape: window.cursorVisible ? Qt.ArrowCursor : Qt.BlankCursor
 
-                onPositionChanged: {
+                onPositionChanged: mouse => {
                     window.cursorVisible = true;
                     cursorHideTimer.restart();
+                    if (Aod.registerMouseMove(window.screenName, mouse.x, mouse.y))
+                        window.dismiss();
                 }
-                onClicked: window.dismiss()
+                onClicked: {
+                    Aod.resetMotion();
+                    window.dismiss();
+                }
             }
 
             Timer {

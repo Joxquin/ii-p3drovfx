@@ -51,9 +51,11 @@ MouseArea {
     }
     // Waking one screen wakes the whole lock: the lock's timer put them all to sleep.
     function wakeAod() {
+        Aod.resetMotion();
         GlobalStates.oledSaverMonitors = [];
     }
     onAodActiveChanged: {
+        Aod.resetMotion();
         if (root.aodActive) {
             layoutDialog.close();
             lockContextMenu.close();
@@ -1655,7 +1657,7 @@ MouseArea {
     }
 
     // Over the AOD a click only wakes it: nothing hidden under the pointer is pressed,
-    // and no ripple is drawn on the black. Moving the mouse does not wake it.
+    // and no ripple is drawn on the black. Moving the mouse continuously for at least 1s wakes it.
     MouseArea {
         id: aodCatcher
         anchors.fill: parent
@@ -1667,10 +1669,15 @@ MouseArea {
         cursorShape: aodCatcher.cursorVisible ? Qt.ArrowCursor : Qt.BlankCursor
         onVisibleChanged: {
             aodCatcher.cursorVisible = false;
+            Aod.resetMotion();
         }
-        onPositionChanged: {
+        onPositionChanged: mouse => {
             aodCatcher.cursorVisible = true;
             aodCursorTimer.restart();
+            if (Aod.registerMouseMove(root.screenName, mouse.x, mouse.y)) {
+                root.wakeAod();
+                root.forceFieldFocus();
+            }
         }
         onPressed: mouse => {
             mouse.accepted = true;
