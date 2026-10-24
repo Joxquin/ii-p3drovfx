@@ -154,6 +154,22 @@ Item {
         });
     }
 
+    /**
+     * Takes the caret where a click landed, in this block's own coordinates.
+     *
+     * The text is only as tall as its glyphs; the block around it is a whole rhythm line.
+     * A click in that space has always meant "edit this paragraph", so the point is handed
+     * to `positionAt` unclamped: above the first line it answers the start, below the last
+     * it answers the end.
+     */
+    function placeCaret(x, y): void {
+        if (!root.editor || !root.block)
+            return;
+        const point = editText.mapFromItem(root, x, y);
+        editText.forceActiveFocus();
+        editText.cursorPosition = editText.positionAt(point.x, point.y);
+    }
+
     Connections {
         target: root.editor
         function onFocusRequestChanged() {

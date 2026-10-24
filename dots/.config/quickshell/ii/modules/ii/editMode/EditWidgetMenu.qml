@@ -40,8 +40,21 @@ Item {
     readonly property var widget: (canvas && canvas.widgetById) ? canvas.widgetById(instanceId) : null
     readonly property var instance: widget ? widget.widgetInstance : null
     readonly property var metadata: instance ? WidgetsRegistry.getWidgetMetadata(instance.widgetId) : null
-    readonly property bool pinned: widget ? widget.pinned : false
-    readonly property string lockBehavior: widget ? (widget.lockBehavior || "hide") : "hide"
+    readonly property bool isSelected: widget !== null && canvas !== null && canvas.selectedWidgets && canvas.selectedWidgets.indexOf(widget) !== -1
+    readonly property var targetWidgets: (isSelected && canvas.selectedWidgets.length > 1) ? canvas.selectedWidgets : (widget ? [widget] : [])
+    readonly property int targetCount: targetWidgets.length
+    readonly property bool multiSelect: targetCount > 1
+    readonly property bool pinned: root.multiSelect
+        ? (root.targetWidgets.length > 0 && root.targetWidgets.every(w => w && w.pinned))
+        : (widget ? widget.pinned : false)
+    readonly property string lockBehavior: {
+        if (!root.multiSelect)
+            return widget ? (widget.lockBehavior || "hide") : "hide";
+        if (root.targetWidgets.length === 0)
+            return "hide";
+        const first = root.targetWidgets[0]?.lockBehavior || "hide";
+        return root.targetWidgets.every(w => (w?.lockBehavior || "hide") === first) ? first : (widget ? (widget.lockBehavior || "hide") : first);
+    }
     readonly property bool lockOnly: root.lockBehavior === "lockOnly"
 
     readonly property var lockChoices: [
@@ -85,8 +98,15 @@ Item {
 
     readonly property real scaleFactor: widget ? widget.committedScaleFactor : 1
     readonly property real scaleStep: EditModeLogic.nearestSizeStep(root.scaleFactor)
-    readonly property bool canGrow: root.widget !== null && EditModeLogic.steppedScale(root.scaleFactor, 1) !== null
-    readonly property bool canShrink: root.widget !== null && EditModeLogic.steppedScale(root.scaleFactor, -1) !== null
+    readonly property bool allSameScale: root.multiSelect
+        ? root.targetWidgets.every(w => Math.abs((w.committedScaleFactor ?? 1) - root.scaleFactor) < 0.001)
+        : true
+    readonly property bool canGrow: root.multiSelect
+        ? root.targetWidgets.some(w => w && EditModeLogic.steppedScale(w.committedScaleFactor ?? 1, 1) !== null)
+        : (root.widget !== null && EditModeLogic.steppedScale(root.scaleFactor, 1) !== null)
+    readonly property bool canShrink: root.multiSelect
+        ? root.targetWidgets.some(w => w && EditModeLogic.steppedScale(w.committedScaleFactor ?? 1, -1) !== null)
+        : (root.widget !== null && EditModeLogic.steppedScale(root.scaleFactor, -1) !== null)
     readonly property bool dense: ContextMenus.compact
     readonly property int padding: root.dense ? ContextMenus.compactPadding : 8
 
@@ -101,23 +121,25 @@ Item {
             "title": root.pinned ? Translation.tr("Unpin position") : Translation.tr("Pin position"),
             "toggle": true,
             "checked": root.pinned,
-            "enabled": root.instance !== null
+            "enabled": root.multiSelect ? root.targetWidgets.length > 0 : root.instance !== null
         },
         {
             "id": "size",
             "symbol": "aspect_ratio",
             "title": Translation.tr("Size"),
             "stepper": true,
-            "valueText": Math.round(root.scaleStep * 100) + "%",
+            "valueText": root.allSameScale ? (Math.round(root.scaleStep * 100) + "%") : "—",
             "canStepDown": root.canShrink,
             "canStepUp": root.canGrow,
-            "enabled": root.widget !== null
+            "enabled": root.multiSelect ? root.targetWidgets.length > 0 : root.widget !== null
         },
         // Beside the size, the way back to the plain one - a widget resized
         // by the grip has no other route to exactly 100%.
         {
             "id": "resetSize",
-            "shown": root.widget !== null && Math.abs(root.scaleFactor - 1) > 0.001,
+            "shown": root.multiSelect
+                ? root.targetWidgets.some(w => w && Math.abs((w.committedScaleFactor ?? 1) - 1) > 0.001)
+                : (root.widget !== null && Math.abs(root.scaleFactor - 1) > 0.001),
             "symbol": "fit_screen",
             "title": Translation.tr("Reset size")
         },
@@ -127,7 +149,7 @@ Item {
         // them to keep in step.
         {
             "id": "options",
-            "shown": root.hasConfigPage,
+            "shown": root.hasConfigPage && !root.multiSelect,
             "symbol": "tune",
             "title": Translation.tr("Widget options"),
             "submenu": true,
@@ -140,7 +162,7 @@ Item {
             "id": "duplicate",
             "symbol": "content_copy",
             "title": Translation.tr("Duplicate"),
-            "enabled": root.instance !== null
+            "enabled": root.multiSelect ? root.targetWidgets.length > 0 : root.instance !== null
         },
         {
             "id": "lock",
@@ -148,7 +170,7 @@ Item {
             "title": Translation.tr("On lock screen"),
             "subtitle": root.currentLockChoice.title,
             "submenu": true,
-            "enabled": root.instance !== null
+            "enabled": root.multiSelect ? root.targetWidgets.length > 0 : root.instance !== null
         },
         // On the Lockscreen tab a desktop widget is hidden from the lock, not
         // removed from the desktop; a lock-only one is removed outright.
@@ -158,8 +180,8 @@ Item {
             "title": GlobalStates.editLockPreview && !root.lockOnly
                 ? Translation.tr("Hide on lock screen") : Translation.tr("Remove from desktop"),
             "destructive": true,
-            "enabled": root.instance !== null
-                && !(GlobalStates.editLockPreview && root.lockBehavior === "hide")
+            "enabled": root.multiSelect ? root.targetWidgets.length > 0 : (root.instance !== null
+                && !(GlobalStates.editLockPreview && root.lockBehavior === "hide"))
         }
     ].filter(entry => entry.shown !== false)
     readonly property var arranged: ContextMenus.arrange("editWidget", root.liveEntries)
@@ -175,24 +197,38 @@ Item {
             return;
         }
         switch (entry.id) {
-        case "pin":
-            Config.updateWidgetPinned(root.instanceId, !root.pinned);
+        case "pin": {
+            const nextPinned = !root.pinned;
+            GlobalStates.editHistoryBeginBatch();
+            for (const w of root.targetWidgets) {
+                if (w && w.widgetInstance && w.widgetInstance.id)
+                    Config.updateWidgetPinned(w.widgetInstance.id, nextPinned);
+            }
+            GlobalStates.editHistoryEndBatch();
             break;
+        }
         case "size":
             break;
         case "resetSize":
-            if (root.widget && root.widget.commitResizeScale)
-                root.widget.commitResizeScale(1);
+            GlobalStates.editHistoryBeginBatch();
+            for (const w of root.targetWidgets) {
+                if (w && w.commitResizeScale)
+                    w.commitResizeScale(1);
+            }
+            GlobalStates.editHistoryEndBatch();
             break;
         case "options":
             root.lockChooserOpen = false;
             root.configOpen = !root.configOpen;
             break;
         case "duplicate": {
-            const instanceId = root.instanceId;
-            const monitor = root.instance ? (root.instance.monitorName ?? "") : "";
             root.dismissRequested();
-            Config.duplicateWidgetInstance(instanceId, monitor);
+            if (root.multiSelect && root.canvas && root.canvas.duplicateSelection) {
+                root.canvas.duplicateSelection();
+            } else if (root.instance) {
+                const monitor = root.instance.monitorName ?? "";
+                Config.duplicateWidgetInstance(root.instanceId, monitor);
+            }
             break;
         }
         case "lock":
@@ -202,15 +238,28 @@ Item {
             root.lockChooserOpen = !root.lockChooserOpen;
             break;
         case "remove": {
-            const instanceId = root.instanceId;
             root.dismissRequested();
-            if (GlobalStates.editLockPreview && !root.lockOnly)
-                Config.updateWidgetLockBehavior(instanceId, "hide");
-            else
-                // THIS copy, not every widget of its kind: the menu is
-                // about the one the pointer opened it on, and a widget can
-                // now be placed more than once.
-                Config.removeWidgetInstance(instanceId);
+            if (root.multiSelect) {
+                if (GlobalStates.editLockPreview) {
+                    GlobalStates.editHistoryBeginBatch();
+                    for (const w of root.targetWidgets) {
+                        if (!w || !w.widgetInstance) continue;
+                        if (w.lockBehavior === "lockOnly")
+                            Config.removeWidgetInstance(w.widgetInstance.id);
+                        else
+                            Config.updateWidgetLockBehavior(w.widgetInstance.id, "hide");
+                    }
+                    GlobalStates.editHistoryEndBatch();
+                } else if (root.canvas && root.canvas.removeSelection) {
+                    root.canvas.removeSelection();
+                }
+            } else {
+                const instanceId = root.instanceId;
+                if (GlobalStates.editLockPreview && !root.lockOnly)
+                    Config.updateWidgetLockBehavior(instanceId, "hide");
+                else
+                    Config.removeWidgetInstance(instanceId);
+            }
             break;
         }
         }
@@ -268,12 +317,18 @@ Item {
     }
 
     function stepSize(direction) {
-        if (!root.widget || !root.widget.commitResizeScale)
+        if (root.targetWidgets.length === 0)
             return;
-        const next = EditModeLogic.steppedScale(root.scaleFactor, direction);
-        if (next === null)
-            return;
-        root.widget.commitResizeScale(next);
+        GlobalStates.editHistoryBeginBatch();
+        for (const w of root.targetWidgets) {
+            if (!w || !w.commitResizeScale)
+                continue;
+            const current = w.committedScaleFactor ?? 1;
+            const next = EditModeLogic.steppedScale(current, direction);
+            if (next !== null)
+                w.commitResizeScale(next);
+        }
+        GlobalStates.editHistoryEndBatch();
     }
 
     StyledRectangularShadow {
@@ -311,13 +366,13 @@ Item {
             spacing: 8
 
             MaterialSymbol {
-                text: root.metadata ? (root.metadata.icon || "widgets") : "widgets"
+                text: root.multiSelect ? "select_all" : (root.metadata ? (root.metadata.icon || "widgets") : "widgets")
                 iconSize: root.dense ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.larger
                 color: Appearance.colors.colOnSurfaceVariant
             }
             StyledText {
                 Layout.fillWidth: true
-                text: root.metadata ? root.metadata.name : Translation.tr("Widget")
+                text: root.multiSelect ? Translation.tr("%1 widgets selected").arg(root.targetCount) : (root.metadata ? root.metadata.name : Translation.tr("Widget"))
                 font.pixelSize: root.dense ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
                 font.weight: Font.Medium
                 color: Appearance.colors.colOnSurfaceVariant
@@ -355,7 +410,7 @@ Item {
     // not fit a row that is already carrying its own answer.
     Loader {
         id: chooserLoader
-        active: root.lockChooserOpen && root.instance !== null
+        active: root.lockChooserOpen && (root.multiSelect ? root.targetWidgets.length > 0 : root.instance !== null)
         // Top-aligned with the row it belongs to, so the eye goes straight
         // from the chevron to the list.
         y: Math.min(root.lockRowY, root.height - (chooserLoader.item ? chooserLoader.item.height : 0))
@@ -429,7 +484,13 @@ Item {
                         trailingKind: selected ? "check" : "none"
                         onActivated: {
                             root.lockChooserOpen = false;
-                            Config.updateWidgetLockBehavior(root.instanceId, modelData.value);
+                            GlobalStates.editHistoryBeginBatch();
+                            for (const w of root.targetWidgets) {
+                                if (w && w.widgetInstance && w.widgetInstance.id) {
+                                    Config.updateWidgetLockBehavior(w.widgetInstance.id, modelData.value);
+                                }
+                            }
+                            GlobalStates.editHistoryEndBatch();
                         }
                     }
                 }

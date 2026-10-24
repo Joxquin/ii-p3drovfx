@@ -545,6 +545,8 @@ AbstractWidget {
     // Uniform by design: widgets are drawn for one aspect ratio, so the grip
     // carries a single factor and never stretches one axis on its own.
     property bool _resizeActive: false
+    property var _resizeGroup: []
+    property real _resizeFollowerStartScale: 1.0
     property real _resizeStartScale: 1 // factor, not percent
     property real _resizeStartDist: 1
     property bool _resizeUsesGlobal: false
@@ -624,6 +626,15 @@ AbstractWidget {
         _resizeGestureMoved = false;
         _resizeFreeStep = false;
         _resizePreviewScale = _resizeStartScale;
+        if (canvas && canvas.selectedWidgets && canvas.selectedWidgets.indexOf(root) !== -1) {
+            _resizeGroup = canvas.selectedWidgets.filter(w => w !== root && w.draggable);
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                const follower = _resizeGroup[i];
+                follower._resizeFollowerStartScale = follower.committedScaleFactor ?? follower.scale;
+            }
+        } else {
+            _resizeGroup = [];
+        }
         isDraggingOrSettling = true;
         settleTimer.stop();
         staggerTimer.stop();
@@ -647,6 +658,13 @@ AbstractWidget {
         }
         dist = Math.max(1, dist);
         _resizePreviewScale = _quantiseScale(_resizeStartScale * (dist / _resizeStartDist));
+        if (_resizeGroup.length > 0 && _resizeStartScale > 0) {
+            const ratio = _resizePreviewScale / _resizeStartScale;
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                const follower = _resizeGroup[i];
+                follower._liveScaleOverride = (follower._resizeFollowerStartScale ?? 1) * ratio;
+            }
+        }
         applyLiveResize();
     }
 
@@ -714,7 +732,18 @@ AbstractWidget {
     function resetScaleFromHandle() {
         _resizeActive = false;
         _resizePreviewScale = 0;
+        const canvas = findCanvas(root.parent);
+        const inGroup = canvas && canvas.selectedWidgets && canvas.selectedWidgets.indexOf(root) !== -1;
+        GlobalStates.editHistoryBeginBatch();
         commitResizeScale(1.0);
+        if (inGroup) {
+            const others = canvas.selectedWidgets.filter(w => w !== root && w.draggable);
+            for (let i = 0; i < others.length; i++) {
+                others[i].commitResizeScale(1.0);
+                others[i]._liveScaleOverride = 0;
+            }
+        }
+        GlobalStates.editHistoryEndBatch();
         // Cleared only after the commit, so the scale binding never falls back
         // to the stale pre-resize value for a frame.
         _liveScaleOverride = 0;
@@ -728,8 +757,24 @@ AbstractWidget {
         // A click without pointer travel never entered updateResizeGesture, so
         // there is nothing to commit — persisting the untouched preview would
         // just rewrite the same value and fight the double-click reset.
-        if (_resizeGestureMoved && _resizePreviewScale > 0)
+        if (_resizeGestureMoved && _resizePreviewScale > 0) {
+            GlobalStates.editHistoryBeginBatch();
             commitResizeScale(_resizePreviewScale);
+            if (_resizeGroup.length > 0 && _resizeStartScale > 0) {
+                const ratio = _resizePreviewScale / _resizeStartScale;
+                for (let i = 0; i < _resizeGroup.length; i++) {
+                    const follower = _resizeGroup[i];
+                    follower._liveScaleOverride = 0;
+                    follower.commitResizeScale((follower._resizeFollowerStartScale ?? 1) * ratio);
+                }
+            }
+            GlobalStates.editHistoryEndBatch();
+        } else if (_resizeGroup.length > 0) {
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                _resizeGroup[i]._liveScaleOverride = 0;
+            }
+        }
+        _resizeGroup = [];
         _resizePreviewScale = 0;
         _liveScaleOverride = 0;
         settleTimer.restart();
@@ -1307,6 +1352,12 @@ AbstractWidget {
             root.x = _dragOriginX;
             root.y = _dragOriginY;
         }
+        if (_resizeGroup.length > 0) {
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                _resizeGroup[i]._liveScaleOverride = 0;
+            }
+            _resizeGroup = [];
+        }
         _pointerGestureReady = false;
         _dragMovementActive = false;
         isDraggingOrSettling = false;
@@ -1400,6 +1451,8 @@ AbstractWidget {
         const canvas = findCanvas(root.parent);
         if (!canvas || !canvas.contextMenuRequested)
             return;
+        if (canvas.selectedWidgets && canvas.selectedWidgets.indexOf(root) === -1)
+            canvas.applySelection([root]);
         const point = root.mapToItem(canvas, localX, localY);
         canvas.contextMenuRequested(widgetInstance.id, point.x, point.y);
     }

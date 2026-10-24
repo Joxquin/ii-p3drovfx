@@ -378,7 +378,9 @@ MouseArea {
     function selectWidgetsInRect(rect) {
         const picked = [];
         for (const widget of root.widgetsUnder(root, [])) {
-            if (!widget.draggable || !widget.visible)
+            if (!widget.visible || widget.isPreview)
+                continue;
+            if (!widget.draggable && !(root.editMode && widget.pinned))
                 continue;
             const box = root.widgetVisualRect(widget);
             if (box.x < rect.x + rect.width && box.x + box.width > rect.x && box.y < rect.y + rect.height && box.y + box.height > rect.y)

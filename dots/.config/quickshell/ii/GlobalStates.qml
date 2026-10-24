@@ -1273,12 +1273,19 @@ Singleton {
     // so Ctrl+Z takes that edit back instead of reverting under it.
     signal editHistoryWillReplay()
 
+    property int _editHistoryBatchDepth: 0
+
     function editHistoryBeginBatch() {
         if (root._editHistoryBatch === null)
             root._editHistoryBatch = [];
+        root._editHistoryBatchDepth++;
     }
 
     function editHistoryEndBatch() {
+        if (root._editHistoryBatchDepth > 0)
+            root._editHistoryBatchDepth--;
+        if (root._editHistoryBatchDepth > 0)
+            return;
         const entries = root._editHistoryBatch;
         root._editHistoryBatch = null;
         if (entries === null || entries.length === 0)

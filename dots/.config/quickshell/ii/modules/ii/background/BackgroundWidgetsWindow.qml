@@ -912,7 +912,17 @@ PanelWindow {
 
                 sourceComponent: EditAlignBar {
                     count: widgetCanvas.selectedWidgets.length
-                    onRequested: mode => widgetCanvas.alignSelection(mode)
+                    onRequested: mode => {
+                        if (mode === "menu") {
+                            const first = widgetCanvas.selectedWidgets[0];
+                            if (first && first.widgetInstance) {
+                                const p = widgetCanvas.mapToItem(null, alignBar.x + alignBar.width / 2, alignBar.y + (alignBar.below ? alignBar.barHeight + 8 : -8));
+                                GlobalStates.openEditWidgetMenu(widgetCanvas, first.widgetInstance.id, bgWidgetsWindow.monitor ? bgWidgetsWindow.monitor.name : "", p.x, p.y);
+                            }
+                        } else {
+                            widgetCanvas.alignSelection(mode);
+                        }
+                    }
                 }
             }
 

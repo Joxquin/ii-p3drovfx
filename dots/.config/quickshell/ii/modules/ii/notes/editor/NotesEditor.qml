@@ -964,6 +964,37 @@ Item {
 
     // ── The list ──────────────────────────────────────────────────────────
 
+    /**
+     * How much height the footer has to add to reach the bottom of the viewport.
+     *
+     * A note shorter than the page leaves dead space under its last line, and a click in
+     * it has to mean "keep typing" rather than nothing. Measured from the last *row* and
+     * never from `contentHeight`: the footer is part of `contentHeight`, so a binding on
+     * that would be a loop that keeps relaying out the row the caret is in.
+     */
+    property real footerFill: 0
+
+    function fitFooter(): void {
+        // Only the rows near the viewport are instantiated, so the last row exists exactly
+        // when the page is short enough to end on screen — which is the only case that has
+        // space to fill. A longer note leaves the footer at its base, as before.
+        const last = list.count > 0 ? list.itemAtIndex(list.count - 1) : null;
+        root.footerFill = last ? Math.max(0, list.height - (last.y + last.height)) : 0;
+    }
+
+    Connections {
+        target: list
+        function onContentHeightChanged() {
+            root.fitFooter();
+        }
+        function onHeightChanged() {
+            root.fitFooter();
+        }
+        function onCountChanged() {
+            root.fitFooter();
+        }
+    }
+
     ListView {
         id: list
         anchors.fill: parent
@@ -984,12 +1015,13 @@ Item {
         }
 
         footer: Item {
-            // A fixed height. Sizing it from the space left in the view reads
-            // `contentHeight`, which the footer is part of — a binding loop that keeps the
-            // list relaying out, rebuilding the delegate the caret is in and dropping the
-            // focus on every pass.
+            // A fixed base, grown to the rest of the viewport by `footerFill`, so the
+            // empty space under the last line still belongs to the page. Sizing it from
+            // `contentHeight` — which the footer is part of — was a binding loop that kept
+            // the list relaying out, rebuilding the delegate the caret is in and dropping
+            // the focus on every pass.
             width: list.width
-            height: 200 + (root.aiBusy ? aiLoading.implicitHeight : 0)
+            height: Math.max(200 + (root.aiBusy ? aiLoading.implicitHeight : 0), root.footerFill)
 
             AiTypingIndicator {
                 id: aiLoading
@@ -1010,10 +1042,12 @@ Item {
                 anchors.top: root.aiBusy ? aiLoading.bottom : parent.top
                 onClicked: {
                     const last = root.blockAt(root.blocks.length - 1);
-                    if (last && ["text", "heading", "list", "quote", "callout"].includes(last.type))
+                    if (last && ["text", "heading", "list", "quote", "callout"].includes(last.type)) {
+                        root.focusCaret = -1; // The end of the block, which is where the page goes on.
                         root.focusRequest = last.id;
-                    else
+                    } else {
                         root.apply([{ op: "insert", index: root.blocks.length, block: { type: "text" } }]);
+                    }
                 }
             }
         }
