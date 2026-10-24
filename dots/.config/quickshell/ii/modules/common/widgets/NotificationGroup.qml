@@ -231,6 +231,9 @@ MouseArea { // Notification group area
         id: dragManager
         anchors.fill: parent
         interactive: !expanded
+        // Dismissal is horizontal only. Without this the popup's ListView steals the
+        // gesture on a vertical drag and slides the card up or down before rebounding.
+        preventStealing: root.popup
         minimumX: -Infinity
         maximumX: Infinity
         automaticallyReset: false
@@ -474,6 +477,7 @@ MouseArea { // Notification group area
                             qmlParent: notificationsColumn
                             notificationObject: modelData
                             expanded: root.expanded
+                            popup: root.popup
                             animationSpec: root.expansionAnimationSpec
                             zoom: root.zoom
                             onlyNotification: (root.notificationCount === 1)

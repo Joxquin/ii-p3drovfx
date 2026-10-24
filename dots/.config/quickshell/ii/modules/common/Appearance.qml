@@ -505,7 +505,10 @@ Singleton {
         script += "hl.layer_rule({ name = 'ii:appearance:task-view', match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:overview-transition', match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:workspace-overlay', match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
-        script += "hl.layer_rule({ name = 'ii:appearance:notification-animation', match = { namespace = 'quickshell:notificationPopup' }, no_anim = true }) ";
+        // The popup slides in over the dock, bar, screen corners and every other shell
+        // surface. Hyprland draws lower orders on top, so -2 clears the default 0 those
+        // surfaces sit at (and the -1 overlays), while live draw keeps its -5 ink above all.
+        script += "hl.layer_rule({ name = 'ii:appearance:notification-animation', match = { namespace = 'quickshell:notificationPopup' }, no_anim = true, order = -2 }) ";
         // These layer surfaces animate their content with the Windows preset. Never also
         // animate the fullscreen transparent layer (or alter animations for other overlays).
         script += "hl.layer_rule({ name = 'ii:appearance:window-animation-overlays', match = { namespace = '^quickshell:(usage|modes|cheatsheet)$' }, no_anim = true }) ";

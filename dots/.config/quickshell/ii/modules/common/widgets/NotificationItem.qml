@@ -13,6 +13,7 @@ Item { // Notification item area
     id: root
     property var notificationObject
     property bool expanded: false
+    property bool popup: false
     property bool onlyNotification: false
     property real zoom: 1.0
     property real fontSize: Appearance.font.pixelSize.small * zoom
@@ -85,6 +86,9 @@ Item { // Notification item area
         anchors.fill: root
         anchors.leftMargin: root.expanded ? -notificationIcon.implicitWidth : 0
         interactive: expanded
+        // Same as the group: the popup dismisses horizontally, so the ListView must
+        // not take the gesture and drag the card vertically on a downward or upward pull.
+        preventStealing: root.popup
         minimumX: -Infinity
         maximumX: Infinity
         automaticallyReset: false

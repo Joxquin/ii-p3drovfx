@@ -201,7 +201,8 @@ hl.layer_rule({ match = { namespace = "quickshell:notes" }, animation = "slide b
 hl.layer_rule({ match = { namespace = "quickshell:dock" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:screenCorners" }, animation = "popin 120%", order = 10})
 hl.layer_rule({ match = { namespace = "quickshell:lockWindowPusher" }, no_anim = true})
-hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade"})
+-- Lower order is drawn on top: keeps the popup over the dock, bar and corner surfaces during its slide.
+hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade", order = -2})
 hl.layer_rule({ match = { namespace = "quickshell:idleDim" }, above_lock = 1, no_anim = true, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:desktopMenu" }, no_anim = true})
