@@ -24,9 +24,13 @@ import "../../../../services/modes/ModeSchema.js" as ModeSchema
  * Column count and tile sizes are decided on the settled width, so a sheet sliding in
  * re-deals the tiles instead of squeezing them frame by frame.
  *
+ * A tile's grip drags it to another place in the order (priority, for modes): it follows
+ * the pointer, the others slide to where they would sit, and the drop saves the order.
+ *
  * Keys on the grid: arrows move a cursor between tiles, Enter starts / stops the one
  * under it (as the old list did), Space opens it, Ctrl+arrows change its place in the
- * order (priority, for modes), Ctrl+D duplicates, Delete asks to delete, Ctrl+N adds.
+ * order, Ctrl+D duplicates, Delete asks to delete, Ctrl+N adds; Escape puts a dragged
+ * tile back.
  */
 Item {
     id: root
@@ -92,6 +96,10 @@ Item {
 
     // Innermost first: a sheet, then the editor's own field, then the detail page.
     function handleEscape(): bool {
+        if (root.dragging) {
+            root.cancelDrag();
+            return true;
+        }
         if (sidePanel.open) {
             sidePanel.close();
             return true;
@@ -307,6 +315,243 @@ Item {
             Modes.moveMode(id, to);
         root.cursorId = id;
         root.scrollSoon(id);
+    }
+
+    // ── Tiles ───────────────────────────────────────────────────────────
+    // One row per definition, kept in step with the list by moves: a reorder carries each
+    // tile with its definition (and the grid slides it there) instead of handing every
+    // tile its neighbour's contents, colours and switch included.
+    ListModel {
+        id: tileModel
+    }
+
+    function syncTiles(): void {
+        const ids = root.items.map(d => d.id);
+        let changed = false;
+        for (let i = 0; i < ids.length; i++) {
+            if (i < tileModel.count && tileModel.get(i).defId === ids[i])
+                continue;
+            changed = true;
+            let found = -1;
+            for (let j = i + 1; j < tileModel.count; j++) {
+                if (tileModel.get(j).defId === ids[i]) {
+                    found = j;
+                    break;
+                }
+            }
+            if (found !== -1)
+                tileModel.move(found, i, 1);
+            else
+                tileModel.insert(i, { defId: ids[i] });
+        }
+        if (tileModel.count > ids.length) {
+            changed = true;
+            tileModel.remove(ids.length, tileModel.count - ids.length);
+        }
+        // The order changed under a held tile: its slots no longer mean anything.
+        if (changed)
+            root.clearDrag();
+    }
+
+    onItemsChanged: root.syncTiles()
+    Component.onCompleted: root.syncTiles()
+
+    // ── Drag to reorder ─────────────────────────────────────────────────
+    // The held tile follows the pointer; the others are shifted to where they would sit
+    // with it dropped at `dropAt`, an outline marking that slot. On release it glides
+    // into the slot and only then is the order saved, every shift cleared in the same
+    // frame. Slots are the tiles' resting places, read once at the press, so the sliding
+    // tiles never feed back into where the drop lands.
+    property int dragFrom: -1
+    property int dropAt: -1
+    readonly property bool dragging: root.dragFrom !== -1
+    /// Let go (or Escape): the held tile is gliding into its slot.
+    property bool settling: false
+    // The shifts animate only while these are set. Each is raised before the shifts it
+    // animates change and dropped before they are cleared, so nothing slides back.
+    property bool sliding: false
+    property bool gliding: false
+    /// The new order is being laid out in place: the grid's move transition stays off.
+    property bool landing: false
+    property var slots: []
+    /// The spread of the slots' corners; the held tile is kept inside it.
+    property rect slotBounds
+    /// The pointer at the press and now, in the grid's coordinates.
+    property point pressPoint
+    property point pointer
+    /// The outline's corner; placed before `sliding` is raised, so it appears in place.
+    property point dropPoint
+    property real dragContentY: 0
+
+    onCountChanged: root.clearDrag()
+    onColumnsChanged: root.clearDrag()
+
+    /// How far tile `index` is drawn from its resting place.
+    function shiftFor(index: int): point {
+        const home = root.dragging ? root.slots[index] : undefined;
+        if (!home)
+            return Qt.point(0, 0);
+        let to;
+        if (index === root.dragFrom) {
+            if (!root.settling) {
+                const b = root.slotBounds;
+                return Qt.point(
+                    Math.max(b.left, Math.min(b.right, home.x + root.pointer.x - root.pressPoint.x)) - home.x,
+                    Math.max(b.top, Math.min(b.bottom, home.y + root.pointer.y - root.pressPoint.y)) - home.y);
+            }
+            to = root.slots[root.dropAt];
+        } else if (root.dragFrom < index && index <= root.dropAt) {
+            to = root.slots[index - 1];
+        } else if (root.dropAt <= index && index < root.dragFrom) {
+            to = root.slots[index + 1];
+        } else {
+            return Qt.point(0, 0);
+        }
+        return Qt.point(to.x - home.x, to.y - home.y);
+    }
+
+    function updateDrop(): void {
+        // The slot nearest the held tile. Tiles are one size, so corners stand in for
+        // centres. A rival has to be clearly nearer to take over, so a tile held on a
+        // boundary does not set its neighbours swinging back and forth.
+        const home = root.slots[root.dragFrom];
+        const shift = root.shiftFor(root.dragFrom);
+        const x = home.x + shift.x;
+        const y = home.y + shift.y;
+        const distance = slot => Math.hypot(slot.x - x, slot.y - y);
+        let best = root.dropAt;
+        root.slots.forEach((slot, i) => {
+            if (distance(slot) < distance(root.slots[best]))
+                best = i;
+        });
+        if (best === root.dropAt || distance(root.slots[best]) + 12 > distance(root.slots[root.dropAt]))
+            return;
+        root.dropPoint = root.slots[best];
+        root.dropAt = best;
+    }
+
+    function beginDrag(index: int, at: point): void {
+        if (root.dragging || root.count < 2)
+            return;
+        const slots = [];
+        for (let i = 0; i < root.count; i++) {
+            const tile = tileRepeater.itemAt(i);
+            if (!tile)
+                return;
+            slots.push(Qt.point(tile.x, tile.y));
+        }
+        const xs = slots.map(s => s.x);
+        const ys = slots.map(s => s.y);
+        const left = Math.min(...xs);
+        const top = Math.min(...ys);
+        root.slots = slots;
+        root.slotBounds = Qt.rect(left, top, Math.max(...xs) - left, Math.max(...ys) - top);
+        root.pressPoint = at;
+        root.pointer = at;
+        root.dragContentY = flick.contentY;
+        root.dropPoint = slots[index];
+        root.sliding = true;
+        root.dropAt = index;
+        root.dragFrom = index;
+    }
+
+    function dragTo(at: point): void {
+        if (!root.dragging || root.settling)
+            return;
+        root.pointer = at;
+        root.updateDrop();
+    }
+
+    function endDrag(): void {
+        if (!root.dragging || root.settling)
+            return;
+        root.gliding = true;
+        root.settling = true;
+        if (ClockStyle.reducedMotion)
+            root.commitDrag();
+        else
+            settleTimer.restart();
+    }
+
+    function cancelDrag(): void {
+        if (!root.dragging || root.settling)
+            return;
+        root.dropPoint = root.slots[root.dragFrom];
+        root.dropAt = root.dragFrom;
+        root.endDrag();
+    }
+
+    function clearDrag(): void {
+        settleTimer.stop();
+        root.sliding = false;
+        root.gliding = false;
+        root.settling = false;
+        root.dragFrom = -1;
+        root.dropAt = -1;
+    }
+
+    function commitDrag(): void {
+        const from = root.dragFrom;
+        const to = root.dropAt;
+        const id = root.items[from]?.id ?? "";
+        root.clearDrag();
+        if (!id.length || to < 0 || to === from)
+            return;
+        // The held tile already sits in its new place: the grid takes the new order
+        // without its move transition, before the next frame.
+        root.landing = true;
+        if (root.routines)
+            Modes.moveRoutine(id, to);
+        else
+            Modes.moveMode(id, to);
+        grid.forceLayout();
+        root.landing = false;
+        root.cursorId = id;
+    }
+
+    // Tiles pushed aside ease into place: a spring would overshoot a whole row on a wrap.
+    // Only the dropped tile, a short way from its slot, springs into it.
+    component ShiftAnimation: NumberAnimation {
+        id: shiftAnimation
+        property bool spring: false
+        duration: ClockStyle.motionSpatial.duration
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: shiftAnimation.spring ? ClockStyle.motionSpatial.bezierCurve : Appearance.animationCurves.emphasizedDecel
+    }
+
+    Timer {
+        id: settleTimer
+        // One frame past the glide, so the commit never cuts its last step.
+        interval: ClockStyle.motionSpatial.duration + 16
+        onTriggered: root.commitDrag()
+    }
+
+    // The pointer's height in the page's view: near an edge the page scrolls under it.
+    readonly property real dragViewY: root.dragging ? grid.mapToItem(flick, 0, root.pointer.y).y : 0
+
+    Timer {
+        interval: 16
+        repeat: true
+        running: root.dragging && !root.settling && flick.contentHeight > flick.height
+            && (root.dragViewY < 56 || root.dragViewY > flick.height - 56)
+        onTriggered: {
+            const edge = 56;
+            const depth = root.dragViewY < edge ? root.dragViewY - edge : root.dragViewY - (flick.height - edge);
+            const step = Math.max(-24, Math.min(24, depth / 3));
+            flick.contentY = Math.max(0, Math.min(Math.max(0, flick.contentHeight - flick.height), flick.contentY + step));
+        }
+    }
+
+    // The page scrolled under a held tile (the edge scroll, or the wheel): the pointer
+    // stays put on screen, so in the grid it moved by the scroll.
+    Connections {
+        target: flick
+        enabled: root.dragging && !root.settling
+        function onContentYChanged() {
+            root.pointer = Qt.point(root.pointer.x, root.pointer.y + flick.contentY - root.dragContentY);
+            root.dragContentY = flick.contentY;
+            root.updateDrop();
+        }
     }
 
     function duplicate(id: string): void {
@@ -541,66 +786,124 @@ Item {
                     // ── Grid ────────────────────────────────────────────
                     // Tiles carry their own width and the flow animates where they land,
                     // so a sheet opening re-deals them instead of stretching them.
-                    Flow {
-                        id: grid
+                    Item {
                         visible: root.count > 0
                         Layout.preferredWidth: root.flowWidth
-                        spacing: root.gridGap
+                        implicitHeight: grid.implicitHeight
+                        // A held tile and its shadow pass over the sections below.
+                        z: root.dragging ? 1 : 0
 
-                        move: Transition {
-                            enabled: !ClockStyle.reducedMotion
-                            NumberAnimation {
-                                properties: "x,y"
-                                duration: ClockStyle.motionDefault.duration
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: ClockStyle.motionDefault.bezierCurve
-                            }
-                        }
-
-                        // Hidden with an empty list: the empty card below says it once.
-                        DefinitionHero {
-                            visible: root.count > 0
-                            width: Math.floor(root.tileWidth * root.heroSpan + root.gridGap * (root.heroSpan - 1))
+                        // Where the held tile will land.
+                        Rectangle {
+                            x: root.dropPoint.x
+                            y: root.dropPoint.y
+                            width: Math.floor(root.tileWidth)
                             height: root.tileHeight
-                            layoutWidth: root.tileLayoutWidth * root.heroSpan
-                            routine: root.routines
-                            onOpenRequested: id => root.openEditor(id, false)
+                            radius: ClockStyle.radiusCard
+                            color: ColorUtils.applyAlpha(ClockStyle.colOutline, 0.12)
+                            border.width: 2
+                            border.color: ClockStyle.colOutline
+                            opacity: root.dragging && !root.settling ? 1 : 0
+                            visible: opacity > 0
 
-                            StaggeredEntrance {
-                                index: 0
-                                active: !ClockStyle.reducedMotion
+                            Behavior on x {
+                                enabled: root.sliding
+                                ShiftAnimation {}
+                            }
+                            Behavior on y {
+                                enabled: root.sliding
+                                ShiftAnimation {}
+                            }
+                            Behavior on opacity {
+                                enabled: !ClockStyle.reducedMotion
+                                animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                             }
                         }
 
-                        Repeater {
-                            id: tileRepeater
-                            // The count, not the list: an edit re-reads a tile's data
-                            // instead of rebuilding every tile.
-                            model: root.count
+                        Flow {
+                            id: grid
+                            width: parent.width
+                            spacing: root.gridGap
 
-                            DefinitionTile {
-                                id: tile
-                                required property int index
-                                width: Math.floor(root.tileWidth)
-                                height: root.tileHeight
-                                def: root.items[tile.index] ?? null
-                                routine: root.routines
-                                position: tile.index
-                                count: root.count
-                                layoutWidth: root.tileLayoutWidth
-                                focusRing: root.cursorVisible && root.cursorId === (tile.def?.id ?? "")
-                                onOpenRequested: {
-                                    root.cursorId = tile.def.id;
-                                    root.openEditor(tile.def.id, false);
+                            move: Transition {
+                                enabled: !ClockStyle.reducedMotion && !root.landing
+                                NumberAnimation {
+                                    properties: "x,y"
+                                    duration: ClockStyle.motionDefault.duration
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: ClockStyle.motionDefault.bezierCurve
                                 }
-                                onMoveRequested: delta => root.move(tile.def.id, delta)
-                                onDuplicateRequested: root.duplicate(tile.def.id)
-                                onDeleteRequested: root.confirmDelete(tile.def.id)
+                            }
+
+                            // Hidden with an empty list: the empty card below says it once.
+                            DefinitionHero {
+                                visible: root.count > 0
+                                width: Math.floor(root.tileWidth * root.heroSpan + root.gridGap * (root.heroSpan - 1))
+                                height: root.tileHeight
+                                layoutWidth: root.tileLayoutWidth * root.heroSpan
+                                routine: root.routines
+                                onOpenRequested: id => root.openEditor(id, false)
 
                                 StaggeredEntrance {
-                                    index: tile.index + 1
-                                    step: ClockStyle.staggerStep
+                                    index: 0
                                     active: !ClockStyle.reducedMotion
+                                }
+                            }
+
+                            Repeater {
+                                id: tileRepeater
+                                // One row per definition, not the list: an edit re-reads a
+                                // tile's data instead of rebuilding every tile.
+                                model: tileModel
+
+                                DefinitionTile {
+                                    id: tile
+                                    required property int index
+                                    required property string defId
+                                    readonly property point shift: root.shiftFor(tile.index)
+
+                                    width: Math.floor(root.tileWidth)
+                                    height: root.tileHeight
+                                    z: tile.index === root.dragFrom || tile.lift > 0 ? 1 : 0
+                                    def: root.items.find(d => d.id === tile.defId) ?? null
+                                    routine: root.routines
+                                    draggable: root.count > 1
+                                    lifted: tile.index === root.dragFrom
+                                    reordering: root.dragging
+                                    shiftX: tile.shift.x
+                                    shiftY: tile.shift.y
+                                    layoutWidth: root.tileLayoutWidth
+                                    focusRing: root.cursorVisible && root.cursorId === tile.defId
+                                    onOpenRequested: {
+                                        root.cursorId = tile.defId;
+                                        root.openEditor(tile.defId, false);
+                                    }
+                                    onDuplicateRequested: root.duplicate(tile.defId)
+                                    onDeleteRequested: root.confirmDelete(tile.defId)
+                                    onDragStarted: position => root.beginDrag(tile.index, tile.mapToItem(grid, position.x, position.y))
+                                    onDragMoved: position => root.dragTo(tile.mapToItem(grid, position.x, position.y))
+                                    onDragEnded: root.endDrag()
+
+                                    // The others slide out of the way; the held tile follows
+                                    // the pointer exactly and glides only once let go.
+                                    Behavior on shiftX {
+                                        enabled: root.sliding && (tile.index !== root.dragFrom || root.gliding)
+                                        ShiftAnimation {
+                                            spring: tile.index === root.dragFrom
+                                        }
+                                    }
+                                    Behavior on shiftY {
+                                        enabled: root.sliding && (tile.index !== root.dragFrom || root.gliding)
+                                        ShiftAnimation {
+                                            spring: tile.index === root.dragFrom
+                                        }
+                                    }
+
+                                    StaggeredEntrance {
+                                        index: tile.index + 1
+                                        step: ClockStyle.staggerStep
+                                        active: !ClockStyle.reducedMotion
+                                    }
                                 }
                             }
                         }

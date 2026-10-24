@@ -16,26 +16,37 @@ import qs.modules.ii.modes
  *
  * A mode that is on (a routine that is running) takes its accent as the whole tile, the
  * way an enabled alarm takes the primary container; everything else sits on the pane
- * colour with only the shape tinted. Hovering reveals move earlier / later (list order is
- * priority among automatic starts), duplicate and delete, the clock's card actions.
+ * colour with only the shape tinted. Hovering reveals duplicate and delete, the clock's
+ * card actions, and a grip on top that drags the tile to another place in the order
+ * (priority among automatic starts). The board does the moving: the tile reports the
+ * grip's pointer and draws itself lifted and shifted where the board says.
  */
 Rectangle {
     id: root
 
     required property var def
     property bool routine: false
-    /// Place in the list (priority for modes) and the list's length, for the move actions.
-    property int position: 0
-    property int count: 1
+    /// Shows the grip; the board decides (one tile has nowhere to go).
+    property bool draggable: false
+    /// Picked up by its grip: raised off the grid, following the pointer.
+    property bool lifted: false
+    /// A drag is reordering the grid: hover reveals nothing, so passing tiles stay still.
+    property bool reordering: false
+    /// Where the board has slid the tile from its place in the grid.
+    property real shiftX: 0
+    property real shiftY: 0
     /// The keyboard cursor is on this tile.
     property bool focusRing: false
     /// The settled width to size the name by; the live width may be mid-animation.
     property real layoutWidth: root.width
 
     signal openRequested()
-    signal moveRequested(int delta)
     signal duplicateRequested()
     signal deleteRequested()
+    /// The grip's pointer, in the tile's coordinates.
+    signal dragStarted(point position)
+    signal dragMoved(point position)
+    signal dragEnded()
 
     // ── State ───────────────────────────────────────────────────────────
     readonly property string defId: root.def?.id ?? ""
@@ -127,16 +138,49 @@ Rectangle {
     readonly property color colContentSoft: root.active ? ModeUi.onAccent(root.colorKey) : ClockStyle.colOnIdleCard
     readonly property real nameSize: Math.round(Math.max(20, Math.min(30, root.layoutWidth * 0.1)))
 
-    readonly property bool engaged: cardHover.hovered || actionRow.focusInside
-    /// Hovered, or under the keyboard cursor: the tile takes its hover fill and its shape
-    /// morphs, so the cursor is shown without a ring.
-    readonly property bool lit: root.engaged || root.focusRing
+    readonly property bool engaged: !root.reordering && (cardHover.hovered || actionRow.focusInside)
+    /// Hovered, under the keyboard cursor or picked up: the tile takes its hover fill and
+    /// its shape morphs, so the cursor is shown without a ring.
+    readonly property bool lit: root.engaged || root.focusRing || root.lifted
+
+    /// 0 → 1 as the tile is picked up: it grows a little and casts a shadow.
+    property real lift: root.lifted ? 1 : 0
+
+    Behavior on lift {
+        enabled: !ClockStyle.reducedMotion
+        animation: ClockStyle.motionFast.numberAnimation.createObject(this)
+    }
 
     radius: ClockStyle.radiusCard
     color: root.lit ? root.colContainerHover : root.colContainer
+    // Scaled about its own centre first, so the shift stays the pointer's.
+    transform: [
+        Scale {
+            origin.x: root.width / 2
+            origin.y: root.height / 2
+            xScale: 1 + 0.03 * root.lift
+            yScale: 1 + 0.03 * root.lift
+        },
+        Translate {
+            x: root.shiftX
+            y: root.shiftY
+        }
+    ]
 
     Behavior on color {
         animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+    }
+
+    // Under the tile while it is picked up.
+    Item {
+        anchors.fill: parent
+        z: -1
+        visible: root.lift > 0
+        opacity: root.lift
+
+        StyledRectangularShadow {
+            target: root
+        }
     }
 
     // The run button of a routine: play to run it now, stop while it runs.
@@ -255,8 +299,7 @@ Rectangle {
 
                 RowLayout {
                     id: actionRow
-                    readonly property bool focusInside: earlierButton.activeFocus || laterButton.activeFocus
-                        || duplicateButton.activeFocus || deleteButton.activeFocus
+                    readonly property bool focusInside: duplicateButton.activeFocus || deleteButton.activeFocus
 
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
@@ -264,22 +307,6 @@ Rectangle {
                     opacity: actionSlot.revealProgress
                     enabled: root.engaged
 
-                    ClockCardAction {
-                        id: earlierButton
-                        symbol: "arrow_back"
-                        tip: root.routine ? Translation.tr("Move earlier") : Translation.tr("Higher priority")
-                        colContent: root.colContent
-                        enabled: root.engaged && root.position > 0
-                        onClicked: root.moveRequested(-1)
-                    }
-                    ClockCardAction {
-                        id: laterButton
-                        symbol: "arrow_forward"
-                        tip: root.routine ? Translation.tr("Move later") : Translation.tr("Lower priority")
-                        colContent: root.colContent
-                        enabled: root.engaged && root.position < root.count - 1
-                        onClicked: root.moveRequested(1)
-                    }
                     ClockCardAction {
                         id: duplicateButton
                         symbol: "content_copy"
@@ -455,6 +482,70 @@ Rectangle {
                         : (root.active ? Translation.tr("Turn off") : Translation.tr("Turn on"))
                 }
             }
+        }
+    }
+
+    // ── Grip ────────────────────────────────────────────────────────────
+    // Centred on the icon row, revealed with the card actions; above the card's click.
+    MouseArea {
+        id: grip
+        readonly property bool shown: root.engaged || root.lifted
+
+        visible: root.draggable
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: ClockStyle.gapLarge + (44 - grip.height) / 2
+        width: 56
+        height: 32
+        hoverEnabled: true
+        preventStealing: true
+        cursorShape: grip.pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        opacity: grip.shown ? 1 : 0
+
+        Behavior on opacity {
+            enabled: !ClockStyle.reducedMotion
+            animation: ClockStyle.motionFast.numberAnimation.createObject(this)
+        }
+
+        onPressed: mouse => root.dragStarted(grip.mapToItem(root, mouse.x, mouse.y))
+        onPositionChanged: mouse => {
+            if (grip.pressed)
+                root.dragMoved(grip.mapToItem(root, mouse.x, mouse.y));
+        }
+        onReleased: root.dragEnded()
+        onCanceled: root.dragEnded()
+
+        Rectangle {
+            anchors.fill: parent
+            radius: height / 2
+            color: root.colContent
+            opacity: grip.pressed ? 0.12 : grip.containsMouse ? 0.08 : 0
+
+            Behavior on opacity {
+                animation: ClockStyle.motionFast.numberAnimation.createObject(this)
+            }
+        }
+
+        // Two rows of four dots.
+        Grid {
+            anchors.centerIn: parent
+            columns: 4
+            spacing: 3
+
+            Repeater {
+                model: 8
+
+                Rectangle {
+                    width: 4
+                    height: 4
+                    radius: 2
+                    color: root.colContentSoft
+                }
+            }
+        }
+
+        StyledToolTip {
+            extraVisibleCondition: !grip.pressed && !root.reordering
+            text: root.routine ? Translation.tr("Drag to change the order") : Translation.tr("Drag to change the priority")
         }
     }
 }
