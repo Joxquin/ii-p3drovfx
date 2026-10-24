@@ -186,6 +186,20 @@ Singleton {
     readonly property var clientTitleRules: ModeSchema.GAME_CLIENT_TITLE_RULES.map(r => ({
         cls: new RegExp(r.cls, "i"), playing: new RegExp(r.playing, "i") }))
 
+    readonly property var ignoreRegexes: ModeSchema.classRegexes(root.settings?.ignoreClasses)
+
+    // User exclusion list: a class pattern, or the window's Steam app id.
+    function isIgnored(win) {
+        if (!win || (root.ignoreRegexes.length === 0 && !(root.settings?.ignoreClasses?.length)))
+            return false;
+        const initial = String(win.initialClass || "");
+        const current = String(win["class"] || "");
+        if (root.ignoreRegexes.some(rx => rx.test(initial) || rx.test(current)))
+            return true;
+        const app = root.steamApps[win.pid];
+        return !!app && Array.from(root.settings.ignoreClasses).some(s => String(s).trim() === app);
+    }
+
     // A store/launcher's own window (Steam, Big Picture, its web helper).
     function isClientWindow(win) {
         if (!win)
@@ -200,7 +214,7 @@ Singleton {
 
     // Returns a short reason, or "" when the window is not a game.
     function classify(win) {
-        if (!win)
+        if (!win || root.isIgnored(win))
             return "";
         const initial = String(win.initialClass || "");
         const current = String(win["class"] || "");
@@ -255,6 +269,7 @@ Singleton {
     readonly property int gpuPercent: Math.round((ResourceUsage.gpuUsage ?? 0) * 100)
     readonly property bool gpuCandidate: root.gpuWanted && root.focusedFullscreen
         && root.focusedAddress.length > 0 && !root.isClientWindow(root.focusedWindow)
+        && !root.isIgnored(root.focusedWindow)
         && root.gpuPercent >= (root.settings?.gpuThreshold ?? 45)
     // Window that passed the hold; cleared when it closes or leaves fullscreen.
     property string gpuGameAddress: ""

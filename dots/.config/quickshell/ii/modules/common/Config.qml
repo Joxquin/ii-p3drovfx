@@ -3342,6 +3342,10 @@ Singleton {
                     property int gpuThreshold: 45
                     property int holdSec: 20
                     property list<string> extraClasses: []
+                    // Never a game, whatever else matches: window class
+                    // patterns, or a Steam app id ("558990") for Steam-launched
+                    // tools that are not games.
+                    property list<string> ignoreClasses: []
                 }
             }
 
