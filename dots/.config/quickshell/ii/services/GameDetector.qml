@@ -97,6 +97,8 @@ Singleton {
     // Desktop-entry lookups are not free; remember the verdict per class.
     property var categoryCache: ({})
 
+    readonly property var toolCategories: ["Utility", "Network", "FileTransfer", "Development", "Office", "System", "Settings"]
+
     function isGameByDesktopEntry(cls) {
         if (!cls)
             return false;
@@ -107,7 +109,10 @@ Singleton {
         try {
             const entry = DesktopEntries.heuristicLookup(cls);
             const cats = Array.from(entry?.categories ?? []);
-            verdict = cats.indexOf("Game") !== -1;
+            // "Game" next to a tool category (save editors, stores, trainers:
+            // Utility;Game, Network;FileTransfer;Game) is a tool about games.
+            verdict = cats.indexOf("Game") !== -1
+                && !cats.some(c => root.toolCategories.indexOf(c) !== -1);
         } catch (e) {
             verdict = false;
         }
