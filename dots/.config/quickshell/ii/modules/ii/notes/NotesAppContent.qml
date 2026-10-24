@@ -269,6 +269,21 @@ Item {
         sequences: ["Escape"]
         context: Qt.WindowShortcut
         onActivated: {
+            if (detail.clearTextFocus())
+                return;
+            if (rail.searchFocused) {
+                rail.clearSearchFocus();
+                return;
+            }
+            const activeItem = root.Window.window?.activeFocusItem ?? null;
+            if (activeItem && activeItem.cursorPosition !== undefined) {
+                if (typeof activeItem.deselect === "function")
+                    activeItem.deselect();
+                activeItem.focus = false;
+                return;
+            }
+            if (detail.dismissTransientSurface())
+                return;
             if (revisionsSheet.visible)
                 revisionsSheet.visible = false;
             else if (root.page.length > 0)

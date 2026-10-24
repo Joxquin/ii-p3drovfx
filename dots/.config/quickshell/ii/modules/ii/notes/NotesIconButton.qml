@@ -26,6 +26,7 @@ RippleButton {
     implicitWidth: root.size
     implicitHeight: root.size
     buttonRadius: Appearance.rounding.full
+    focusPolicy: Qt.NoFocus
 
     onClicked: root.triggered()
 

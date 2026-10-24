@@ -34,17 +34,34 @@ Item {
     property var blocks: []
     property bool ready: false
 
+    /// Bottom breathing room so the active line is never hidden under the floating toolbar.
+    readonly property int bottomClearance: 96
+    property var imageDimensions: ({})
+
     property var activeTextEdit: null
-    readonly property bool hasSelection: root.activeTextEdit !== null && root.activeTextEdit.selectedText.length > 0
-    readonly property string selectedText: root.hasSelection ? root.activeTextEdit.selectedText : ""
+    readonly property bool hasActiveTextFocus: (root.activeTextEdit !== null && root.activeTextEdit.activeFocus)
+        || root.activeBlockId.length > 0
+    readonly property bool hasSelection: (root.activeTextEdit !== null && root.activeTextEdit.selectedText.length > 0)
+        || (root.activeTextEdit !== null && root.activeTextEdit.activeFocus && root.lastSelectionBlockId === root.activeBlockId && root.lastSelectionText.length > 0)
+    readonly property string selectedText: root.activeTextEdit !== null && root.activeTextEdit.selectedText.length > 0
+        ? root.activeTextEdit.selectedText
+        : (root.hasSelection ? root.lastSelectionText : "")
+    readonly property int selectedStart: root.activeTextEdit !== null && root.activeTextEdit.selectionStart !== root.activeTextEdit.selectionEnd
+        ? Math.min(root.activeTextEdit.selectionStart, root.activeTextEdit.selectionEnd)
+        : root.lastSelectionStart
+    readonly property int selectedEnd: root.activeTextEdit !== null && root.activeTextEdit.selectionStart !== root.activeTextEdit.selectionEnd
+        ? Math.max(root.activeTextEdit.selectionStart, root.activeTextEdit.selectionEnd)
+        : root.lastSelectionEnd
 
     readonly property rect selectionGeometry: {
         if (!root.hasSelection || !root.activeTextEdit)
             return Qt.rect(0, 0, 0, 0);
         try {
             const te = root.activeTextEdit;
-            const sMin = Math.min(te.selectionStart, te.selectionEnd);
-            const sMax = Math.max(te.selectionStart, te.selectionEnd);
+            const sMin = root.selectedStart;
+            const sMax = root.selectedEnd;
+            if (sMin < 0 || sMax <= sMin)
+                return Qt.rect(0, 0, 0, 0);
             const r1 = te.positionToRectangle(sMin);
             const r2 = te.positionToRectangle(sMax);
             const startPoint = te.mapToItem(root, r1.x, r1.y);
@@ -101,8 +118,18 @@ Item {
     }
 
     function rememberSelection(textEdit, blockId): void {
-        if (!textEdit || !textEdit.activeFocus || textEdit.selectionStart === textEdit.selectionEnd)
+        if (!textEdit || !textEdit.activeFocus)
             return;
+        if (textEdit.selectionStart === textEdit.selectionEnd) {
+            if (root.lastSelectionBlockId === String(blockId ?? "")) {
+                root.lastSelectionBlockId = "";
+                root.lastSelectionText = "";
+                root.lastSelectionFullText = "";
+                root.lastSelectionStart = -1;
+                root.lastSelectionEnd = -1;
+            }
+            return;
+        }
         const start = Math.min(textEdit.selectionStart, textEdit.selectionEnd);
         const end = Math.max(textEdit.selectionStart, textEdit.selectionEnd);
         const selected = String(textEdit.selectedText ?? "");
@@ -121,12 +148,20 @@ Item {
     /// was closed.
     function clearTextFocus(): void {
         const te = root.activeTextEdit;
+        root.focusRequest = "";
+        root.focusCaret = -1;
         if (te) {
-            te.deselect();
+            if (typeof te.deselect === "function")
+                te.deselect();
             te.focus = false;
         }
         root.activeTextEdit = null;
         root.activeBlockId = "";
+        root.lastSelectionBlockId = "";
+        root.lastSelectionText = "";
+        root.lastSelectionFullText = "";
+        root.lastSelectionStart = -1;
+        root.lastSelectionEnd = -1;
     }
 
     function presentPendingAiMenu(): void {
@@ -339,11 +374,11 @@ Item {
         const next = document ? Doc.asArray(document.blocks) : [];
         root.ready = document !== null;
         if (forceText || root.signatureOf(next) !== root.signatureOf(root.blocks)) {
-            const savedScroll = keepScroll ? list.contentY : 0;
+            const savedOffset = keepScroll ? Math.max(0, list.contentY - list.originY) : 0;
             root.blocks = next;
             // The reset happens synchronously, inside the assignment; restoring it in the
             // same turn means the frame never gets drawn at the top.
-            list.contentY = savedScroll;
+            list.contentY = list.originY + savedOffset;
         }
         if (root.pendingAutoFocus && root.blocks.length > 0) {
             root.pendingAutoFocus = false;
@@ -388,7 +423,8 @@ Item {
         function onDataChanged() {
             // Not gated on readiness any more: this is how a document that finished
             // loading after its note was selected reaches the editor at all.
-            root.syncFromDocument();
+            if (!root.writingOurselves)
+                root.syncFromDocument();
         }
     }
 
@@ -456,7 +492,7 @@ Item {
         root.writingOurselves = false;
         if (result.ok && result.changed)
             root.redoStack = root.redoStack.concat([result.inverse]);
-        root.syncFromDocument();
+        root.syncFromDocument(true);
     }
 
     function redo(): void {
@@ -469,7 +505,7 @@ Item {
         root.writingOurselves = false;
         if (result.ok && result.changed)
             root.undoStack = root.undoStack.concat([result.inverse]);
-        root.syncFromDocument();
+        root.syncFromDocument(true);
     }
 
     function blockAt(index): var {
@@ -500,6 +536,9 @@ Item {
 
     /// Text as it is typed. Not structural: the delegate is already showing this.
     function commitText(blockId, text): void {
+        const index = root.indexOfBlock(blockId);
+        if (index >= 0 && root.blocks[index])
+            root.blocks[index].text = text;
         root.apply([{ op: "update", id: blockId, patch: { text: text } }], false);
     }
 
@@ -531,23 +570,38 @@ Item {
         return block ? block.id : "";
     }
 
+    property real minScrollOffset: -1
+    property bool advanceScrollOnFocus: false
+
     /// Enter. Splits here, or leaves the list when the item is empty.
     function splitAt(blockId, offset, text): void {
         const index = root.indexOfBlock(blockId);
         const block = root.blockAt(index);
         if (!block)
             return;
+        const savedOffset = Math.max(0, list.contentY - list.originY);
+        const currentItem = list.itemAtIndex(index);
+        const maxOffsetBefore = Math.max(0, list.contentHeight - list.height);
+        const nearBottom = (maxOffsetBefore > 0 && savedOffset >= maxOffsetBefore - 32)
+            || (currentItem !== null && (currentItem.y + currentItem.height - list.contentY) >= list.height - 220 && index >= root.blocks.length - 2);
+        root.minScrollOffset = savedOffset;
+        root.advanceScrollOnFocus = nearBottom;
+
         const current = Object.assign({}, block, { text: text });
         if (Shortcuts.shouldExit(current)) {
             root.apply(Shortcuts.exitOperations(current));
+            root.focusCaret = 0;
             root.focusRequest = blockId;
             return;
         }
         // The typed text has to land first: the split reads the block's text from the
         // document, and the document has not seen this keystroke yet.
+        block.text = text;
         root.apply([{ op: "update", id: blockId, patch: { text: text } }], false, false);
-        if (root.apply([{ op: "split", id: blockId, offset: offset }]))
+        if (root.apply([{ op: "split", id: blockId, offset: offset }])) {
+            root.focusCaret = 0;
             root.focusRequest = root.blockIdAt(index + 1);
+        }
     }
 
     /// Backspace at the very start. Joins this block onto the one above.
@@ -911,18 +965,64 @@ Item {
      */
     property int focusTick: 0
 
+    function ensureBlockVisible(at): void {
+        if (at < 0 || at >= root.blocks.length || list.height <= 0)
+            return;
+        const floorY = root.minScrollOffset >= 0 ? list.originY + root.minScrollOffset : -1e9;
+        let item = list.itemAtIndex(at);
+        if (!item) {
+            list.positionViewAtIndex(at, ListView.Contain);
+            item = list.itemAtIndex(at);
+        }
+        if (list.contentY < floorY)
+            list.contentY = floorY;
+        if (!item)
+            return;
+
+        const topMargin = 24;
+        const visibleBottom = Math.max(topMargin + 28, list.height - root.bottomClearance);
+        const itemTop = item.y - list.contentY;
+        const itemBottom = itemTop + item.height;
+
+        if (itemBottom > visibleBottom) {
+            const delta = itemBottom - visibleBottom;
+            const maxContentY = list.originY + Math.max(0, list.contentHeight - list.height);
+            list.contentY = Math.max(floorY, Math.min(maxContentY, list.contentY + delta));
+        } else if (root.advanceScrollOnFocus) {
+            const step = Math.max(NotesMetrics.paperLineHeight, item.height);
+            const maxContentY = list.originY + Math.max(0, list.contentHeight - list.height);
+            list.contentY = Math.min(maxContentY, Math.max(list.contentY, floorY + step));
+        } else if (itemTop < topMargin && root.minScrollOffset < 0) {
+            const delta = topMargin - itemTop;
+            list.contentY = Math.max(list.originY, list.contentY - delta);
+        }
+    }
+
+    function ensureCursorVisible(textEdit): void {
+        if (!textEdit || !textEdit.activeFocus || list.height <= 0)
+            return;
+        try {
+            const caret = textEdit.cursorRectangle;
+            const mapped = textEdit.mapToItem(list, caret.x, caret.y);
+            const topMargin = 24;
+            const visibleBottom = Math.max(topMargin + 28, list.height - root.bottomClearance);
+            const caretTop = mapped.y;
+            const caretBottom = mapped.y + Math.max(caret.height, NotesMetrics.paperLineHeight);
+            if (caretBottom > visibleBottom) {
+                const maxContentY = list.originY + Math.max(0, list.contentHeight - list.height);
+                list.contentY = Math.min(maxContentY, list.contentY + (caretBottom - visibleBottom));
+            } else if (caretTop < topMargin && root.minScrollOffset < 0) {
+                list.contentY = Math.max(list.originY, list.contentY - (topMargin - caretTop));
+            }
+        } catch (e) {}
+    }
+
     onFocusRequestChanged: {
         if (root.focusRequest.length === 0)
             return;
-        // Revealed *before* the delegates are asked, because a row that is out of view has
-        // not been created yet — and a delegate that does not exist cannot take the caret.
-        // Enter is what made this matter: the new block lands below the fold as often as
-        // not, so without this the caret had nowhere to go and the page was rebuilt with
-        // nothing following the keystroke. `Contain` moves the least it can, so a block
-        // that is already on screen does not move the page at all.
         const at = root.indexOfBlock(root.focusRequest);
         if (at >= 0)
-            list.positionViewAtIndex(at, ListView.Contain);
+            root.ensureBlockVisible(at);
         refocusTimer.restart();
     }
 
@@ -933,7 +1033,14 @@ Item {
         // the first character of whatever follows a markdown prefix.
         interval: 1
         repeat: false
-        onTriggered: root.focusTick++
+        onTriggered: {
+            const at = root.indexOfBlock(root.focusRequest);
+            if (at >= 0)
+                root.ensureBlockVisible(at);
+            root.minScrollOffset = -1;
+            root.advanceScrollOnFocus = false;
+            root.focusTick++;
+        }
     }
 
     /**

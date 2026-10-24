@@ -44,7 +44,7 @@ Item {
     readonly property int minHeight: root.targetLines * root.paperLineHeight
 
     implicitHeight: {
-        const raw = Math.max(row.implicitHeight, editText.implicitHeight) + (root.blockType === "callout" ? 24 : root.isMajorHeading ? 20 : 6);
+        const raw = Math.max(row.implicitHeight, textCell.implicitHeight) + (root.blockType === "callout" ? 24 : root.isMajorHeading ? 20 : 6);
         return Math.max(root.minHeight, Math.ceil(raw / root.paperLineHeight) * root.paperLineHeight);
     }
 
@@ -70,7 +70,7 @@ Item {
      * what it was.
      */
     readonly property bool hasMarkup: {
-        const text = root.block ? String(root.block.text ?? "") : "";
+        const text = editText ? String(editText.text ?? "") : (root.block ? String(root.block.text ?? "") : "");
         if (text.length === 0)
             return false;
         return /(\*\*|__|[*_`~]|\[[^\]]*\]\()/.test(text);
@@ -378,9 +378,15 @@ Item {
                             root.editor.activeTextEdit = null;
                         // Leaving the block commits whatever the debounce was still holding.
                         saveDebounce.stop();
-                        root.commit();
+                        if (!root.editor || !root.editor.writingOurselves)
+                            root.commit();
                         root.wikilinkActive = false;
                     }
+                }
+
+                onCursorRectangleChanged: {
+                    if (activeFocus && !root.applying && root.editor)
+                        root.editor.ensureCursorVisible(editText);
                 }
 
                 onCursorPositionChanged: {
@@ -427,14 +433,12 @@ Item {
                     id: renderedText
                     width: textCell.width
                     visible: root.rendered
-                    text: root.block ? root.block.text : ""
+                    text: editText.text
                     textFormat: Text.MarkdownText
                     wrapMode: Text.Wrap
                     color: editText.color
                     opacity: root.isChecked ? 0.55 : 1
                     font: editText.font
-                    lineHeight: root.paperLineHeight
-                    lineHeightMode: Text.FixedHeight
                     // Set, and ignored: `linkColor` applies to the StyledText format and
                     // markdown becomes rich text, which takes its link colour from Qt.
                     // Measured — a link here draws in Qt's blue, not the theme's primary.
@@ -695,7 +699,7 @@ Item {
     }
 
     function commit(): void {
-        if (root.applying || !root.block || !root.editor)
+        if (root.applying || !root.block || !root.editor || root.editor.writingOurselves)
             return;
         if (editText.text === root.block.text)
             return;
@@ -713,6 +717,18 @@ Item {
     function handleKey(event): void {
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
+
+        if (event.key === Qt.Key_Escape) {
+            if (root.wikilinkActive) {
+                root.wikilinkActive = false;
+            } else if (root.editor) {
+                saveDebounce.stop();
+                root.commit();
+                root.editor.clearTextFocus();
+            }
+            event.accepted = true;
+            return;
+        }
 
         if (ctrl && event.key === Qt.Key_Z) {
             saveDebounce.stop();

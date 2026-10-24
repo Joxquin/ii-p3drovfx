@@ -185,6 +185,56 @@ Item {
         editor.requestAutoFocus();
     }
 
+    readonly property bool hasActiveTextFocus: titleField.activeFocus || root.aiPromptOpen || editor.hasActiveTextFocus
+
+    function clearTextFocus(): bool {
+        if (root.aiPromptOpen) {
+            root.cancelAiPrompt();
+            return true;
+        }
+        if (titleField.activeFocus) {
+            root.titleEdited(titleField.text);
+            titleField.focus = false;
+            return true;
+        }
+        if (editor.hasActiveTextFocus) {
+            editor.clearTextFocus();
+            return true;
+        }
+        return false;
+    }
+
+    function dismissTransientSurface(): bool {
+        if (editor.aiCompareOpen) {
+            editor.aiCompareOpen = false;
+            return true;
+        }
+        if (editor.aiMenuOpen) {
+            editor.aiMenuOpen = false;
+            return true;
+        }
+        if (editor.editingInk.length > 0) {
+            editor.editInk("");
+            return true;
+        }
+        if (editor.viewingImage.length > 0) {
+            editor.viewImage("");
+            return true;
+        }
+        if (exportSheet.visible) {
+            exportSheet.visible = false;
+            return true;
+        }
+        if (paperPicker.visible || noteMenu.visible || reminderMenu.visible || lockSheet.visible) {
+            paperPicker.visible = false;
+            noteMenu.visible = false;
+            reminderMenu.visible = false;
+            lockSheet.visible = false;
+            return true;
+        }
+        return false;
+    }
+
     /// Asked for by the table of contents, which knows a block id and nothing else.
     function goToBlock(blockId) {
         editor.goToBlock(blockId);
