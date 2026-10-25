@@ -22,6 +22,7 @@ import qs.modules.common.quickToggleDialogs.dnsOverTls
 import qs.modules.common.quickToggleDialogs.easyEffects
 import qs.modules.common.quickToggleDialogs.idleInhibitor
 import qs.modules.common.quickToggleDialogs.screenShader
+import qs.modules.common.quickToggleDialogs.smartDevices
 
 /**
  * Landscape shade contents, laid out like Android's: one status line across the top, quick
@@ -68,8 +69,9 @@ Item {
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
     property bool showEasyEffectsDialog: false
+    property bool showSmartDevicesDialog: false
     property bool showTrayDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showEasyEffectsDialog || showTrayDialog
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showEasyEffectsDialog || showSmartDevicesDialog || showTrayDialog
 
     property bool editMode: false
 
@@ -418,6 +420,14 @@ Item {
         dialog: EasyEffectsDialog {}
     }
 
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showSmartDevicesDialog"
+        dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
+        dialog: SmartDevicesDialog {}
+    }
+
     ToggleDialog {
         shownPropertyString: "showIdleInhibitorDialog"
         dialog: IdleInhibitorDialog {}
@@ -520,6 +530,9 @@ Item {
             }
             function onOpenEasyEffectsDialog() {
                 root.showEasyEffectsDialog = true;
+            }
+            function onOpenSmartDevicesDialog() {
+                root.showSmartDevicesDialog = true;
             }
         }
     }

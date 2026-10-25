@@ -578,6 +578,7 @@ AbstractQuickPanel {
                     onOpenScreenShaderDialog: root.openScreenShaderDialog()
                     onOpenModesDialog: root.openModesDialog()
                     onOpenEasyEffectsDialog: root.openEasyEffectsDialog()
+                    onOpenSmartDevicesDialog: root.openSmartDevicesDialog()
                 }
             }
         }
@@ -722,6 +723,7 @@ AbstractQuickPanel {
                                         onOpenScreenShaderDialog: root.openScreenShaderDialog()
                                         onOpenModesDialog: root.openModesDialog()
                                         onOpenEasyEffectsDialog: root.openEasyEffectsDialog()
+                                        onOpenSmartDevicesDialog: root.openSmartDevicesDialog()
                                     }
                                 }
                             }

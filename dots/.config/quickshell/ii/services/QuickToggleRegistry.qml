@@ -82,7 +82,8 @@ Singleton {
         "localSend": localSendComp,
         "keyboardBacklight": keyboardBacklightComp,
         "laptopKeyboard": laptopKeyboardComp,
-        "modes": modesComp
+        "modes": modesComp,
+        "smartDevices": smartDevicesComp
     })
 
     readonly property var allEntries: [
@@ -122,7 +123,8 @@ Singleton {
         { id: "localSend", keywords: ["localsend", "send", "enviar"], get model() { return root.getModel("localSend"); } },
         { id: "keyboardBacklight", keywords: ["backlight", "keyboard", "teclado"], get model() { return root.getModel("keyboardBacklight"); } },
         { id: "laptopKeyboard", keywords: ["laptop", "keyboard", "teclado", "builtin", "internal"], get model() { return root.getModel("laptopKeyboard"); } },
-        { id: "modes", keywords: ["modes", "routines", "rotinas"], get model() { return root.getModel("modes"); } }
+        { id: "modes", keywords: ["modes", "routines", "rotinas"], get model() { return root.getModel("modes"); } },
+        { id: "smartDevices", keywords: ["smart", "tuya", "devices", "light", "led", "lampada", "fita", "casa"], get model() { return root.getModel("smartDevices"); } }
     ]
 
     readonly property var entries: root.suspended ? [] : root.allEntries.filter(entry => entry.model?.available && !Config.options.search.modules.quickToggles.hidden.includes(entry.id))
@@ -168,4 +170,5 @@ Singleton {
     Component { id: keyboardBacklightComp; KeyboardBacklightToggle {} }
     Component { id: laptopKeyboardComp; LaptopKeyboardToggle {} }
     Component { id: modesComp; ModesToggle {} }
+    Component { id: smartDevicesComp; SmartDevicesToggle {} }
 }

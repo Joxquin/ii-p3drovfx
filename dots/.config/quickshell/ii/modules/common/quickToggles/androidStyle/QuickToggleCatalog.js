@@ -86,6 +86,7 @@ var TOGGLE_TYPES = {
     phoneMic: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     phoneMirror: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     speedTest: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    smartDevices: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
 
     volumeSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
     micSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },

@@ -20,6 +20,7 @@ DelegateChooser {
     signal openIdleInhibitorDialog
     signal openModesDialog
     signal openEasyEffectsDialog
+    signal openSmartDevicesDialog
     signal editRequested(string type)
 
     role: "toggleType"
@@ -211,6 +212,19 @@ DelegateChooser {
                     Quickshell.shellPath("modules/ii/sidebarPolicies/phone/PhoneScrcpyPage.qml"));
                 GlobalStates.policiesRequestTabIcon = "smartphone";
                 GlobalStates.openLeftSidebar();
+            }
+        }
+    }
+    DelegateChoice {
+        roleValue: "smartDevices"
+        SmartDevices {
+            editMode: root.editMode
+            isUnused: root.isUnused
+            toggleType: "smartDevices"
+            draggable: root.draggable
+            onEditClicked: root.editRequested("smartDevices")
+            altAction: () => {
+                root.openSmartDevicesDialog();
             }
         }
     }

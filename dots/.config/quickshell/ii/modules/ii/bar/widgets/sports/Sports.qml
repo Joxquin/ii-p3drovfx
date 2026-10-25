@@ -1,3 +1,4 @@
+import qs
 import qs.modules.ii.bar.popups.sports
 import QtQuick
 import QtQuick.Layouts

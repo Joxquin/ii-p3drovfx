@@ -20,7 +20,8 @@ var TOGGLE_TYPES = [
     "keypressDisplay",
     "liveDraw",
     "laptopKeyboard",
-    "phoneMirror"
+    "phoneMirror",
+    "smartDevices"
 ];
 
 function allTypes() {

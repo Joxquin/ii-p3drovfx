@@ -162,6 +162,7 @@ AbstractQuickPanel {
                 onOpenIdleInhibitorDialog: grid.panel.openIdleInhibitorDialog()
                 onOpenModesDialog: grid.panel.openModesDialog()
                 onOpenEasyEffectsDialog: grid.panel.openEasyEffectsDialog()
+                onOpenSmartDevicesDialog: grid.panel.openSmartDevicesDialog()
             }
         }
     }

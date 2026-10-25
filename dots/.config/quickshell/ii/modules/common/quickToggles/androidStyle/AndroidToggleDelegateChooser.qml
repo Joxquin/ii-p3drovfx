@@ -39,6 +39,7 @@ DelegateChooser {
     signal openScreenShaderDialog
     signal openModesDialog
     signal openEasyEffectsDialog
+    signal openSmartDevicesDialog
 
     role: "toggleType"
 
@@ -533,6 +534,30 @@ DelegateChooser {
             entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openNightLightDialog();
+            }
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "smartDevices"
+        AndroidSmartDevicesToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+            onOpenMenu: {
+                root.openSmartDevicesDialog();
             }
         }
     }

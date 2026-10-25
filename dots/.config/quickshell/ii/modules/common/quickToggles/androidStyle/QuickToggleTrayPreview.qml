@@ -71,7 +71,8 @@ AndroidWidgetTileBase {
         sportsWidget: { icon: "sports_soccer", label: Translation.tr("Sports") },
         sportsCard: { icon: "scoreboard", label: Translation.tr("Sports Card") },
         photoWidget: { icon: "photo_library", label: Translation.tr("Photo") },
-        trayWidget: { icon: "apps", label: Translation.tr("Active apps") }
+        trayWidget: { icon: "apps", label: Translation.tr("Active apps") },
+        smartDevices: { icon: "home_iot_device", label: Translation.tr("Smart Devices") }
     })
     readonly property var entry: root.meta[root.buttonData.type]
         ?? ({ icon: "widgets", label: root.buttonData.type })
