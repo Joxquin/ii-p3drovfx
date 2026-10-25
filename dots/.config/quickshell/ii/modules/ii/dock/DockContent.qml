@@ -24,6 +24,24 @@ Item {
     signal togglePinRequested
 
     property var currentScreen: null
+    // Isolate monitors: a dock lists the running apps of its own monitor only.
+    // Off unless dock.isolateMonitors is on (Settings > Dock > "Isolate monitors").
+    function _toplevelsOnThisMonitor(toplevels) {
+        const isolate = Config.options?.dock?.isolateMonitors ?? false
+        if (!isolate || !root.currentScreen)
+            return toplevels ?? []
+        return (toplevels ?? []).filter(t => t?.screens?.includes(root.currentScreen))
+    }
+
+    // A dock keeps an app when it is pinned -- pinned apps are launchers and stay
+    // on every monitor -- or when it has a window on this monitor.
+    function _appVisibleHere(app) {
+        const isolate = Config.options?.dock?.isolateMonitors ?? false
+        if (!isolate || !root.currentScreen || !app)
+            return true
+        return app.pinned || root._toplevelsOnThisMonitor(app.toplevels).length > 0
+    }
+
     // Main-axis room the tray has on this screen (Dock.qml); 0 = unknown.
     property real availableMainExtent: 0
     property bool isPinned: false
@@ -2196,7 +2214,9 @@ Item {
         for (var i = 0; i < allApps.length; i++) {
             var a = allApps[i];
             if (a.pinned)
-                m[a.appId] = a;
+                m[a.appId] = Object.assign({}, a, {
+                    toplevels: root._toplevelsOnThisMonitor(a.toplevels)
+                });
         }
         return m;
     }
@@ -2206,8 +2226,9 @@ Item {
         var allApps = TaskbarApps.apps ?? [];
         for (var i = 0; i < allApps.length; i++) {
             var a = allApps[i];
-            if (!a.pinned && a.toplevels && a.toplevels.length > 0)
-                m[a.appId] = a;
+            var visible = root._toplevelsOnThisMonitor(a.toplevels);
+            if (!a.pinned && visible.length > 0)
+                m[a.appId] = Object.assign({}, a, { toplevels: visible });
         }
         return m;
     }
@@ -2303,7 +2324,10 @@ Item {
     readonly property var modelItems: {
         var result = [];
         var order = Config.options.dock.order ?? [];
-        var allApps = TaskbarApps.apps ?? [];
+        // Only apps this dock may show: pinned, or running here. Without this an
+        // `app:` order entry whose app runs on another monitor would be pushed
+        // back in through allAppIds, with no toplevels.
+        var allApps = (TaskbarApps.apps ?? []).filter(app => root._appVisibleHere(app));
         var allAppIds = [];
         for (var i = 0; i < allApps.length; i++)
             allAppIds.push(allApps[i].appId);
