@@ -689,7 +689,7 @@ Item {
                     title: Translation.tr("Running indicator")
                     icon: "more_horiz"
                     Layout.fillWidth: true
-                    tooltip: Translation.tr("The mark under an app that is running. One per window, up to the slot count; past that they collapse to circles.")
+                    tooltip: Translation.tr("The mark beside an app that is running. One per window, up to the slot count; past that they collapse to circles around the focused window.")
 
                     ConfigSelectionArray {
                         currentValue: Config.options.dock.runningIndicatorStyle
@@ -716,25 +716,29 @@ Item {
 
                         ConfigSlider {
                             Layout.fillWidth: true
-                            buttonIcon: "width"
-                            text: Translation.tr("Width")
-                            from: 4
-                            to: 24
-                            stepSize: 1
-                            usePercentTooltip: false
-                            value: Config.options.dock.runningIndicatorWidth
-                            onValueChanged: Config.options.dock.runningIndicatorWidth = value
-                        }
-                        ConfigSlider {
-                            Layout.fillWidth: true
                             buttonIcon: "height"
                             text: Translation.tr("Thickness")
                             from: 2
                             to: 12
                             stepSize: 1
                             usePercentTooltip: false
-                            value: Config.options.dock.runningIndicatorHeight
-                            onValueChanged: Config.options.dock.runningIndicatorHeight = value
+                            value: Config.options.dock.runningIndicatorThickness
+                            onValueChanged: Config.options.dock.runningIndicatorThickness = value
+                        }
+                        // Along the icon's edge, so it reads as width on a
+                        // bottom dock and as height on a side one. Floored at
+                        // the thickness: a pill never stands on its side.
+                        ConfigSlider {
+                            Layout.fillWidth: true
+                            visible: Config.options.dock.runningIndicatorStyle === "pill"
+                            buttonIcon: "straighten"
+                            text: Translation.tr("Length")
+                            from: Config.options.dock.runningIndicatorThickness
+                            to: 32
+                            stepSize: 1
+                            usePercentTooltip: false
+                            value: Config.options.dock.runningIndicatorLength
+                            onValueChanged: Config.options.dock.runningIndicatorLength = value
                         }
                         ConfigSlider {
                             Layout.fillWidth: true
@@ -746,6 +750,28 @@ Item {
                             usePercentTooltip: false
                             value: Config.options.dock.runningIndicatorMaxVisible
                             onValueChanged: Config.options.dock.runningIndicatorMaxVisible = value
+                        }
+                    }
+
+                    ConfigRow {
+                        uniform: true
+                        ConfigSwitch {
+                            buttonIcon: "aspect_ratio"
+                            text: Translation.tr("Scale with dock height")
+                            checked: Config.options.dock.runningIndicatorScaleWithDock
+                            onCheckedChanged: Config.options.dock.runningIndicatorScaleWithDock = checked
+                            StyledToolTip {
+                                text: Translation.tr("Sizes are for a 56 px dock and grow or shrink with it. Off, they are exact pixels.")
+                            }
+                        }
+                        ConfigSwitch {
+                            buttonIcon: "contrast"
+                            text: Translation.tr("Neutral focus color")
+                            checked: Config.options.dock.runningIndicatorNeutralColor
+                            onCheckedChanged: Config.options.dock.runningIndicatorNeutralColor = checked
+                            StyledToolTip {
+                                text: Translation.tr("Mark the focused window in the text color instead of the accent color")
+                            }
                         }
                     }
                 }

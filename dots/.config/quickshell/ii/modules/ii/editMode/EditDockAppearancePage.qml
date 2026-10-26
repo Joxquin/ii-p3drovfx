@@ -214,6 +214,93 @@ StyledFlickable {
         }
 
         EditPanelSectionLabel {
+            text: Translation.tr("Running indicator")
+        }
+
+        EditOptionChips {
+            currentValue: Config.options.dock.runningIndicatorStyle
+            options: [
+                { "displayName": Translation.tr("Dot"), "icon": "circle", "value": "dot" },
+                { "displayName": Translation.tr("Pill"), "icon": "more_horiz", "value": "pill" }
+            ]
+            onSelected: value => Config.options.dock.runningIndicatorStyle = value
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            first: true
+            last: false
+            symbol: "height"
+            title: Translation.tr("Thickness")
+            trailingKind: "stepper"
+            valueText: Config.options.dock.runningIndicatorThickness + " px"
+            stepDownEnabled: Config.options.dock.runningIndicatorThickness > 2
+            stepUpEnabled: Config.options.dock.runningIndicatorThickness < 12
+            onStepDown: Config.options.dock.runningIndicatorThickness = Math.max(2, Config.options.dock.runningIndicatorThickness - 1)
+            onStepUp: {
+                const next = Math.min(12, Config.options.dock.runningIndicatorThickness + 1);
+                Config.options.dock.runningIndicatorThickness = next;
+                // Same floor the Settings slider keeps: length >= thickness.
+                if (Config.options.dock.runningIndicatorLength < next)
+                    Config.options.dock.runningIndicatorLength = next;
+            }
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            visible: Config.options.dock.runningIndicatorStyle === "pill"
+            first: false
+            last: false
+            symbol: "straighten"
+            title: Translation.tr("Length")
+            trailingKind: "stepper"
+            valueText: Config.options.dock.runningIndicatorLength + " px"
+            stepDownEnabled: Config.options.dock.runningIndicatorLength > Config.options.dock.runningIndicatorThickness
+            stepUpEnabled: Config.options.dock.runningIndicatorLength < 32
+            onStepDown: Config.options.dock.runningIndicatorLength = Math.max(Config.options.dock.runningIndicatorThickness, Config.options.dock.runningIndicatorLength - 1)
+            onStepUp: Config.options.dock.runningIndicatorLength = Math.min(32, Config.options.dock.runningIndicatorLength + 1)
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            first: false
+            last: false
+            symbol: "filter_list"
+            title: Translation.tr("Slots")
+            subtitle: Translation.tr("Marks shown before they collapse to circles")
+            trailingKind: "stepper"
+            valueText: String(Config.options.dock.runningIndicatorMaxVisible)
+            stepDownEnabled: Config.options.dock.runningIndicatorMaxVisible > 1
+            stepUpEnabled: Config.options.dock.runningIndicatorMaxVisible < 5
+            onStepDown: Config.options.dock.runningIndicatorMaxVisible = Math.max(1, Config.options.dock.runningIndicatorMaxVisible - 1)
+            onStepUp: Config.options.dock.runningIndicatorMaxVisible = Math.min(5, Config.options.dock.runningIndicatorMaxVisible + 1)
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            first: false
+            last: false
+            symbol: "aspect_ratio"
+            title: Translation.tr("Scale with dock height")
+            trailingKind: "switch"
+            switchChecked: Config.options.dock.runningIndicatorScaleWithDock
+            onActivated: Config.options.dock.runningIndicatorScaleWithDock = !Config.options.dock.runningIndicatorScaleWithDock
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            first: false
+            last: true
+            symbol: "contrast"
+            title: Translation.tr("Neutral focus color")
+            subtitle: Translation.tr("Text color instead of the accent")
+            trailingKind: "switch"
+            switchChecked: Config.options.dock.runningIndicatorNeutralColor
+            onActivated: Config.options.dock.runningIndicatorNeutralColor = !Config.options.dock.runningIndicatorNeutralColor
+        }
+
+        EditPanelSectionLabel {
             text: Translation.tr("Behaviour")
         }
 
