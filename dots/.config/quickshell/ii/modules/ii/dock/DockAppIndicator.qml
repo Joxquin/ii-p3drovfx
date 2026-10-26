@@ -12,32 +12,31 @@ Item {
     visible: root.appIsRunning
 
     readonly property int totalCount: root.appToplevel ? root.appToplevel.toplevels.length : 0
-    readonly property int maxVisibleDots: 5
-    readonly property int visibleCount: Math.min(totalCount, maxVisibleDots)
-    readonly property int focusedIndex: root.focusedWindowIndex
+    readonly property string indicatorStyle: Config.options.dock.runningIndicatorStyle
+    readonly property int maxVisible: Config.options.dock.runningIndicatorMaxVisible
+    readonly property int visibleCount: Math.min(totalCount, maxVisible)
 
-    readonly property real countDotHeight: Math.max(3, Math.round(root.dockHeight * 0.06))
-    readonly property real baseDotW: countDotHeight
-    readonly property real baseDotH: countDotHeight
+    readonly property bool appIsActive: (root.appToplevel?.toplevels ?? [])
+        .some(toplevel => toplevel.activated === true)
+
+    readonly property real indicatorWidth: Config.options.dock.runningIndicatorWidth
+    readonly property real indicatorHeight: Config.options.dock.runningIndicatorHeight
+    // A dot is always as wide as it is tall; a pill only stays wide while the
+    // windows fit, and collapses to circles past that.
+    readonly property real baseDotW: (indicatorStyle === "pill" && totalCount <= maxVisible)
+        ? indicatorWidth
+        : indicatorHeight
+    readonly property real baseDotH: indicatorHeight
 
     readonly property real dotSpacing: 3
     readonly property real pitchX: root.isVertical ? 0 : (baseDotW + dotSpacing)
     readonly property real pitchY: root.isVertical ? (baseDotH + dotSpacing) : 0
     readonly property real indicatorMargin: Math.max(1, (root.dockContent?.dotMarginV ?? 1) * 0.35)
 
-    readonly property int windowStart: {
-        if (totalCount <= maxVisibleDots) return 0
-        const centeredStart = focusedIndex - Math.floor(maxVisibleDots / 2)
-        const maxStart = totalCount - maxVisibleDots
-        return Math.max(0, Math.min(maxStart, centeredStart))
-    }
-    readonly property bool hasHiddenLeft: windowStart > 0
-    readonly property bool hasHiddenRight: (windowStart + visibleCount) < totalCount
-
     width: root.isVertical ? baseDotW : (visibleCount * baseDotW + Math.max(0, visibleCount - 1) * dotSpacing)
     height: root.isVertical ? (visibleCount * baseDotH + Math.max(0, visibleCount - 1) * dotSpacing) : baseDotH
 
-    // Keep indicators on the screen-edge side of the icon in every orientation.
+    // Keep the indicator on the screen-edge side of the icon in every orientation.
     // Same class of bug as the dock tray: conditional anchors are evaluated
     // one by one, so an orientation flip overlaps opposite edges, over-
     // constrains the group and permanently removes the width/height bindings.
@@ -70,37 +69,19 @@ Item {
     Repeater {
         model: indicatorContainer.visibleCount
         delegate: Rectangle {
-            id: dotRect
-
-            readonly property int absoluteIndex: indicatorContainer.windowStart + index
-            readonly property bool isFocused: absoluteIndex === indicatorContainer.focusedIndex
-
-            readonly property bool isOverflowHint:
-                (index === 0 && indicatorContainer.hasHiddenLeft) ||
-                (index === indicatorContainer.visibleCount - 1 && indicatorContainer.hasHiddenRight)
-
-            readonly property real shrinkFactor: (isOverflowHint && !isFocused) ? 0.72 : 1.0
-
-            width: indicatorContainer.baseDotW * shrinkFactor
-            height: indicatorContainer.baseDotH * shrinkFactor
-
+            width: indicatorContainer.baseDotW
+            height: indicatorContainer.baseDotH
             radius: Appearance.rounding.full
 
-            x: root.isVertical ? (indicatorContainer.baseDotW - width) / 2 : (index * indicatorContainer.pitchX + (indicatorContainer.baseDotW - width) / 2)
-            y: root.isVertical ? (index * indicatorContainer.pitchY + (indicatorContainer.baseDotH - height) / 2) : (indicatorContainer.baseDotH - height) / 2
+            x: root.isVertical ? (indicatorContainer.baseDotW - width) / 2 : (index * indicatorContainer.pitchX)
+            y: root.isVertical ? (index * indicatorContainer.pitchY) : 0
 
-            color: (isFocused && indicatorContainer.focusedIndex >= 0) ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
-
-            opacity: (isOverflowHint && !isFocused) ? 0.55 : 1.0
+            color: indicatorContainer.appIsActive
+                ? Appearance.colors.colPrimary
+                : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
 
             Behavior on color {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-            }
-            Behavior on width {
-                animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
-            }
-            Behavior on height {
-                animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
             }
         }
     }

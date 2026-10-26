@@ -5849,6 +5849,13 @@ Singleton {
                 property bool autoOverflowGroup: true
                 property bool enableShapeMask: true
                 property string shapeMask: "Circle"
+                // Running mark under each dock icon: "dot" is a circle, "pill" a
+                // wider bar. One per window, and anything past
+                // runningIndicatorMaxVisible collapses to circles.
+                property string runningIndicatorStyle: "dot"
+                property int runningIndicatorWidth: 10
+                property int runningIndicatorHeight: 4
+                property int runningIndicatorMaxVisible: 5
                 property real height: 56
                 property real hoverRegionHeight: 2
                 property bool pinnedOnStartup: false

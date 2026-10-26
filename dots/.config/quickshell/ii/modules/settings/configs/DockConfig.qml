@@ -686,6 +686,72 @@ Item {
 
                 ContentSubsection {
                     visible: Config.options.dock.enable
+                    title: Translation.tr("Running indicator")
+                    icon: "more_horiz"
+                    Layout.fillWidth: true
+                    tooltip: Translation.tr("The mark under an app that is running. One per window, up to the slot count; past that they collapse to circles.")
+
+                    ConfigSelectionArray {
+                        currentValue: Config.options.dock.runningIndicatorStyle
+                        onSelected: newValue => Config.options.dock.runningIndicatorStyle = newValue
+                        options: [
+                            {
+                                "displayName": Translation.tr("Dot"),
+                                "icon": "circle",
+                                "value": "dot"
+                            },
+                            {
+                                "displayName": Translation.tr("Pill"),
+                                "icon": "more_horiz",
+                                "value": "pill"
+                            }
+                        ]
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 2
+                        columnSpacing: 8
+                        rowSpacing: 8
+
+                        ConfigSlider {
+                            Layout.fillWidth: true
+                            buttonIcon: "width"
+                            text: Translation.tr("Width")
+                            from: 4
+                            to: 24
+                            stepSize: 1
+                            usePercentTooltip: false
+                            value: Config.options.dock.runningIndicatorWidth
+                            onValueChanged: Config.options.dock.runningIndicatorWidth = value
+                        }
+                        ConfigSlider {
+                            Layout.fillWidth: true
+                            buttonIcon: "height"
+                            text: Translation.tr("Thickness")
+                            from: 2
+                            to: 12
+                            stepSize: 1
+                            usePercentTooltip: false
+                            value: Config.options.dock.runningIndicatorHeight
+                            onValueChanged: Config.options.dock.runningIndicatorHeight = value
+                        }
+                        ConfigSlider {
+                            Layout.fillWidth: true
+                            buttonIcon: "filter_list"
+                            text: Translation.tr("Slots")
+                            from: 1
+                            to: 5
+                            stepSize: 1
+                            usePercentTooltip: false
+                            value: Config.options.dock.runningIndicatorMaxVisible
+                            onValueChanged: Config.options.dock.runningIndicatorMaxVisible = value
+                        }
+                    }
+                }
+
+                ContentSubsection {
+                    visible: Config.options.dock.enable
                     title: Translation.tr("Show on")
                     icon: "desktop_windows"
                     Layout.fillWidth: true
