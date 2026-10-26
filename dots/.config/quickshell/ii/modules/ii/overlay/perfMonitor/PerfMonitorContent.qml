@@ -362,8 +362,27 @@ Rectangle {
             return Translation.tr("Driver %1").arg(String(info.driverVersion));
         return info.driver ?? "";
     }
+    // A game that never logs a frame: MangoHud is not in it, and only a
+    // restart of the launcher (Steam) puts it there.
+    property bool noFpsLate: false
+    Timer {
+        interval: 12000
+        running: !root.preview && GameDetector.gameRunning && !root.hasFps && root.sampler.ready
+        onTriggered: root.noFpsLate = true
+    }
+    Connections {
+        target: root
+        function onHasFpsChanged() { if (root.hasFps) root.noFpsLate = false; }
+    }
+    Connections {
+        target: GameDetector
+        function onGameRunningChanged() { if (!GameDetector.gameRunning) root.noFpsLate = false; }
+    }
+
     readonly property var footerItems: {
         const out = [];
+        if (root.noFpsLate)
+            out.push({ "icon": "info", "text": Translation.tr("No FPS · MangoHud is not in this game") });
         if (!(root.cfg.showDetails ?? true))
             return out;
         if (root.cfg.showProcess && root.gameName.length > 0)

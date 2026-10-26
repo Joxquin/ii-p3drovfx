@@ -1313,6 +1313,53 @@ def prism_running():
         return False
 
 
+def steam_client_pid():
+    """The running native Steam client, or 0."""
+    try:
+        pids = subprocess.run(["pgrep", "-x", "steam"], capture_output=True, text=True).stdout.split()
+    except OSError:
+        return 0
+    for pid in pids:
+        if "ubuntu12_32/steam" in (read(f"/proc/{pid}/cmdline", "") or "").replace("\0", " "):
+            return int(pid)
+    return 0
+
+
+def steam_missing_layer():
+    """Steam is open but was started without MANGOHUD=1.
+
+    Every game inherits Steam's environment, so a Steam that was already
+    running when the launcher entry got its override (or that was started
+    some other way) never injects MangoHud, and no CSV is written.
+    """
+    pid = steam_client_pid()
+    if not pid:
+        return False
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as f:
+            return b"\0MANGOHUD=1\0" not in b"\0" + f.read() + b"\0"
+    except OSError:
+        return False
+
+
+def steam_playing():
+    try:
+        return subprocess.run(["pgrep", "-x", "reaper"], capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+def restart_steam():
+    if steam_playing():
+        raise RuntimeError("steam-playing")
+    subprocess.run(["steam", "-shutdown"], capture_output=True, timeout=20)
+    deadline = time.monotonic() + 40
+    while steam_client_pid():
+        if time.monotonic() > deadline:
+            raise RuntimeError("steam-stuck")
+        time.sleep(0.5)
+
+
 def game_enabled(file_id, method, app):
     if method in ("flatpak",):
         return flatpak_override_enabled(app)
@@ -1354,6 +1401,7 @@ def find_games():
                 "method": method,
                 "app": app,
                 "enabled": game_enabled(file_id, method, app),
+                "restart": method == "steam" and game_enabled(file_id, method, app) and steam_missing_layer(),
                 "needsLayer": method in ("flatpak", "prism-flatpak") and not flatpak_installed("runtime", FLATPAK_LAYER),
             })
     order = {"steam": 0, "flatpak": 1, "prism": 1, "prism-flatpak": 1, "wrap": 2, "guide": 3}
@@ -1464,6 +1512,17 @@ def set_game(file_id, enable, folder):
         raise RuntimeError("guided")
 
 
+def autowire(folder):
+    """First run: wire MangoHud into native Steam so FPS needs no setup.
+
+    Only Steam: its launcher entry is a plain desktop override. Flatpak,
+    Prism and the rest keep their opt-in switch in Settings.
+    """
+    game = next((g for g in find_games() if g["method"] == "steam"), None)
+    if game is not None and not game["enabled"]:
+        set_game(game["id"], True, folder)
+
+
 def launch_game(file_id, folder):
     game = next((g for g in find_games() if g["id"] == file_id), None)
     if game is None:
@@ -1471,6 +1530,8 @@ def launch_game(file_id, folder):
     ensure_logging(folder)
     if game["method"] in ("prism", "prism-flatpak", "flatpak") and not game["enabled"]:
         set_game(file_id, True, folder)
+    if game["method"] == "steam" and game["enabled"] and steam_missing_layer():
+        restart_steam()
     path = os.path.join(user_apps_dir(), file_id + ".desktop")
     entry = parse_desktop(path if os.path.isfile(path) else system_desktop(file_id) or "")
     args = shlex.split(strip_field_codes(entry.get("Exec", "")))
@@ -1594,6 +1655,8 @@ def main():
     p_watch = sub.add_parser("watch")
     p_watch.add_argument("--mangohud-dir", default="")
     p_watch.add_argument("--interval", type=int, default=500)
+    p_auto = sub.add_parser("autowire")
+    p_auto.add_argument("--dir", default="")
     p_games = sub.add_parser("games")
     p_games.add_argument("--dir", default="")
     for name in ("enable", "disable", "launch"):
@@ -1608,6 +1671,12 @@ def main():
         elif args.cmd == "setup":
             setup(args.dir, args.interval, args.hide_hud)
             emit(mangohud_status(args.dir))
+        elif args.cmd == "autowire":
+            try:
+                autowire(args.dir)
+            except (OSError, RuntimeError, subprocess.SubprocessError) as e:
+                sys.stderr.write(f"autowire: {e}\n")
+                sys.exit(1)
         elif args.cmd == "disarm":
             disarm_if_idle()
         elif args.cmd == "unsetup":

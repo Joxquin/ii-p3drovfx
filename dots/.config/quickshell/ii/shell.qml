@@ -67,6 +67,18 @@ ShellRoot {
         deferredServicesTimer.restart();
     }
 
+    // MangoHud has to be in Steam's environment before a game starts, so the
+    // wiring happens at shell start instead of when the HUD is first opened.
+    Process {
+        id: perfAutoWire
+        command: ["python3", Quickshell.shellPath("scripts/perfOverlay/perf_monitor.py"), "autowire",
+            "--dir", String(Directories.cache).replace(/^file:\/\//, "") + "/perf-overlay/mangohud"]
+        onExited: exitCode => {
+            if (exitCode === 0)
+                Config.options.overlay.perfMonitor.gamesAutoWired = true;
+        }
+    }
+
     Timer {
         id: deferredServicesTimer
         interval: 3000
@@ -74,6 +86,8 @@ ShellRoot {
     }
 
     function loadDeferredServices() {
+        if (!Config.options.overlay.perfMonitor.gamesAutoWired)
+            perfAutoWire.running = true;
         Hyprsunset.load();
         DisplayColorFilter.load();
         Cliphist.refresh();

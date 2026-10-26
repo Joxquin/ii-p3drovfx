@@ -1097,6 +1097,9 @@ Item {
                 StyledText {
                     Layout.fillWidth: true
                     text: row.error === "prism-running" ? Translation.tr("Close Prism Launcher first: it rewrites its settings when it quits.")
+                        : row.error === "steam-playing" ? Translation.tr("A game is running. Close it, then press Play so Steam restarts with MangoHud.")
+                        : row.error === "steam-stuck" ? Translation.tr("Steam did not close. Quit it yourself, then press Play.")
+                        : (row.game.restart ?? false) ? Translation.tr("Steam is open without MangoHud. Play restarts it so games log FPS.")
                         : row.error.length > 0 ? Translation.tr("That did not work. Check the shell log (qs log -c ii).")
                         : row.how
                     wrapMode: Text.WordWrap

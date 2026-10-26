@@ -6732,6 +6732,9 @@ Singleton {
                 }
                 // Performance HUD (RivaTuner style). Frame rate comes from MangoHud's logger.
                 property JsonObject perfMonitor: JsonObject {
+                    // Steam got its MangoHud wiring once, on first run; after that the
+                    // per-game switch in Settings decides.
+                    property bool gamesAutoWired: false
                     // Pin the HUD on screen while a game is detected
                     property bool autoPin: false
                     property string style: "bars" // bars | graph | text
