@@ -6,9 +6,10 @@ import qs.modules.common.widgets
 
 Item {
     id: indicatorContainer
-    readonly property bool isAdaptiveMode: Config.options?.dock?.enableShapeMask ?? false
-
-    visible: root.appIsRunning && !isAdaptiveMode
+    // enableShapeMask used to hide this indicator with nothing drawing running
+    // state in its place, so a running app and an idle one looked identical.
+    // The parent fork shows it either way.
+    visible: root.appIsRunning
 
     readonly property int totalCount: root.appToplevel ? root.appToplevel.toplevels.length : 0
     readonly property int maxVisibleDots: 5

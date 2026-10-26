@@ -349,7 +349,9 @@ DockButton {
     }
 
     DockAppIndicator {
-        z: -1
+        // Above the plate: the shape mask covers the bottom of the slot and used
+        // to cut the indicator in half.
+        z: 1
     }
     DockAppIcon {
         z: 0
