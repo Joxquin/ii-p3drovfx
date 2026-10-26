@@ -5856,6 +5856,17 @@ Singleton {
                 property bool autoOverflowGroup: true
                 property bool enableShapeMask: true
                 property string shapeMask: "Circle"
+                // Running mark beside each dock icon: "dot" is a circle, "pill" a
+                // bar along the icon's edge. One per window, and anything past
+                // runningIndicatorMaxVisible collapses to circles. Sizes are px
+                // on a 56 px dock, scaled by dock.height unless ScaleWithDock is off.
+                property string runningIndicatorStyle: "dot"
+                property int runningIndicatorLength: 10
+                property int runningIndicatorThickness: 3
+                property int runningIndicatorMaxVisible: 5
+                property bool runningIndicatorScaleWithDock: true
+                // The focused window's mark in colOnLayer0 instead of colPrimary.
+                property bool runningIndicatorNeutralColor: false
                 property real height: 56
                 property real hoverRegionHeight: 2
                 property bool pinnedOnStartup: false
