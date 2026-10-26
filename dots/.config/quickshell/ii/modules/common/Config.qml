@@ -3157,6 +3157,13 @@ Singleton {
                     property bool enableThemed: false
                     property bool enableShapeMask: false
                     property string shapeMask: "Circle"
+                    // ii-icon-pack, installed and reshaped from Settings -> Themed icons (services/IiIconPack.qml)
+                    property JsonObject iiPack: JsonObject {
+                        property string shape: "circle" // A key from the pack's `iipack.py shapes`
+                        property real plateScale: 1.0 // Icon size inside its canvas, 0.6-1.08
+                        property real glyphScale: 1.0 // Logo size on the plate, 0.5-1.5
+                        property string source: "" // Pack checkout; empty = ~/.local/share/ii-icon-pack
+                    }
                 }
                 property string borderColorType: "primary" // Options: primary, secondary, tertiary, primaryContainer, surface
                 property bool borderless: true

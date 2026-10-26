@@ -156,6 +156,7 @@ ShellRoot {
         if (Config.options?.bar?.workspaces?.arranger?.autoCloseGaps ?? false)
             WorkspaceArranger.enabled; // Start the arranger's watcher only when auto-close gaps is enabled
         // IconThemes is loaded by the settings page when its data is actually needed.
+        IiIconPack.busy; // Touch singleton: registers the iconPack IPC; idle until Settings or IPC asks for something
         if (Config.options?.dictation?.enabled)
             DictationService.installed; // Touch singleton: registers the dictation keybind, whose surfaces are all optional
         if (Config.options?.budsLink?.enabled)
