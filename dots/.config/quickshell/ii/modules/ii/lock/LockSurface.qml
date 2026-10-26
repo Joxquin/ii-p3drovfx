@@ -12,6 +12,7 @@ import qs.modules.common.panels.lock
 import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.widgets.tray
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.SystemTray
 import qs.modules.ii.editMode
 import "../../common/functions/lock_islands.js" as LockIslands
@@ -51,11 +52,9 @@ MouseArea {
     }
     // Waking one screen wakes the whole lock: the lock's timer put them all to sleep.
     function wakeAod() {
-        Aod.resetMotion();
         GlobalStates.oledSaverMonitors = [];
     }
     onAodActiveChanged: {
-        Aod.resetMotion();
         if (root.aodActive) {
             layoutDialog.close();
             lockContextMenu.close();
@@ -1657,7 +1656,7 @@ MouseArea {
     }
 
     // Over the AOD a click only wakes it: nothing hidden under the pointer is pressed,
-    // and no ripple is drawn on the black. Moving the mouse continuously for at least 1s wakes it.
+    // and no ripple is drawn on the black. Moving the mouse does not wake it.
     MouseArea {
         id: aodCatcher
         anchors.fill: parent
@@ -1669,15 +1668,10 @@ MouseArea {
         cursorShape: aodCatcher.cursorVisible ? Qt.ArrowCursor : Qt.BlankCursor
         onVisibleChanged: {
             aodCatcher.cursorVisible = false;
-            Aod.resetMotion();
         }
-        onPositionChanged: mouse => {
+        onPositionChanged: {
             aodCatcher.cursorVisible = true;
             aodCursorTimer.restart();
-            if (Aod.registerMouseMove(root.screenName, mouse.x, mouse.y)) {
-                root.wakeAod();
-                root.forceFieldFocus();
-            }
         }
         onPressed: mouse => {
             mouse.accepted = true;
@@ -1698,5 +1692,199 @@ MouseArea {
         anchors.fill: parent
         z: 50
         sourceComponent: LockIslandEditController { surface: root }
+    }
+
+    // ── Startup loading overlay ─────────────────────────────────────────────
+    //
+    // When quickshell starts with the screen locked (lock.launchOnStartup or a
+    // session that was already locked), the lockscreen panel itself loads first
+    // (priority 5 in the family), but the rest of the shell — ~50 panels —
+    // continues building in the background via PanelSchedule (one per 8 ms tick).
+    //
+    // This overlay covers the lock surface while that work is in progress so the
+    // user never sees a half-built shell flash through after typing the password
+    // quickly. Once PanelSchedule becomes idle the overlay fades away. If the
+    // shell was already idle when the lock mounted (manual lock mid-session) the
+    // overlay never becomes visible.
+    //
+    // The overlay is only relevant on the interactive surface (not Edit Mode
+    // preview) and only during the very first boot lock; it self-destructs after
+    // the shell has finished loading to avoid any ongoing overhead.
+    // ── Material 3 Expressive Startup Loading Overlay ───────────────────────
+    //
+    // Displays immediately when the lock surface mounts at boot while the rest of
+    // Quickshell's panels are building. Features a Material 3 Expressive circular
+    // morphing indicator and smooth pulsing typography, centered on screen.
+    Item {
+        id: startupLoadingOverlay
+        anchors.fill: parent
+        z: 70  // Above aodCatcher (60) and edit overlays (50)
+
+        readonly property bool shellIdle: PanelSchedule.idle && !minDisplayTimer.running
+        property bool needsOverlay: root.interactive
+        property bool everNeeded: true
+
+        Timer {
+            id: minDisplayTimer
+            interval: 1200
+            running: true
+            repeat: false
+        }
+
+        visible: opacity > 0.001
+        opacity: (needsOverlay && !shellIdle) ? 1 : 0
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 700
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        onVisibleChanged: {
+            if (!visible)
+                startupLoadingOverlay.enabled = false
+        }
+
+        // Frosted-glass ambient background
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(
+                Appearance.colors.colLayer0Base.r,
+                Appearance.colors.colLayer0Base.g,
+                Appearance.colors.colLayer0Base.b,
+                0.85
+            )
+        }
+
+        // Centered Material 3 Expressive Loader
+        Column {
+            anchors.centerIn: parent
+            spacing: 24
+
+            // Material 3 Expressive Progress Ring (Variable-arc expanding & contracting stroke)
+            Item {
+                id: m3Spinner
+                width: 64
+                height: 64
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                // Expressive track
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: "transparent"
+                    border.color: Qt.rgba(
+                        Appearance.colors.colPrimary.r,
+                        Appearance.colors.colPrimary.g,
+                        Appearance.colors.colPrimary.b,
+                        0.14
+                    )
+                    border.width: 5
+                }
+
+                Canvas {
+                    id: m3Canvas
+                    anchors.fill: parent
+
+                    property real headAngle: 0
+                    property real tailAngle: 0
+                    property real rotationOffset: 0
+
+                    onHeadAngleChanged: requestPaint()
+                    onTailAngleChanged: requestPaint()
+                    onRotationOffsetChanged: requestPaint()
+
+                    onPaint: {
+                        var ctx = getContext("2d");
+                        ctx.clearRect(0, 0, width, height);
+
+                        var cx = width / 2;
+                        var cy = height / 2;
+                        var r = cx - 3;
+
+                        // Material 3 Expressive expanding/contracting arc calculation
+                        var start = ((tailAngle + rotationOffset) % 360) * Math.PI / 180;
+                        var end = ((headAngle + rotationOffset) % 360) * Math.PI / 180;
+                        var sweep = end - start;
+                        if (sweep < 0) sweep += 2 * Math.PI;
+                        if (sweep < 0.1) sweep = 0.1;
+
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, r, start, start + sweep, false);
+                        ctx.strokeStyle = Appearance.colors.colPrimary;
+                        ctx.lineWidth = 5;
+                        ctx.lineCap = "round";
+                        ctx.stroke();
+                    }
+
+                    // M3 Expressive Rotation
+                    NumberAnimation on rotationOffset {
+                        running: startupLoadingOverlay.visible
+                        loops: Animation.Infinite
+                        from: 0
+                        to: 720
+                        duration: 4400
+                        easing.type: Easing.Linear
+                    }
+
+                    // M3 Expressive Head (leading edge) motion
+                    SequentialAnimation on headAngle {
+                        running: startupLoadingOverlay.visible
+                        loops: Animation.Infinite
+                        NumberAnimation {
+                            from: 0; to: 270
+                            duration: 1200
+                            easing.type: Easing.InOutCubic
+                        }
+                        NumberAnimation {
+                            from: 270; to: 360
+                            duration: 600
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+
+                    // M3 Expressive Tail (trailing edge) motion
+                    SequentialAnimation on tailAngle {
+                        running: startupLoadingOverlay.visible
+                        loops: Animation.Infinite
+                        PauseAnimation { duration: 250 }
+                        NumberAnimation {
+                            from: 0; to: 270
+                            duration: 1100
+                            easing.type: Easing.InOutCubic
+                        }
+                        NumberAnimation {
+                            from: 270; to: 360
+                            duration: 450
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+                }
+            }
+
+            // Material 3 Typography & Status badge
+            Item {
+                width: 160
+                height: 36
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("Iniciando…")
+                    font.family: Appearance.font.family.main
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnSurface
+                    opacity: 0.85
+
+                    SequentialAnimation on opacity {
+                        running: startupLoadingOverlay.visible
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.45; duration: 1000; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 0.85; duration: 1000; easing.type: Easing.InOutSine }
+                    }
+                }
+            }
+        }
     }
 }

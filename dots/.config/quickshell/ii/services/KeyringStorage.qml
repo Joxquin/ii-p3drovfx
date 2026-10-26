@@ -76,8 +76,9 @@ Singleton {
     }
 
     function fetchKeyringData() {
-        // console.log("[KeyringStorage] Fetching keyring data...");
-        // console.log("[KeyringStorage] getData command:'" + getData.command.join("' '") + "'");
+        if (GlobalStates.screenLocked) {
+            return;
+        }
         getData.running = true;
     }
 
@@ -115,7 +116,35 @@ Singleton {
         }
     }
 
+    FileView {
+        id: fastConfigView
+        path: (Quickshell.env("XDG_CONFIG_HOME") || ((Quickshell.env("HOME") || "") + "/.config")) + "/illogical-impulse/config.json"
+        printErrors: false
+    }
+
     Component.onCompleted: {
+        // Do NOT fetch the keyring immediately at startup when the screen is locked:
+        // `secret-tool lookup` will prompt the user to unlock the keyring (a dialog
+        // over a black screen) before the lock surface has even painted.
+        // LockScreen.qml calls fetchKeyringData() explicitly after the user has unlocked,
+        // so this auto-fetch is only needed for sessions that start without a lock.
+        if (GlobalStates.screenLocked) {
+            return;
+        }
+
+        // Fast check: if launchOnStartup is true in config.json, do not trigger
+        // secret-tool at startup.
+        try {
+            fastConfigView.reload();
+            const raw = fastConfigView.text();
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed?.lock?.launchOnStartup) {
+                    return;
+                }
+            }
+        } catch (_) {}
+
         root.fetchKeyringData();
     }
 

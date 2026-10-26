@@ -144,6 +144,11 @@ Scope {
         priority: 1
     }
     PanelUrlLoader {
+        // Priority 5 (above bar=4, background=3, island=2, dock=1): when the session starts
+        // locked (lock.launchOnStartup or boot with an active session lock), the lockscreen
+        // must be visible before any other panel. Without a priority it joins the back of the
+        // ~50-panel queue and the user sees a black screen for several seconds.
+        priority: (Config.ready && (Config.options.lock.launchOnStartup || GlobalStates.screenLocked)) ? 5 : 0
         panelUrl: Qt.resolvedUrl("../modules/ii/lock/Lock.qml")
     }
     PanelUrlLoader {

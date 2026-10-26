@@ -268,10 +268,71 @@ Scope {
         }
     }
 
+    // ── Fast-path startup lock ───────────────────────────────────────────────
+    //
+    // The full Config singleton (Config.qml, 440 KB) takes several seconds to
+    // parse on every cold start. initIfReady() is gated on Config.ready, so the
+    // WlSessionLock only activates after that parsing is done — the user sees a
+    // live desktop for 3-6 s even when lock.launchOnStartup is true.
+    //
+    // To fix that: read ONLY the relevant key (lock.launchOnStartup) from the
+    // raw config.json file the moment LockScreen mounts, using a lightweight
+    // FileView. If the key is true and this is a new Hyprland session, set
+    // screenLocked immediately — the compositor blacks out the desktop within
+    // one frame instead of waiting for the full parse.
+    //
+    // The HYPRLAND_INSTANCE_SIGNATURE env var changes on every real login;
+    // Persistent.states.hyprlandInstanceSignature stores the last one. We
+    // replicate that check here with a Process-free env read so we don't need
+    // Persistent.ready either.
+    //
+    // The existing initIfReady() path still runs when Config and Persistent are
+    // ready, but at that point screenLocked is already true so it only picks up
+    // whatever else the full config says (useHyprlock, etc.).
+    property bool fastLockApplied: false
+
+    FileView {
+        id: fastConfigView
+        // Same path Config.qml uses; Directories singleton is not yet ready
+        // here, so we build it from Quickshell.env directly.
+        path: (Quickshell.env("HOME") || "") + "/.config/illogical-impulse/config.json"
+        printErrors: false
+        onLoaded: {
+            // Already locked — nothing to do.
+            if (GlobalStates.screenLocked || root.fastLockApplied)
+                return;
+            try {
+                const cfg = JSON.parse(fastConfigView.text());
+                const launchOnStartup = cfg?.lock?.launchOnStartup ?? false;
+                if (!launchOnStartup)
+                    return;
+                // If launchOnStartup is enabled, apply lock immediately on boot.
+                root.fastLockApplied = true;
+                GlobalStates.screenLocked = true;
+            } catch (e) {
+                // Fall through to normal initIfReady
+            }
+        }
+        Component.onCompleted: fastConfigView.reload()
+    }
+
+    FileView {
+        id: fastStateView
+        path: (Quickshell.env("HOME") || "") + "/.local/state/quickshell/states.json"
+        printErrors: false
+        Component.onCompleted: fastStateView.reload()
+    }
+
     function initIfReady() {
         if (!Config.ready || !Persistent.ready)
             return;
-        if (Config.options.lock.launchOnStartup && Persistent.isNewHyprlandInstance) {
+        // Fast-path already locked the screen — skip the lock() call but still
+        // do any other startup work that needs Config (e.g. fingerprint / keyring).
+        if (GlobalStates.screenLocked && root.fastLockApplied) {
+            lockContext.tryFingerUnlock();
+            return;
+        }
+        if (Config.options.lock.launchOnStartup && (Persistent.isNewHyprlandInstance || !Persistent.ready)) {
             root.lock();
         } else {
             KeyringStorage.fetchKeyringData();
