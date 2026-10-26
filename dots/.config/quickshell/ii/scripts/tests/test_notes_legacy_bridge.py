@@ -24,7 +24,6 @@ SHELL = ROOT / "shell.qml"
 
 CONSUMERS = [
     ROOT / "modules/ii/overlay/notes/NotesContent.qml",
-    ROOT / "modules/ii/overlay/notes/NotesSketchEditor.qml",
     ROOT / "modules/ii/background/widgets/utility/NotesWidget.qml",
     ROOT / "modules/ii/background/widgets/utility/NotesWidget2x1.qml",
     ROOT / "modules/common/draw/LiveDrawWindow.qml",

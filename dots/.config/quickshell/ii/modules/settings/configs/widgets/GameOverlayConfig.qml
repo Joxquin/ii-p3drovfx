@@ -215,34 +215,6 @@ ContentPage {
     }
 
     ContentSection {
-        title: Translation.tr("Notes")
-        icon: "sticky_note_2"
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ConfigSwitch {
-                buttonIcon: "tab"
-                text: Translation.tr("Show tabs")
-                checked: Config.options.overlay.notes.showTabs
-                onCheckedChanged: {
-                    Config.options.overlay.notes.showTabs = checked;
-                }
-            }
-            ConfigSwitch {
-                enabled: Config.options.overlay.notes.showTabs
-                buttonIcon: "edit_note"
-                text: Translation.tr("Allow editing the icon")
-                checked: Config.options.overlay.notes.allowEditingIcon
-                onCheckedChanged: {
-                    Config.options.overlay.notes.allowEditingIcon = checked;
-                }
-            }
-        }
-    }
-
-    ContentSection {
         title: Translation.tr("Discord Voice")
         icon: "record_voice_over"
 
